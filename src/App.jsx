@@ -6,27 +6,36 @@ import Flashcards from './components/Flashcards';
 import Settings from './components/Settings';
 import FlashcardGame from './components/FlashcardGame';
 import Library from './components/Library';
+import MiniGames_th from './components/MiniGames_th';
 
 export default function App() {
   const [page, setPage] = useState('login');
   const [user, setUser] = useState(null);
-  const [timerSetting, setTimerSetting] = useState(5);
+  
+  // Settings & Data
+  const [timerSetting, setTimerSetting] = useState(5); // สำหรับ Flashcard
+  const [gameTimerSetting, setGameTimerSetting] = useState(5); // สำหรับ Mini Games
   const [schedules, setSchedules] = useState({ lv3: [], lv4: [], lv5: [], lv6: [] });
   const [allMasterCards, setAllMasterCards] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [levelCounts, setLevelCounts] = useState({1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, mistakes: 0});
+  
+  // Game States
   const [activeLevel, setActiveLevel] = useState(1);
   const [currentCard, setCurrentCard] = useState(null);
   const [isFlipped, setIsFlipped] = useState(false);
   const [timer, setTimer] = useState(5);
   const [gameActive, setGameActive] = useState(false);
   const [gameQueue, setGameQueue] = useState([]);
+
+  // UI States
   const [isPreloading, setIsPreloading] = useState(false);
   const [preloadProgress, setPreloadProgress] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [libraryDetail, setLibraryDetail] = useState(null);
   const [libFlipped, setLibFlipped] = useState(false);
 
+  // --- 1. Initial Load ---
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) { 
@@ -39,12 +48,20 @@ export default function App() {
 
   const fetchUserSettings = async (userId) => {
     const { data } = await supabase.from('user_settings').select('*').eq('user_id', userId).single();
-    if (data) { setTimerSetting(data.timer_setting); setSchedules(data.schedules); }
+    if (data) { 
+      setTimerSetting(data.timer_setting || 5); 
+      setGameTimerSetting(data.game_timer_setting || 5); // ป้องกันค่าว่าง
+      setSchedules(data.schedules || { lv3: [], lv4: [], lv5: [], lv6: [] }); 
+    }
     else { await supabase.from('user_settings').insert([{ user_id: userId }]); }
   };
 
-  const saveSettings = async (newTimer, newSchedules) => {
-    await supabase.from('user_settings').update({ timer_setting: newTimer, schedules: newSchedules }).eq('user_id', user.id);
+  const saveSettings = async (newTimer, newGameTimer, newSchedules) => {
+    await supabase.from('user_settings').update({ 
+      timer_setting: newTimer, 
+      game_timer_setting: newGameTimer,
+      schedules: newSchedules 
+    }).eq('user_id', user.id);
   };
 
   const fetchInitialData = async (userId) => {
@@ -85,7 +102,7 @@ export default function App() {
     let loaded = 0;
     const urls = cards.flatMap(c => [c.image_front_url, c.image_back_url]);
     for (const url of urls) {
-      await new Promise(r => { const img = new Image(); img.src = url; img.onload = img.onerror = () => { loaded++; setPreloadProgress(Math.floor((loaded/urls.length)*100)); r(); }; });
+      await new Promise(r => { const img = new Image(); img.src = url; img.onload = img.onerror = () => { loaded++; setPreloadProgress(Math.floor((loaded/(urls.length || 1))*100)); r(); }; });
     }
     setIsPreloading(false); setGameQueue(cards.sort(() => Math.random() - 0.5)); setPage('fc-play'); setGameActive(true);
   };
@@ -109,10 +126,16 @@ export default function App() {
   const handleAnswer = async (isCorrect) => {
     let nextLevel; let nextWrongCount;
     const { data: currentProgress } = await supabase.from('user_progress').select('wrong_count, level').eq('user_id', user.id).eq('flashcard_id', currentCard.id).single();
+    
+    // ป้องกันแอปพังถ้าหาข้อมูล progress ไม่เจอ
+    const currentWrong = currentProgress?.wrong_count || 0;
+    const currentLv = currentProgress?.level || 1;
+
     if (isCorrect) {
       if (activeLevel === 'mistakes') { nextLevel = 1; nextWrongCount = 0; }
-      else { nextLevel = Math.min(activeLevel + 1, 7); nextWrongCount = currentProgress.wrong_count; }
-    } else { nextLevel = 1; nextWrongCount = (currentProgress.wrong_count || 0) + 1; }
+      else { nextLevel = Math.min(activeLevel + 1, 7); nextWrongCount = currentWrong; }
+    } else { nextLevel = 1; nextWrongCount = currentWrong + 1; }
+
     await supabase.from('user_progress').update({ level: nextLevel, wrong_count: nextWrongCount }).eq('user_id', user.id).eq('flashcard_id', currentCard.id);
     setGameQueue(gameQueue.slice(1)); setCurrentCard(null); fetchInitialData(user.id);
   };
@@ -123,10 +146,10 @@ export default function App() {
     const today = new Date();
     const dayName = days[today.getDay() === 0 ? 6 : today.getDay() - 1];
     const dateNum = today.getDate();
-    if (lv === 3) return schedules.lv3.includes(dayName);
-    if (lv === 4) return schedules.lv4.includes(dayName);
-    if (lv === 5) return schedules.lv5.includes(dateNum);
-    if (lv === 6) return schedules.lv6.includes(dateNum);
+    if (lv === 3) return schedules.lv3?.includes(dayName);
+    if (lv === 4) return schedules.lv4?.includes(dayName);
+    if (lv === 5) return schedules.lv5?.includes(dateNum);
+    if (lv === 6) return schedules.lv6?.includes(dateNum);
     return false;
   };
 
@@ -165,13 +188,56 @@ export default function App() {
         {page === 'fc-chars' && <Flashcards setPage={setPage} levelCounts={levelCounts} schedules={schedules} checkLevelAvailable={checkLevelAvailable} startLevelGame={startLevelGame} />}
         {page === 'fc-play' && currentCard && <FlashcardGame setPage={setPage} activeLevel={activeLevel} currentCard={currentCard} setCurrentCard={setCurrentCard} timer={timer} isFlipped={isFlipped} setIsFlipped={setIsFlipped} gameQueue={gameQueue} handleAnswer={handleAnswer} setGameActive={setGameActive} />}
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}
-        {(page === 'settings' || page === 'set-schedule') && <Settings page={page} setPage={setPage} timerSetting={timerSetting} setTimerSetting={setTimerSetting} schedules={schedules} setSchedules={setSchedules} saveSettings={saveSettings} />}
+        
+        {(page === 'settings' || page === 'set-schedule') && (
+          <Settings 
+            page={page} 
+            setPage={setPage} 
+            timerSetting={timerSetting} 
+            setTimerSetting={setTimerSetting} 
+            gameTimerSetting={gameTimerSetting} // ส่งค่าที่ขาดไป
+            setGameTimerSetting={setGameTimerSetting} // ส่งค่าที่ขาดไป
+            schedules={schedules} 
+            setSchedules={setSchedules} 
+            saveSettings={(t, g, s) => saveSettings(t, g, s)} 
+          />
+        )}
+
+        {/* --- 4. หน้าเมนูเลือก 4 เกม (Mini Games Hub) --- */}
+        {page === 'minigames' && (
+          <div className="grid grid-cols-1 gap-4 pt-4">
+            <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline text-left mb-2">← Back</button>
+            <button onClick={() => setPage('minigame-th')} className="h-28 bg-emerald-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 transform active:scale-95 transition-all text-xl italic">
+              <span className="text-4xl">🇹🇭</span> เกมแปลไทย
+            </button>
+            <button className="h-28 bg-blue-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 opacity-50 cursor-not-allowed text-xl italic">
+              <span className="text-4xl">🔤</span> Pinyin (Soon)
+            </button>
+            <button className="h-28 bg-purple-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 opacity-50 cursor-not-allowed text-xl italic">
+              <span className="text-4xl">📝</span> เติมคำ (Soon)
+            </button>
+            <button className="h-28 bg-slate-600 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 opacity-50 cursor-not-allowed text-xl italic">
+              <span className="text-4xl">⌨️</span> ฝึกพิมพ์ (Soon)
+            </button>
+          </div>
+        )}
+
+        {/* --- เรียกใช้ Mini Game 1 (แปลไทย) --- */}
+        {page === 'minigame-th' && (
+          <MiniGames_th 
+            user={user}
+            allMasterCards={allMasterCards}
+            selectedIds={selectedIds}
+            timerSetting={gameTimerSetting}
+            setPage={setPage}
+          />
+        )}
         
         {page === 'select-words' && (
           <div className="space-y-4 pb-10 text-center">
             <div className="flex justify-between items-center sticky top-20 bg-slate-50 py-2 z-10 px-2">
               <button onClick={() => setPage('settings')} className="text-orange-600 font-black italic underline uppercase text-xs">← Back</button>
-              <div className="bg-orange-600 text-white px-4 py-1 rounded-full font-black text-xs uppercase shadow-sm">Selected {selectedIds.length}</div>
+              <div className="bg-orange-600 text-white px-4 py-1 rounded-full font-black text-xs">Selected {selectedIds.length}</div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               {allMasterCards.map(card => {
@@ -179,7 +245,7 @@ export default function App() {
                 return (
                   <div key={card.id} onClick={() => toggleWordSelection(card.id)} className={`p-4 rounded-2xl border-2 text-center transition-all ${isSelected ? "bg-orange-500 border-orange-600 text-white shadow-lg" : "bg-white border-slate-100"}`}>
                     <div className="text-2xl font-bold">{card.cn}</div>
-                    <div className={`text-[9px] font-bold uppercase ${isSelected ? "text-white" : "text-slate-400"}`}>{card.pinyin}</div>
+                    <div className={`text-[9px] font-bold uppercase ${isSelected ? 'text-white' : 'text-slate-400'}`}>{card.pinyin}</div>
                   </div>
                 );
               })}
