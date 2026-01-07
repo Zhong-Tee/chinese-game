@@ -7,6 +7,7 @@ import Settings from './components/Settings';
 import FlashcardGame from './components/FlashcardGame';
 import Library from './components/Library';
 import MiniGames_th from './components/MiniGames_th';
+import MiniGames_pinyin from './components/MiniGames_pinyin';
 
 export default function App() {
   const [page, setPage] = useState('login');
@@ -65,17 +66,34 @@ export default function App() {
   };
 
   const fetchInitialData = async (userId) => {
-    const { data: master } = await supabase.from('flashcards').select('*').order('id', { ascending: true });
-    setAllMasterCards(master || []);
-    const { data: progress } = await supabase.from('user_progress').select('level, wrong_count, flashcard_id').eq('user_id', userId);
-    if (progress) {
-      setSelectedIds(progress.map(p => p.flashcard_id));
-      const counts = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, mistakes: 0};
-      progress.forEach(item => { 
-        if (item.wrong_count >= 3) counts.mistakes++;
-        else if (counts[item.level] !== undefined) counts[item.level]++;
-      });
-      setLevelCounts(counts);
+    try {
+      const { data: master, error: masterError } = await supabase.from('flashcards').select('*').order('id1', { ascending: true });
+      if (masterError) {
+        console.error('Error fetching flashcards:', masterError);
+        return;
+      }
+      console.log('Fetched flashcards:', master?.length || 0, 'items');
+      setAllMasterCards(master || []);
+      
+      const { data: progress, error: progressError } = await supabase.from('user_progress').select('level, wrong_count, flashcard_id').eq('user_id', userId);
+      if (progressError) {
+        console.error('Error fetching progress:', progressError);
+        return;
+      }
+      if (progress) {
+        // แปลง flashcard_id เป็น number ทั้งหมดเพื่อให้ type ตรงกัน
+        const selectedIdsNums = progress.map(p => Number(p.flashcard_id)).filter(id => !isNaN(id));
+        console.log('Selected IDs:', selectedIdsNums);
+        setSelectedIds(selectedIdsNums);
+        const counts = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, mistakes: 0};
+        progress.forEach(item => { 
+          if (item.wrong_count >= 3) counts.mistakes++;
+          else if (counts[item.level] !== undefined) counts[item.level]++;
+        });
+        setLevelCounts(counts);
+      }
+    } catch (error) {
+      console.error('Error in fetchInitialData:', error);
     }
   };
 
@@ -92,19 +110,68 @@ export default function App() {
   };
 
   const startLevelGame = async (level) => {
-    setActiveLevel(level); setIsPreloading(true); setPreloadProgress(0);
-    let query = supabase.from('user_progress').select('flashcard_id').eq('user_id', user.id);
-    if (level === 'mistakes') query = query.gte('wrong_count', 3); 
-    else query = query.eq('level', level).lt('wrong_count', 3);
-    const { data: progress } = await query;
-    if (!progress || progress.length === 0) { setIsPreloading(false); alert("ไม่มีคำศัพท์"); return; }
-    const { data: cards } = await supabase.from('flashcards').select('*').in('id', progress.map(p => p.flashcard_id));
-    let loaded = 0;
-    const urls = cards.flatMap(c => [c.image_front_url, c.image_back_url]);
-    for (const url of urls) {
-      await new Promise(r => { const img = new Image(); img.src = url; img.onload = img.onerror = () => { loaded++; setPreloadProgress(Math.floor((loaded/(urls.length || 1))*100)); r(); }; });
+    try {
+      setActiveLevel(level); setIsPreloading(true); setPreloadProgress(0);
+      let query = supabase.from('user_progress').select('flashcard_id').eq('user_id', user.id);
+      if (level === 'mistakes') query = query.gte('wrong_count', 3); 
+      else query = query.eq('level', level).lt('wrong_count', 3);
+      const { data: progress, error: progressError } = await query;
+      if (progressError) {
+        console.error('Error fetching progress:', progressError);
+        setIsPreloading(false);
+        alert("เกิดข้อผิดพลาด: " + progressError.message);
+        return;
+      }
+      if (!progress || progress.length === 0) { 
+        setIsPreloading(false); 
+        alert("ไม่มีคำศัพท์"); 
+        return; 
+      }
+      // แปลง flashcard_id เป็น number ก่อน query
+      const flashcardIds = progress.map(p => Number(p.flashcard_id)).filter(id => !isNaN(id));
+      console.log('Flashcard IDs for game:', flashcardIds);
+      const { data: cards, error: cardsError } = await supabase.from('flashcards').select('*').in('id1', flashcardIds);
+      if (cardsError) {
+        console.error('Error fetching cards:', cardsError);
+        setIsPreloading(false);
+        alert("เกิดข้อผิดพลาด: " + cardsError.message);
+        return;
+      }
+      if (!cards || cards.length === 0) {
+        setIsPreloading(false);
+        alert("ไม่พบคำศัพท์");
+        return;
+      }
+      console.log('Loading', cards.length, 'cards');
+      let loaded = 0;
+      const urls = cards.flatMap(c => [c.image_front_url, c.image_back_url]).filter(url => url);
+      console.log('Total images to load:', urls.length);
+      for (const url of urls) {
+        await new Promise(r => { 
+          const img = new Image(); 
+          img.src = url; 
+          img.onload = () => { 
+            loaded++; 
+            setPreloadProgress(Math.floor((loaded/(urls.length || 1))*100)); 
+            r(); 
+          };
+          img.onerror = () => {
+            console.warn('Failed to load image:', url);
+            loaded++;
+            setPreloadProgress(Math.floor((loaded/(urls.length || 1))*100));
+            r();
+          };
+        });
+      }
+      setIsPreloading(false); 
+      setGameQueue(cards.sort(() => Math.random() - 0.5)); 
+      setPage('fc-play'); 
+      setGameActive(true);
+    } catch (error) {
+      console.error('Error in startLevelGame:', error);
+      setIsPreloading(false);
+      alert("เกิดข้อผิดพลาด: " + error.message);
     }
-    setIsPreloading(false); setGameQueue(cards.sort(() => Math.random() - 0.5)); setPage('fc-play'); setGameActive(true);
   };
 
   useEffect(() => {
@@ -125,7 +192,7 @@ export default function App() {
 
   const handleAnswer = async (isCorrect) => {
     let nextLevel; let nextWrongCount;
-    const { data: currentProgress } = await supabase.from('user_progress').select('wrong_count, level').eq('user_id', user.id).eq('flashcard_id', currentCard.id).single();
+    const { data: currentProgress } = await supabase.from('user_progress').select('wrong_count, level').eq('user_id', user.id).eq('flashcard_id', currentCard.id1 || currentCard.id).single();
     
     // ป้องกันแอปพังถ้าหาข้อมูล progress ไม่เจอ
     const currentWrong = currentProgress?.wrong_count || 0;
@@ -136,7 +203,7 @@ export default function App() {
       else { nextLevel = Math.min(activeLevel + 1, 7); nextWrongCount = currentWrong; }
     } else { nextLevel = 1; nextWrongCount = currentWrong + 1; }
 
-    await supabase.from('user_progress').update({ level: nextLevel, wrong_count: nextWrongCount }).eq('user_id', user.id).eq('flashcard_id', currentCard.id);
+    await supabase.from('user_progress').update({ level: nextLevel, wrong_count: nextWrongCount }).eq('user_id', user.id).eq('flashcard_id', currentCard.id1 || currentCard.id);
     setGameQueue(gameQueue.slice(1)); setCurrentCard(null); fetchInitialData(user.id);
   };
 
@@ -208,10 +275,17 @@ export default function App() {
           <div className="grid grid-cols-1 gap-4 pt-4">
             <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline text-left mb-2">← Back</button>
             <button onClick={() => setPage('minigame-th')} className="h-28 bg-emerald-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 transform active:scale-95 transition-all text-xl italic">
-              <span className="text-4xl">🇹🇭</span> เกมแปลไทย
+              <svg width="48" height="32" viewBox="0 0 48 32" className="rounded" style={{filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'}}>
+                <rect y="0" width="48" height="6.4" fill="#ED1C24"/>
+                <rect y="6.4" width="48" height="6.4" fill="#FFFFFF"/>
+                <rect y="12.8" width="48" height="6.4" fill="#241D4F"/>
+                <rect y="19.2" width="48" height="6.4" fill="#FFFFFF"/>
+                <rect y="25.6" width="48" height="6.4" fill="#ED1C24"/>
+              </svg>
+              เกมแปลไทย
             </button>
-            <button className="h-28 bg-blue-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 opacity-50 cursor-not-allowed text-xl italic">
-              <span className="text-4xl">🔤</span> Pinyin (Soon)
+            <button onClick={() => setPage('minigame-pinyin')} className="h-28 bg-blue-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 transform active:scale-95 transition-all text-xl italic">
+              <span className="text-4xl">🔤</span> Pinyin
             </button>
             <button className="h-28 bg-purple-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 opacity-50 cursor-not-allowed text-xl italic">
               <span className="text-4xl">📝</span> เติมคำ (Soon)
@@ -232,6 +306,17 @@ export default function App() {
             setPage={setPage}
           />
         )}
+
+        {/* --- เรียกใช้ Mini Game 2 (Pinyin) --- */}
+        {page === 'minigame-pinyin' && (
+          <MiniGames_pinyin 
+            user={user}
+            allMasterCards={allMasterCards}
+            selectedIds={selectedIds}
+            timerSetting={gameTimerSetting}
+            setPage={setPage}
+          />
+        )}
         
         {page === 'select-words' && (
           <div className="space-y-4 pb-10 text-center">
@@ -240,15 +325,32 @@ export default function App() {
               <div className="bg-orange-600 text-white px-4 py-1 rounded-full font-black text-xs">Selected {selectedIds.length}</div>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              {allMasterCards.map(card => {
-                const isSelected = selectedIds.includes(card.id);
-                return (
-                  <div key={card.id} onClick={() => toggleWordSelection(card.id)} className={`p-4 rounded-2xl border-2 text-center transition-all ${isSelected ? "bg-orange-500 border-orange-600 text-white shadow-lg" : "bg-white border-slate-100"}`}>
-                    <div className="text-2xl font-bold">{card.cn}</div>
-                    <div className={`text-[9px] font-bold uppercase ${isSelected ? 'text-white' : 'text-slate-400'}`}>{card.pinyin}</div>
-                  </div>
-                );
-              })}
+              {allMasterCards && allMasterCards.length > 0 ? (
+                allMasterCards
+                  .sort((a, b) => {
+                    const idA = Number(a?.id1 || a?.id || 0);
+                    const idB = Number(b?.id1 || b?.id || 0);
+                    return idA - idB;
+                  })
+                  .map(card => {
+                    const cardId = Number(card?.id1 || card?.id);
+                    const isSelected = selectedIds.includes(cardId);
+                  return (
+                    <div 
+                      key={card?.id1 || card?.id || Math.random()} 
+                      onClick={() => toggleWordSelection(cardId)} 
+                      className={`p-4 rounded-2xl border-2 text-center transition-all select-none ${isSelected ? "bg-orange-500 border-orange-600 text-white shadow-lg" : "bg-white border-slate-100"}`}
+                      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+                      onTouchStart={(e) => e.preventDefault()}
+                    >
+                      <div className="text-2xl font-bold">{card?.cn || ''}</div>
+                      <div className={`text-[9px] font-bold uppercase ${isSelected ? 'text-white' : 'text-slate-400'}`}>{card?.pinyin || ''}</div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="col-span-3 text-center text-slate-400 py-8">กำลังโหลดข้อมูล...</div>
+              )}
             </div>
           </div>
         )}

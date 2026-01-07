@@ -16,11 +16,25 @@ export default function Library({
       </div>
       <h2 className="text-2xl font-black italic uppercase text-center mb-6">Your Library ({selectedIds.length})</h2>
       <div className="grid grid-cols-3 gap-2">
-        {allMasterCards.filter(c => selectedIds.includes(c.id)).map(card => (
-          <div key={card.id} onClick={() => { setLibraryDetail(card); setLibFlipped(false); }} className="aspect-[3/4] rounded-xl overflow-hidden shadow-md border-2 border-white active:scale-95 transition">
-            <img src={card.image_front_url} className="w-full h-full object-cover" alt="thumb" />
+        {allMasterCards && allMasterCards.length > 0 ? (
+          allMasterCards
+            .filter(c => {
+              const cardId = Number(c?.id1 || c?.id);
+              return selectedIds.includes(cardId);
+            })
+            .sort((a, b) => {
+              const idA = Number(a?.id1 || a?.id || 0);
+              const idB = Number(b?.id1 || b?.id || 0);
+              return idA - idB;
+            })
+            .map(card => (
+          <div key={card?.id1 || card?.id || Math.random()} onClick={() => { setLibraryDetail(card); setLibFlipped(false); }} className="aspect-[3/4] rounded-xl overflow-hidden shadow-md border-2 border-white active:scale-95 transition">
+            <img src={card?.image_front_url || ''} className="w-full h-full object-cover" alt="thumb" />
           </div>
-        ))}
+            ))
+        ) : (
+          <div className="col-span-3 text-center text-slate-400 py-8">กำลังโหลดข้อมูล...</div>
+        )}
       </div>
       {libraryDetail && (
         <div className="fixed inset-0 bg-slate-900/95 z-[70] flex flex-col items-center justify-center p-6 text-center">
