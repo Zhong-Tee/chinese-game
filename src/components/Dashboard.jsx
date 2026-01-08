@@ -22,6 +22,9 @@ export default function Dashboard({ setPage }) {
       <button onClick={() => setPage('score')} className="h-36 bg-yellow-500 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
         <span className="text-3xl">📊</span> Score
       </button>
+      <button onClick={() => setPage('rewards')} className="h-36 bg-amber-500 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
+        <span className="text-3xl">🏆</span> Rewards
+      </button>
       <button onClick={() => setPage('settings')} className="h-36 bg-slate-700 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
         <span className="text-3xl">⚙️</span> Settings
       </button>

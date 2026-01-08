@@ -17,7 +17,7 @@ export default function Flashcards({
         <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline">← Back to Menu</button>
       </div>
       
-      <h2 className="text-xl font-black text-slate-300 uppercase italic mb-6 tracking-widest">Flashcard Levels</h2>
+      <h2 className="text-xl font-black text-black uppercase italic mb-6 tracking-widest">Flashcard Levels</h2>
       
       {/* Level 1-7 */}
       {[1, 2, 3, 4, 5, 6, 7].map(lv => {

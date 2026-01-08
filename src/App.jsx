@@ -11,6 +11,8 @@ import MiniGames_pinyin from './components/MiniGames_pinyin';
 import MiniGames_vol from './components/MiniGames_vol';
 import MiniGames_type from './components/MiniGames_type';
 import Score from './components/Score';
+import Rewards from './components/Rewards';
+import Comics from './components/Comics';
 
 export default function App() {
   const [page, setPage] = useState('login');
@@ -238,6 +240,18 @@ export default function App() {
     return false;
   };
 
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setPage('login');
+      setIsMenuOpen(false);
+    } catch (error) {
+      console.error('Error logging out:', error);
+      alert('เกิดข้อผิดพลาดในการออกจากระบบ');
+    }
+  };
+
   const MenuOverlay = () => (
     <div 
       className={`fixed inset-0 bg-slate-900/95 z-50 flex flex-col items-center justify-center transition-all duration-300 select-none ${isMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
@@ -249,7 +263,7 @@ export default function App() {
         <button onClick={() => {setPage('dashboard'); setIsMenuOpen(false);}}>🏠 Home</button>
         <button onClick={() => {setPage('rewards'); setIsMenuOpen(false);}}>🏆 Award</button>
         <button onClick={() => {setPage('settings'); setIsMenuOpen(false);}}>⚙️ Setting</button>
-        <button onClick={() => {supabase.auth.signOut(); window.location.reload();}} className="block text-red-400 pt-10 text-xl font-bold uppercase">🚪 Logout</button>
+        <button onClick={handleLogout} className="block text-red-400 pt-10 text-xl font-bold uppercase">🚪 Logout</button>
       </div>
     </div>
   );
@@ -286,6 +300,8 @@ export default function App() {
         {page === 'fc-play' && currentCard && <FlashcardGame setPage={setPage} activeLevel={activeLevel} currentCard={currentCard} setCurrentCard={setCurrentCard} timer={timer} isFlipped={isFlipped} setIsFlipped={setIsFlipped} gameQueue={gameQueue} handleAnswer={handleAnswer} setGameActive={setGameActive} />}
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}
         {page === 'score' && <Score user={user} selectedIds={selectedIds} levelCounts={levelCounts} setPage={setPage} />}
+        {page === 'rewards' && <Rewards setPage={setPage} />}
+        {page === 'comics' && <Comics setPage={setPage} />}
         
         {(page === 'settings' || page === 'set-schedule') && (
           <Settings 

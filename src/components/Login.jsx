@@ -66,9 +66,9 @@ export default function Login({ setPage, setUser, fetchInitialData, fetchUserSet
         <button 
           onClick={handleSignUp} 
           disabled={loading}
-          className="text-orange-600 font-bold text-sm uppercase tracking-widest mt-4"
+          className="w-full bg-white border-2 border-orange-600 text-orange-600 p-4 rounded-3xl font-black shadow-lg uppercase active:scale-95 transition-all mt-4"
         >
-          หรือสมัครสมาชิกใหม่
+          {loading ? 'กำลังสมัคร...' : 'สมัคร'}
         </button>
       </div>
     </div>
