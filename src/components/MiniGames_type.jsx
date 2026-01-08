@@ -51,7 +51,23 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
       alert("ไม่มีคำศัพท์ให้เล่น"); setPage('minigames'); return;
     }
 
-    const shuffled = poolIds.sort(() => Math.random() - 0.5);
+    // ดึงคำที่เล่นไปแล้วจาก Session Storage (แยกตาม game_type และ mode)
+    const storageKey = `playedWords_type_${mode}`;
+    const playedWords = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
+    
+    // กรองคำที่เล่นไปแล้วออก
+    const remainingIds = poolIds.filter(id => !playedWords.includes(id));
+    
+    let shuffled;
+    // ถ้าเล่นครบทุกคำแล้ว ให้ reset และเริ่มใหม่
+    if (remainingIds.length === 0) {
+      sessionStorage.removeItem(storageKey);
+      shuffled = poolIds.sort(() => Math.random() - 0.5);
+    } else {
+      // สุ่มเฉพาะคำที่ยังไม่เล่น
+      shuffled = remainingIds.sort(() => Math.random() - 0.5);
+    }
+    
     setGameQueue(shuffled);
     
     // เริ่มเกมเมื่อกด Start
@@ -79,7 +95,14 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
   };
 
   const loadNextQuestion = (id, currentQueue) => {
-    if (!id) { alert("🎉 จบเกม! คุณเล่นครบทุกคำแล้ว"); setPage('minigames'); return; }
+    if (!id) { 
+      // Reset Session Storage เมื่อจบเกม
+      const storageKey = `playedWords_type_${mode}`;
+      sessionStorage.removeItem(storageKey);
+      alert("🎉 จบเกม! คุณเล่นครบทุกคำแล้ว"); 
+      setPage('minigames'); 
+      return; 
+    }
     const correctWord = allMasterCards.find(c => (c.id1 || c.id) === id);
     setCurrentQuestion(correctWord);
     setUserInput(''); // รีเซ็ต input
@@ -225,6 +248,14 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
         playSound('correct');
       }
 
+      // บันทึกคำที่เล่นไปแล้วใน Session Storage
+      const storageKey = `playedWords_type_${mode}`;
+      const playedWords = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
+      if (!playedWords.includes(questionId)) {
+        playedWords.push(questionId);
+        sessionStorage.setItem(storageKey, JSON.stringify(playedWords));
+      }
+
       // กรณี Review Mode
       if (mode === 'review') {
         await supabase.from('user_progress').update({ minigame_wrong_count: 0 }).eq('user_id', user.id).eq('flashcard_id', questionId);
@@ -255,6 +286,9 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
           }, 1500);
         } else {
           setTimeout(() => {
+            // ถ้าเล่นครบแล้ว ให้ reset Session Storage
+            const storageKey = `playedWords_type_${mode}`;
+            sessionStorage.removeItem(storageKey);
             alert("🎉 จบเกม Review! คุณตอบถูกทุกคำแล้ว");
             setPage('minigames');
           }, 1500);
@@ -266,6 +300,14 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
       setFeedbackType('wrong');
       setShowFeedback(true);
       playSound('wrong');
+      
+      // บันทึกคำที่เล่นไปแล้วใน Session Storage (แม้ตอบผิดก็บันทึก)
+      const storageKey = `playedWords_type_${mode}`;
+      const playedWords = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
+      if (!playedWords.includes(questionId)) {
+        playedWords.push(questionId);
+        sessionStorage.setItem(storageKey, JSON.stringify(playedWords));
+      }
       
       newStreak = 0;
       newScore = Math.max(0, newScore - 3);
@@ -292,6 +334,17 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
       const nextQueue = gameQueue.slice(1);
       setGameQueue(nextQueue);
       
+      // ถ้าเล่นครบแล้ว ให้ reset Session Storage
+      if (nextQueue.length === 0) {
+        const storageKey = `playedWords_type_${mode}`;
+        sessionStorage.removeItem(storageKey);
+        setTimeout(() => {
+          alert("🎉 จบเกม! คุณเล่นครบทุกคำแล้ว");
+          setPage('minigames');
+        }, 1500);
+        return;
+      }
+      
       // โหลดคำต่อไปหลังจากแสดง feedback
       setTimeout(() => {
         loadNextQuestion(nextQueue[0], nextQueue);
@@ -312,6 +365,17 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
 
     const nextQueue = gameQueue.slice(1);
     setGameQueue(nextQueue);
+    
+    // ถ้าเล่นครบแล้ว ให้ reset Session Storage
+    if (nextQueue.length === 0) {
+      const storageKey = `playedWords_type_${mode}`;
+      sessionStorage.removeItem(storageKey);
+      setTimeout(() => {
+        alert("🎉 จบเกม! คุณเล่นครบทุกคำแล้ว");
+        setPage('minigames');
+      }, 1500);
+      return;
+    }
     
     // โหลดคำต่อไปหลังจากแสดง feedback
     setTimeout(() => {
@@ -347,9 +411,6 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
       <div 
         className="flex flex-col items-center justify-center min-h-[80vh] select-none"
         style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-        onTouchStart={(e) => e.preventDefault()}
-        onTouchMove={(e) => e.preventDefault()}
-        onSelectStart={(e) => e.preventDefault()}
         onDragStart={(e) => e.preventDefault()}
       >
         <div className="text-center mb-8">
@@ -359,10 +420,10 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
         </div>
         
         <div className="flex gap-2 md:gap-4 mb-8">
-          <button onClick={() => {setMode('normal');}} className={`px-6 md:px-10 py-3 md:py-5 rounded-full font-black text-sm md:text-lg uppercase select-none ${mode === 'normal' ? 'bg-slate-800 text-white' : 'bg-white border-2 border-slate-300'}`} style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }} onTouchStart={(e) => e.preventDefault()} onTouchMove={(e) => e.preventDefault()}>
+          <button onClick={() => {setMode('normal');}} className={`px-6 md:px-10 py-3 md:py-5 rounded-full font-black text-sm md:text-lg uppercase select-none ${mode === 'normal' ? 'bg-slate-800 text-white' : 'bg-white border-2 border-slate-300'}`} style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>
             Normal ({normalCount})
           </button>
-          <button onClick={() => {setMode('review');}} className={`px-6 md:px-10 py-3 md:py-5 rounded-full font-black text-sm md:text-lg uppercase select-none ${mode === 'review' ? 'bg-red-600 text-white' : 'bg-white border-2 border-slate-300'}`} style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }} onTouchStart={(e) => e.preventDefault()} onTouchMove={(e) => e.preventDefault()}>
+          <button onClick={() => {setMode('review');}} className={`px-6 md:px-10 py-3 md:py-5 rounded-full font-black text-sm md:text-lg uppercase select-none ${mode === 'review' ? 'bg-red-600 text-white' : 'bg-white border-2 border-slate-300'}`} style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>
             Review ({reviewCountDisplay})
           </button>
         </div>
@@ -371,8 +432,6 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
           onClick={handleStartGame}
           className="bg-indigo-500 text-white px-12 md:px-16 py-4 md:py-6 rounded-[2rem] shadow-xl font-black text-xl md:text-3xl italic uppercase transform active:scale-95 transition-all select-none"
           style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-          onTouchStart={(e) => e.preventDefault()}
-          onTouchMove={(e) => e.preventDefault()}
         >
           🎮 Start Game
         </button>
@@ -381,8 +440,6 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
           onClick={() => setPage('minigames')}
           className="mt-6 text-slate-600 font-bold text-sm md:text-base underline italic uppercase select-none"
           style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-          onTouchStart={(e) => e.preventDefault()}
-          onTouchMove={(e) => e.preventDefault()}
         >
           ← Back to Menu
         </button>
@@ -396,13 +453,10 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
     <div 
       className="flex flex-col items-center select-none" 
       style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-      onTouchStart={(e) => e.preventDefault()}
-      onTouchMove={(e) => e.preventDefault()}
-      onSelectStart={(e) => e.preventDefault()}
       onDragStart={(e) => e.preventDefault()}
     >
       <div className="w-full flex justify-between items-center mb-4">
-        <button onClick={() => setPage('minigames')} className="text-slate-800 font-black text-xs underline italic uppercase select-none" style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }} onTouchStart={(e) => e.preventDefault()} onTouchMove={(e) => e.preventDefault()}>Exit</button>
+        <button onClick={() => setPage('minigames')} className="text-slate-800 font-black text-xs underline italic uppercase select-none" style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>Exit</button>
         <div className="flex gap-2">
            <div className="bg-orange-600 text-white px-3 py-1 rounded-full font-black text-[10px] italic">SCORE: {score}</div>
            <div className="bg-slate-800 text-white px-3 py-1 rounded-full font-black text-[10px] italic uppercase">Left: {gameQueue.length}</div>
@@ -488,8 +542,6 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
           disabled={isChecking || !userInput.trim()}
           className="flex-1 bg-indigo-500 text-white px-6 md:px-8 py-4 md:py-6 rounded-2xl font-black text-base md:text-xl uppercase shadow-xl transform active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed select-none"
           style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-          onTouchStart={(e) => e.preventDefault()}
-          onTouchMove={(e) => e.preventDefault()}
         >
           {isChecking ? 'กำลังตรวจสอบ...' : '✓ ตรวจสอบ'}
         </button>

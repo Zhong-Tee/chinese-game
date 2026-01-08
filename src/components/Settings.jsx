@@ -15,9 +15,6 @@ export default function Settings({
       <div 
         className="space-y-6 pt-4 select-none"
         style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-        onTouchStart={(e) => e.preventDefault()}
-        onTouchMove={(e) => e.preventDefault()}
-        onSelectStart={(e) => e.preventDefault()}
         onDragStart={(e) => e.preventDefault()}
       >
         <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline">← Back</button>
@@ -36,8 +33,6 @@ export default function Settings({
                 }} 
                 className="w-10 h-10 bg-slate-100 rounded-full font-black select-none"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-                onTouchStart={(e) => e.preventDefault()}
-                onTouchMove={(e) => e.preventDefault()}
               >-</button>
               
               <div className="text-2xl font-black text-orange-600 italic w-12">{timerSetting}s</div>
@@ -50,8 +45,6 @@ export default function Settings({
                 }} 
                 className="w-10 h-10 bg-slate-100 rounded-full font-black select-none"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-                onTouchStart={(e) => e.preventDefault()}
-                onTouchMove={(e) => e.preventDefault()}
               >+</button>
             </div>
           </div>
@@ -68,8 +61,6 @@ export default function Settings({
                 }} 
                 className="w-10 h-10 bg-slate-100 rounded-full font-black select-none"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-                onTouchStart={(e) => e.preventDefault()}
-                onTouchMove={(e) => e.preventDefault()}
               >-</button>
               
               <div className="text-2xl font-black text-emerald-600 italic w-12">{gameTimerSetting}s</div>
@@ -82,8 +73,6 @@ export default function Settings({
                 }} 
                 className="w-10 h-10 bg-slate-100 rounded-full font-black select-none"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-                onTouchStart={(e) => e.preventDefault()}
-                onTouchMove={(e) => e.preventDefault()}
               >+</button>
             </div>
           </div>
@@ -100,8 +89,6 @@ export default function Settings({
                 }} 
                 className="w-10 h-10 bg-slate-100 rounded-full font-black select-none"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-                onTouchStart={(e) => e.preventDefault()}
-                onTouchMove={(e) => e.preventDefault()}
               >-</button>
               
               <div className="text-2xl font-black text-indigo-600 italic w-12">{typeTimerSetting}s</div>
@@ -114,8 +101,6 @@ export default function Settings({
                 }} 
                 className="w-10 h-10 bg-slate-100 rounded-full font-black select-none"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-                onTouchStart={(e) => e.preventDefault()}
-                onTouchMove={(e) => e.preventDefault()}
               >+</button>
             </div>
           </div>
@@ -133,9 +118,6 @@ export default function Settings({
       <div 
         className="space-y-4 pt-2 select-none"
         style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-        onTouchStart={(e) => e.preventDefault()}
-        onTouchMove={(e) => e.preventDefault()}
-        onSelectStart={(e) => e.preventDefault()}
         onDragStart={(e) => e.preventDefault()}
       >
         <button onClick={() => setPage('settings')} className="text-orange-600 font-black underline italic uppercase text-xs">← BACK</button>
@@ -160,8 +142,6 @@ export default function Settings({
                 }} 
                 className={`text-[10px] p-2 rounded-xl font-black border-2 transition-all select-none ${schedules.lv3?.includes(day) ? 'bg-orange-500 text-white border-orange-500' : schedules.lv4?.includes(day) ? 'bg-blue-500 text-white border-blue-500' : 'bg-slate-50 text-black border-slate-100'}`}
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-                onTouchStart={(e) => e.preventDefault()}
-                onTouchMove={(e) => e.preventDefault()}
               >
                 {day}<br/>{schedules.lv3?.includes(day) ? 'LV3' : schedules.lv4?.includes(day) ? 'LV4' : '-'}
               </button>
@@ -188,8 +168,6 @@ export default function Settings({
                 }} 
                 className={`text-sm p-2.5 rounded-xl font-black border-2 transition-all select-none ${schedules.lv5?.includes(date) ? 'bg-purple-500 text-white border-purple-500' : schedules.lv6?.includes(date) ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-slate-50 text-black border-slate-100'}`}
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-                onTouchStart={(e) => e.preventDefault()}
-                onTouchMove={(e) => e.preventDefault()}
               >
                 {date}
               </button>

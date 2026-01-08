@@ -49,7 +49,23 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
       alert("ไม่มีคำศัพท์ให้เล่น"); setPage('minigames'); return;
     }
 
-    const shuffled = poolIds.sort(() => Math.random() - 0.5);
+    // ดึงคำที่เล่นไปแล้วจาก Session Storage (แยกตาม game_type และ mode)
+    const storageKey = `playedWords_pinyin_${mode}`;
+    const playedWords = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
+    
+    // กรองคำที่เล่นไปแล้วออก
+    const remainingIds = poolIds.filter(id => !playedWords.includes(id));
+    
+    let shuffled;
+    // ถ้าเล่นครบทุกคำแล้ว ให้ reset และเริ่มใหม่
+    if (remainingIds.length === 0) {
+      sessionStorage.removeItem(storageKey);
+      shuffled = poolIds.sort(() => Math.random() - 0.5);
+    } else {
+      // สุ่มเฉพาะคำที่ยังไม่เล่น
+      shuffled = remainingIds.sort(() => Math.random() - 0.5);
+    }
+    
     setGameQueue(shuffled);
     
     // เริ่มเกมเมื่อกด Start
@@ -77,7 +93,14 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
   };
 
   const loadNextQuestion = (id, currentQueue) => {
-    if (!id) { alert("🎉 จบเกม! คุณเล่นครบทุกคำแล้ว"); setPage('minigames'); return; }
+    if (!id) { 
+      // Reset Session Storage เมื่อจบเกม
+      const storageKey = `playedWords_pinyin_${mode}`;
+      sessionStorage.removeItem(storageKey);
+      alert("🎉 จบเกม! คุณเล่นครบทุกคำแล้ว"); 
+      setPage('minigames'); 
+      return; 
+    }
     const correctWord = allMasterCards.find(c => (c.id1 || c.id) === id);
     const wrongOptions = allMasterCards.filter(c => (c.id1 || c.id) !== id).sort(() => 0.5 - Math.random()).slice(0, 3);
     setOptions([correctWord, ...wrongOptions].sort(() => 0.5 - Math.random()));
@@ -201,6 +224,14 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
         playSound('correct');
       }
 
+      // บันทึกคำที่เล่นไปแล้วใน Session Storage
+      const storageKey = `playedWords_pinyin_${mode}`;
+      const playedWords = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
+      if (!playedWords.includes(questionId)) {
+        playedWords.push(questionId);
+        sessionStorage.setItem(storageKey, JSON.stringify(playedWords));
+      }
+
       // กรณี Review Mode
       if (mode === 'review') {
         await supabase.from('user_progress').update({ minigame_wrong_count: 0 }).eq('user_id', user.id).eq('flashcard_id', questionId);
@@ -227,6 +258,9 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
         if (filteredQueue.length > 0) {
           loadNextQuestion(filteredQueue[0], filteredQueue);
         } else {
+          // ถ้าเล่นครบแล้ว ให้ reset Session Storage
+          const storageKey = `playedWords_pinyin_${mode}`;
+          sessionStorage.removeItem(storageKey);
           alert("🎉 จบเกม Review! คุณตอบถูกทุกคำแล้ว");
           setPage('minigames');
         }
@@ -237,6 +271,14 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
       setFeedbackType('wrong');
       setShowFeedback(true);
       playSound('wrong');
+      
+      // บันทึกคำที่เล่นไปแล้วใน Session Storage (แม้ตอบผิดก็บันทึก)
+      const storageKey = `playedWords_pinyin_${mode}`;
+      const playedWords = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
+      if (!playedWords.includes(questionId)) {
+        playedWords.push(questionId);
+        sessionStorage.setItem(storageKey, JSON.stringify(playedWords));
+      }
       
       newStreak = 0;
       newScore = Math.max(0, newScore - 3);
@@ -262,6 +304,16 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
 
     const nextQueue = gameQueue.slice(1);
     setGameQueue(nextQueue);
+    
+    // ถ้าเล่นครบแล้ว ให้ reset Session Storage
+    if (nextQueue.length === 0) {
+      const storageKey = `playedWords_pinyin_${mode}`;
+      sessionStorage.removeItem(storageKey);
+      alert("🎉 จบเกม! คุณเล่นครบทุกคำแล้ว");
+      setPage('minigames');
+      return;
+    }
+    
     loadNextQuestion(nextQueue[0], nextQueue);
   };
 
@@ -293,9 +345,6 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
       <div 
         className="flex flex-col items-center justify-center min-h-[80vh] select-none"
         style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-        onTouchStart={(e) => e.preventDefault()}
-        onTouchMove={(e) => e.preventDefault()}
-        onSelectStart={(e) => e.preventDefault()}
         onDragStart={(e) => e.preventDefault()}
       >
         <div className="text-center mb-8">
@@ -335,11 +384,8 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
   return (
     <div 
       className="flex flex-col items-center select-none" 
-      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-      onTouchStart={(e) => e.preventDefault()}
-      onTouchMove={(e) => e.preventDefault()}
-      onSelectStart={(e) => e.preventDefault()}
-      onDragStart={(e) => e.preventDefault()}
+            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+            onDragStart={(e) => e.preventDefault()}
     >
       <div className="w-full flex justify-between items-center mb-4">
         <button onClick={() => setPage('minigames')} className="text-slate-800 font-black text-xs underline italic uppercase">Exit</button>
@@ -391,10 +437,7 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
             key={idx} 
             onClick={() => handleAnswer(opt)} 
             className="bg-white p-4 md:p-8 rounded-2xl border-b-4 border-slate-200 active:border-0 active:translate-y-1 transition-all shadow-sm font-black text-slate-700 italic text-base md:text-2xl select-none" 
-            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }} 
-            onTouchStart={(e) => e.preventDefault()}
-            onTouchMove={(e) => e.preventDefault()}
-            onSelectStart={(e) => e.preventDefault()}
+            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
             onDragStart={(e) => e.preventDefault()}
           >
             {(opt.pinyin_vocab || opt.pinyin || '').toLowerCase()}

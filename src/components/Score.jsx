@@ -12,6 +12,18 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
       pinyin: 0,
       vol: 0,
       type: 0
+    },
+    bestStreaksPerGame: {
+      th: 0,
+      pinyin: 0,
+      vol: 0,
+      type: 0
+    },
+    currentScoresPerGame: {
+      th: 0,
+      pinyin: 0,
+      vol: 0,
+      type: 0
     }
   });
 
@@ -38,7 +50,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
 
       const { data: scores, error } = await supabase
         .from('user_scores')
-        .select('game_type, total_score, best_score')
+        .select('game_type, total_score, best_score, best_streak')
         .eq('user_id', user.id);
 
       if (error) {
@@ -49,6 +61,8 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
       let currentTotalScore = 0;
       let bestTotalScore = 0;
       const bestScoresPerGame = { th: 0, pinyin: 0, vol: 0, type: 0 };
+      const bestStreaksPerGame = { th: 0, pinyin: 0, vol: 0, type: 0 };
+      const currentScoresPerGame = { th: 0, pinyin: 0, vol: 0, type: 0 };
 
       if (scores) {
         scores.forEach(score => {
@@ -56,6 +70,8 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
           bestTotalScore += score.best_score || 0;
           if (bestScoresPerGame.hasOwnProperty(score.game_type)) {
             bestScoresPerGame[score.game_type] = score.best_score || 0;
+            bestStreaksPerGame[score.game_type] = score.best_streak || 0;
+            currentScoresPerGame[score.game_type] = score.total_score || 0;
           }
         });
       }
@@ -65,7 +81,9 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
         level7Words: level7Count,
         currentTotalScore,
         bestTotalScore,
-        bestScoresPerGame
+        bestScoresPerGame,
+        bestStreaksPerGame,
+        currentScoresPerGame
       });
     } catch (error) {
       console.error('Error in fetchPersonalStats:', error);
@@ -220,7 +238,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
           <div className="bg-white p-6 rounded-3xl border-2 border-slate-100 shadow-sm">
             <h3 className="text-xl font-black uppercase italic mb-4 text-center">🎮 คะแนนสูงสุดแต่ละเกม</h3>
             
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="p-4 bg-emerald-50 rounded-2xl border-2 border-emerald-200 text-center">
                 <div className="text-xs font-black text-slate-600 uppercase mb-1">เกมแปลไทย</div>
                 <div className="text-2xl font-black text-emerald-600">{personalStats.bestScoresPerGame.th}</div>
@@ -236,6 +254,48 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
               <div className="p-4 bg-indigo-50 rounded-2xl border-2 border-indigo-200 text-center">
                 <div className="text-xs font-black text-slate-600 uppercase mb-1">ฝึกพิมพ์</div>
                 <div className="text-2xl font-black text-indigo-600">{personalStats.bestScoresPerGame.type}</div>
+              </div>
+            </div>
+
+            <h3 className="text-xl font-black uppercase italic mb-4 text-center mt-6">📊 คะแนนปัจจุบันแต่ละเกม</h3>
+            
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="p-4 bg-emerald-50 rounded-2xl border-2 border-emerald-200 text-center">
+                <div className="text-xs font-black text-slate-600 uppercase mb-1">เกมแปลไทย</div>
+                <div className="text-2xl font-black text-emerald-600">{personalStats.currentScoresPerGame.th}</div>
+              </div>
+              <div className="p-4 bg-blue-50 rounded-2xl border-2 border-blue-200 text-center">
+                <div className="text-xs font-black text-slate-600 uppercase mb-1">Pinyin</div>
+                <div className="text-2xl font-black text-blue-600">{personalStats.currentScoresPerGame.pinyin}</div>
+              </div>
+              <div className="p-4 bg-purple-50 rounded-2xl border-2 border-purple-200 text-center">
+                <div className="text-xs font-black text-slate-600 uppercase mb-1">เติมคำ</div>
+                <div className="text-2xl font-black text-purple-600">{personalStats.currentScoresPerGame.vol}</div>
+              </div>
+              <div className="p-4 bg-indigo-50 rounded-2xl border-2 border-indigo-200 text-center">
+                <div className="text-xs font-black text-slate-600 uppercase mb-1">ฝึกพิมพ์</div>
+                <div className="text-2xl font-black text-indigo-600">{personalStats.currentScoresPerGame.type}</div>
+              </div>
+            </div>
+
+            <h3 className="text-xl font-black uppercase italic mb-4 text-center mt-6">🔥 Best Streak แต่ละเกม</h3>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-4 bg-emerald-50 rounded-2xl border-2 border-emerald-200 text-center">
+                <div className="text-xs font-black text-slate-600 uppercase mb-1">เกมแปลไทย</div>
+                <div className="text-2xl font-black text-emerald-600">{personalStats.bestStreaksPerGame.th} คำ</div>
+              </div>
+              <div className="p-4 bg-blue-50 rounded-2xl border-2 border-blue-200 text-center">
+                <div className="text-xs font-black text-slate-600 uppercase mb-1">Pinyin</div>
+                <div className="text-2xl font-black text-blue-600">{personalStats.bestStreaksPerGame.pinyin} คำ</div>
+              </div>
+              <div className="p-4 bg-purple-50 rounded-2xl border-2 border-purple-200 text-center">
+                <div className="text-xs font-black text-slate-600 uppercase mb-1">เติมคำ</div>
+                <div className="text-2xl font-black text-purple-600">{personalStats.bestStreaksPerGame.vol} คำ</div>
+              </div>
+              <div className="p-4 bg-indigo-50 rounded-2xl border-2 border-indigo-200 text-center">
+                <div className="text-xs font-black text-slate-600 uppercase mb-1">ฝึกพิมพ์</div>
+                <div className="text-2xl font-black text-indigo-600">{personalStats.bestStreaksPerGame.type} คำ</div>
               </div>
             </div>
           </div>
