@@ -13,7 +13,14 @@ export default function FlashcardGame({
   setGameActive 
 }) {
   return (
-    <div className="flex flex-col items-center">
+    <div 
+      className="flex flex-col items-center select-none"
+      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+      onTouchStart={(e) => e.preventDefault()}
+      onTouchMove={(e) => e.preventDefault()}
+      onSelectStart={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+    >
       {/* Header ของเกม */}
       <div className="w-full flex justify-between items-center mb-6 px-2">
         <button 
@@ -56,13 +63,19 @@ export default function FlashcardGame({
         <div className="grid grid-cols-2 gap-4 w-full mt-10 animate-in zoom-in duration-300">
           <button 
             onClick={() => handleAnswer(false)} 
-            className="bg-red-600 text-white py-6 rounded-3xl font-black shadow-xl active:scale-90 transition uppercase italic"
+            className="bg-red-600 text-white py-6 rounded-3xl font-black shadow-xl active:scale-90 transition uppercase italic select-none"
+            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+            onTouchStart={(e) => e.preventDefault()}
+            onTouchMove={(e) => e.preventDefault()}
           >
             WRONG
           </button>
           <button 
             onClick={() => handleAnswer(true)} 
-            className="bg-emerald-600 text-white py-6 rounded-3xl font-black shadow-xl active:scale-90 transition uppercase italic"
+            className="bg-emerald-600 text-white py-6 rounded-3xl font-black shadow-xl active:scale-90 transition uppercase italic select-none"
+            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+            onTouchStart={(e) => e.preventDefault()}
+            onTouchMove={(e) => e.preventDefault()}
           >
             CORRECT
           </button>
@@ -70,7 +83,10 @@ export default function FlashcardGame({
       ) : ( 
         <button 
           onClick={() => setIsFlipped(true)} 
-          className="mt-10 text-slate-300 font-black border-b-2 border-slate-200 text-xs uppercase italic"
+          className="mt-10 text-slate-300 font-black border-b-2 border-slate-200 text-xs uppercase italic select-none"
+          style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+          onTouchStart={(e) => e.preventDefault()}
+          onTouchMove={(e) => e.preventDefault()}
         >
           Tap to reveal
         </button> 

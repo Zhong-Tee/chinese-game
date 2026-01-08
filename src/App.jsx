@@ -8,6 +8,9 @@ import FlashcardGame from './components/FlashcardGame';
 import Library from './components/Library';
 import MiniGames_th from './components/MiniGames_th';
 import MiniGames_pinyin from './components/MiniGames_pinyin';
+import MiniGames_vol from './components/MiniGames_vol';
+import MiniGames_type from './components/MiniGames_type';
+import Score from './components/Score';
 
 export default function App() {
   const [page, setPage] = useState('login');
@@ -16,6 +19,7 @@ export default function App() {
   // Settings & Data
   const [timerSetting, setTimerSetting] = useState(5); // สำหรับ Flashcard
   const [gameTimerSetting, setGameTimerSetting] = useState(5); // สำหรับ Mini Games
+  const [typeTimerSetting, setTypeTimerSetting] = useState(5); // สำหรับ Type Game
   const [schedules, setSchedules] = useState({ lv3: [], lv4: [], lv5: [], lv6: [] });
   const [allMasterCards, setAllMasterCards] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -51,18 +55,32 @@ export default function App() {
     const { data } = await supabase.from('user_settings').select('*').eq('user_id', userId).single();
     if (data) { 
       setTimerSetting(data.timer_setting || 5); 
-      setGameTimerSetting(data.game_timer_setting || 5); // ป้องกันค่าว่าง
+      setGameTimerSetting(data.game_timer_setting || data.minigame_timer || 5); // เพิ่ม fallback minigame_timer
+      setTypeTimerSetting(data.type_timer || 5); // ดึงค่า type_timer
       setSchedules(data.schedules || { lv3: [], lv4: [], lv5: [], lv6: [] }); 
     }
     else { await supabase.from('user_settings').insert([{ user_id: userId }]); }
   };
 
-  const saveSettings = async (newTimer, newGameTimer, newSchedules) => {
-    await supabase.from('user_settings').update({ 
+  const saveSettings = async (newTimer, newGameTimer, newTypeTimer, newSchedules) => {
+    if (!user || !user.id) {
+      console.error('User not found, cannot save settings');
+      return;
+    }
+    
+    const { error } = await supabase.from('user_settings').update({ 
       timer_setting: newTimer, 
-      game_timer_setting: newGameTimer,
+      minigame_timer: newGameTimer, // บันทึกค่า gameTimerSetting ไปยังคอลัมน์ minigame_timer
+      type_timer: newTypeTimer || typeTimerSetting, // บันทึกค่า type_timer
       schedules: newSchedules 
     }).eq('user_id', user.id);
+    
+    if (error) {
+      console.error('Error saving settings:', error);
+      alert('ไม่สามารถบันทึกการตั้งค่าได้: ' + error.message);
+    } else {
+      console.log('Settings saved successfully:', { timer_setting: newTimer, minigame_timer: newGameTimer, type_timer: newTypeTimer || typeTimerSetting });
+    }
   };
 
   const fetchInitialData = async (userId) => {
@@ -221,7 +239,14 @@ export default function App() {
   };
 
   const MenuOverlay = () => (
-    <div className={`fixed inset-0 bg-slate-900/95 z-50 flex flex-col items-center justify-center transition-all duration-300 ${isMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+    <div 
+      className={`fixed inset-0 bg-slate-900/95 z-50 flex flex-col items-center justify-center transition-all duration-300 select-none ${isMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+      onTouchStart={(e) => e.preventDefault()}
+      onTouchMove={(e) => e.preventDefault()}
+      onSelectStart={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+    >
       <button onClick={() => setIsMenuOpen(false)} className="absolute top-6 right-6 text-white text-4xl">&times;</button>
       <div className="flex flex-col space-y-8 text-center text-white font-black italic text-2xl uppercase">
         <button onClick={() => {setPage('dashboard'); setIsMenuOpen(false);}}>🏠 Home</button>
@@ -235,7 +260,14 @@ export default function App() {
   if (page === 'login') return <Login setPage={setPage} setUser={setUser} fetchInitialData={fetchInitialData} fetchUserSettings={fetchUserSettings} />;
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-10 overflow-x-hidden" style={{ overscrollBehavior: 'contain' }}>
+    <div 
+      className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-10 overflow-x-hidden select-none" 
+      style={{ overscrollBehavior: 'contain', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+      onTouchStart={(e) => e.preventDefault()}
+      onTouchMove={(e) => e.preventDefault()}
+      onSelectStart={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+    >
       <header className="p-4 bg-white shadow-sm border-b-4 border-orange-500 flex justify-between items-center sticky top-0 z-40">
         <h1 className="font-black text-orange-600 text-xl uppercase italic tracking-tighter">Nihao Game</h1>
         <button onClick={() => setIsMenuOpen(true)} className="w-12 h-10 bg-slate-800 text-white rounded-xl flex items-center justify-center text-2xl shadow-lg">☰</button>
@@ -245,7 +277,14 @@ export default function App() {
 
       <main className="max-w-md mx-auto p-4">
         {isPreloading && (
-          <div className="fixed inset-0 bg-white/95 z-[60] flex flex-col items-center justify-center p-10 text-center">
+          <div 
+            className="fixed inset-0 bg-white/95 z-[60] flex flex-col items-center justify-center p-10 text-center select-none"
+            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+            onTouchStart={(e) => e.preventDefault()}
+            onTouchMove={(e) => e.preventDefault()}
+            onSelectStart={(e) => e.preventDefault()}
+            onDragStart={(e) => e.preventDefault()}
+          >
             <h2 className="text-xl font-black italic uppercase text-orange-600">Preparing...</h2>
             <div className="w-full bg-slate-100 h-4 rounded-full mt-8 border"><div className="bg-orange-500 h-full transition-all" style={{width: `${preloadProgress}%`}}></div></div>
           </div>
@@ -255,6 +294,7 @@ export default function App() {
         {page === 'fc-chars' && <Flashcards setPage={setPage} levelCounts={levelCounts} schedules={schedules} checkLevelAvailable={checkLevelAvailable} startLevelGame={startLevelGame} />}
         {page === 'fc-play' && currentCard && <FlashcardGame setPage={setPage} activeLevel={activeLevel} currentCard={currentCard} setCurrentCard={setCurrentCard} timer={timer} isFlipped={isFlipped} setIsFlipped={setIsFlipped} gameQueue={gameQueue} handleAnswer={handleAnswer} setGameActive={setGameActive} />}
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}
+        {page === 'score' && <Score user={user} selectedIds={selectedIds} levelCounts={levelCounts} setPage={setPage} />}
         
         {(page === 'settings' || page === 'set-schedule') && (
           <Settings 
@@ -262,17 +302,26 @@ export default function App() {
             setPage={setPage} 
             timerSetting={timerSetting} 
             setTimerSetting={setTimerSetting} 
-            gameTimerSetting={gameTimerSetting} // ส่งค่าที่ขาดไป
-            setGameTimerSetting={setGameTimerSetting} // ส่งค่าที่ขาดไป
+            gameTimerSetting={gameTimerSetting}
+            setGameTimerSetting={setGameTimerSetting}
+            typeTimerSetting={typeTimerSetting}
+            setTypeTimerSetting={setTypeTimerSetting}
             schedules={schedules} 
             setSchedules={setSchedules} 
-            saveSettings={(t, g, s) => saveSettings(t, g, s)} 
+            saveSettings={(t, g, type, s) => saveSettings(t, g, type, s)} 
           />
         )}
 
         {/* --- 4. หน้าเมนูเลือก 4 เกม (Mini Games Hub) --- */}
         {page === 'minigames' && (
-          <div className="grid grid-cols-1 gap-4 pt-4">
+          <div 
+            className="grid grid-cols-1 gap-4 pt-4 select-none"
+            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+            onTouchStart={(e) => e.preventDefault()}
+            onTouchMove={(e) => e.preventDefault()}
+            onSelectStart={(e) => e.preventDefault()}
+            onDragStart={(e) => e.preventDefault()}
+          >
             <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline text-left mb-2">← Back</button>
             <button onClick={() => setPage('minigame-th')} className="h-28 bg-emerald-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 transform active:scale-95 transition-all text-xl italic">
               <svg width="48" height="32" viewBox="0 0 48 32" className="rounded" style={{filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'}}>
@@ -287,11 +336,11 @@ export default function App() {
             <button onClick={() => setPage('minigame-pinyin')} className="h-28 bg-blue-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 transform active:scale-95 transition-all text-xl italic">
               <span className="text-4xl">🔤</span> Pinyin
             </button>
-            <button className="h-28 bg-purple-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 opacity-50 cursor-not-allowed text-xl italic">
-              <span className="text-4xl">📝</span> เติมคำ (Soon)
+            <button onClick={() => setPage('minigame-vol')} className="h-28 bg-purple-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 transform active:scale-95 transition-all text-xl italic">
+              <span className="text-4xl">📝</span> เติมคำ
             </button>
-            <button className="h-28 bg-slate-600 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 opacity-50 cursor-not-allowed text-xl italic">
-              <span className="text-4xl">⌨️</span> ฝึกพิมพ์ (Soon)
+            <button onClick={() => setPage('minigame-type')} className="h-28 bg-indigo-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 transform active:scale-95 transition-all text-xl italic">
+              <span className="text-4xl">⌨️</span> ฝึกพิมพ์
             </button>
           </div>
         )}
@@ -317,9 +366,38 @@ export default function App() {
             setPage={setPage}
           />
         )}
+
+        {/* --- เรียกใช้ Mini Game 3 (เติมคำ) --- */}
+        {page === 'minigame-vol' && (
+          <MiniGames_vol 
+            user={user}
+            allMasterCards={allMasterCards}
+            selectedIds={selectedIds}
+            timerSetting={gameTimerSetting}
+            setPage={setPage}
+          />
+        )}
+
+        {/* --- เรียกใช้ Mini Game 4 (ฝึกพิมพ์) --- */}
+        {page === 'minigame-type' && (
+          <MiniGames_type 
+            user={user}
+            allMasterCards={allMasterCards}
+            selectedIds={selectedIds}
+            timerSetting={typeTimerSetting}
+            setPage={setPage}
+          />
+        )}
         
         {page === 'select-words' && (
-          <div className="space-y-4 pb-10 text-center">
+          <div 
+            className="space-y-4 pb-10 text-center select-none"
+            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+            onTouchStart={(e) => e.preventDefault()}
+            onTouchMove={(e) => e.preventDefault()}
+            onSelectStart={(e) => e.preventDefault()}
+            onDragStart={(e) => e.preventDefault()}
+          >
             <div className="flex justify-between items-center sticky top-20 bg-slate-50 py-2 z-10 px-2">
               <button onClick={() => setPage('settings')} className="text-orange-600 font-black italic underline uppercase text-xs">← Back</button>
               <div className="bg-orange-600 text-white px-4 py-1 rounded-full font-black text-xs">Selected {selectedIds.length}</div>
@@ -342,6 +420,9 @@ export default function App() {
                       className={`p-4 rounded-2xl border-2 text-center transition-all select-none ${isSelected ? "bg-orange-500 border-orange-600 text-white shadow-lg" : "bg-white border-slate-100"}`}
                       style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
                       onTouchStart={(e) => e.preventDefault()}
+                      onTouchMove={(e) => e.preventDefault()}
+                      onSelectStart={(e) => e.preventDefault()}
+                      onDragStart={(e) => e.preventDefault()}
                     >
                       <div className="text-2xl font-bold">{card?.cn || ''}</div>
                       <div className={`text-[9px] font-bold uppercase ${isSelected ? 'text-white' : 'text-slate-400'}`}>{card?.pinyin || ''}</div>

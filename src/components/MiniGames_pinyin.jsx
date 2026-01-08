@@ -64,6 +64,13 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
     }
   }, [mode, gameStarted]);
 
+  // ดึง reviewCount เมื่อ component mount เพื่อแสดงในหน้า Start Screen
+  useEffect(() => {
+    if (!gameStarted && user?.id) {
+      fetchReviewCount().then(count => setReviewCount(count));
+    }
+  }, [gameStarted, user?.id]);
+
   const handleStartGame = () => {
     setGameStarted(true);
     initGame();
@@ -79,11 +86,26 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
   };
 
   // 2. ระบบบันทึกคะแนนลง DB (Upsert)
-  const syncScore = async (newScore) => {
+  const syncScore = async (newScore, currentStreak) => {
+    // ดึง best_score และ best_streak ปัจจุบัน
+    const { data: currentData } = await supabase
+      .from('user_scores')
+      .select('best_score, best_streak')
+      .eq('user_id', user.id)
+      .eq('game_type', 'pinyin')
+      .single();
+    
+    const currentBestScore = currentData?.best_score || 0;
+    const newBestScore = Math.max(currentBestScore, newScore);
+    const currentBestStreak = currentData?.best_streak || 0;
+    const newBestStreak = Math.max(currentBestStreak, currentStreak || 0);
+    
     await supabase.from('user_scores').upsert({ 
       user_id: user.id, 
-      game_type: 'pinyin', 
-      total_score: newScore 
+      game_type: 'pinyin',
+      total_score: newScore,
+      best_score: newBestScore,
+      best_streak: newBestStreak // อัพเดท best_streak
     });
   };
 
@@ -193,7 +215,7 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
         
         setScore(newScore);
         setStreak(newStreak);
-        syncScore(newScore);
+        syncScore(newScore, newStreak);
         
         // ซ่อน feedback หลังจาก 1 วินาที
         setTimeout(() => {
@@ -236,7 +258,7 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
 
     setScore(newScore);
     setStreak(newStreak);
-    syncScore(newScore); // บันทึกลง DB
+    syncScore(newScore, newStreak); // บันทึกลง DB
 
     const nextQueue = gameQueue.slice(1);
     setGameQueue(nextQueue);
@@ -264,33 +286,43 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
 
   // หน้า Start Screen
   if (!gameStarted) {
+    const normalCount = mode === 'normal' ? selectedIds.length : selectedIds.length;
+    const reviewCountDisplay = reviewCount;
+    
     return (
-      <div className="flex flex-col items-center justify-center min-h-[80vh]">
+      <div 
+        className="flex flex-col items-center justify-center min-h-[80vh] select-none"
+        style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+        onTouchStart={(e) => e.preventDefault()}
+        onTouchMove={(e) => e.preventDefault()}
+        onSelectStart={(e) => e.preventDefault()}
+        onDragStart={(e) => e.preventDefault()}
+      >
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-black italic uppercase text-blue-600 mb-4">เกม Pinyin</h1>
-          <p className="text-slate-600 font-bold mb-2">เลือก Pinyin ที่ถูกต้อง</p>
-          <p className="text-sm text-slate-500">เวลา: {timerSetting} วินาที/คำ</p>
+          <h1 className="text-4xl md:text-6xl font-black italic uppercase text-blue-600 mb-4">เกม Pinyin</h1>
+          <p className="text-slate-600 font-bold mb-2 text-base md:text-xl">เลือก Pinyin ที่ถูกต้อง</p>
+          <p className="text-sm md:text-lg text-slate-500">เวลา: {timerSetting} วินาที/คำ</p>
         </div>
         
-        <div className="flex gap-2 mb-8">
-          <button onClick={() => {setMode('normal');}} className={`px-6 py-3 rounded-full font-black text-sm uppercase ${mode === 'normal' ? 'bg-slate-800 text-white' : 'bg-white border-2 border-slate-300'}`}>
-            Normal
+        <div className="flex gap-2 md:gap-4 mb-8">
+          <button onClick={() => {setMode('normal');}} className={`px-6 md:px-10 py-3 md:py-5 rounded-full font-black text-sm md:text-lg uppercase ${mode === 'normal' ? 'bg-slate-800 text-white' : 'bg-white border-2 border-slate-300'}`}>
+            Normal ({normalCount})
           </button>
-          <button onClick={() => {setMode('review');}} className={`px-6 py-3 rounded-full font-black text-sm uppercase ${mode === 'review' ? 'bg-red-600 text-white' : 'bg-white border-2 border-slate-300'}`}>
-            Review
+          <button onClick={() => {setMode('review');}} className={`px-6 md:px-10 py-3 md:py-5 rounded-full font-black text-sm md:text-lg uppercase ${mode === 'review' ? 'bg-red-600 text-white' : 'bg-white border-2 border-slate-300'}`}>
+            Review ({reviewCountDisplay})
           </button>
         </div>
 
         <button 
           onClick={handleStartGame}
-          className="bg-blue-500 text-white px-12 py-4 rounded-[2rem] shadow-xl font-black text-xl italic uppercase transform active:scale-95 transition-all"
+          className="bg-blue-500 text-white px-12 md:px-16 py-4 md:py-6 rounded-[2rem] shadow-xl font-black text-xl md:text-3xl italic uppercase transform active:scale-95 transition-all"
         >
           🎮 Start Game
         </button>
 
         <button 
           onClick={() => setPage('minigames')}
-          className="mt-6 text-slate-600 font-bold text-sm underline italic uppercase"
+          className="mt-6 text-slate-600 font-bold text-sm md:text-base underline italic uppercase"
         >
           ← Back to Menu
         </button>
@@ -301,7 +333,14 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
   if (!currentQuestion) return null;
 
   return (
-    <div className="flex flex-col items-center">
+    <div 
+      className="flex flex-col items-center select-none" 
+      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+      onTouchStart={(e) => e.preventDefault()}
+      onTouchMove={(e) => e.preventDefault()}
+      onSelectStart={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+    >
       <div className="w-full flex justify-between items-center mb-4">
         <button onClick={() => setPage('minigames')} className="text-slate-800 font-black text-xs underline italic uppercase">Exit</button>
         <div className="flex gap-2">
@@ -342,13 +381,22 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
         </div>
       )}
 
-      <div className="w-full max-w-[280px] aspect-[3/4] rounded-[2rem] overflow-hidden shadow-2xl border-8 border-white mb-8 relative">
+      <div className="w-full max-w-[280px] md:max-w-[400px] lg:max-w-[500px] aspect-[3/4] rounded-[2rem] overflow-hidden shadow-2xl border-4 md:border-8 border-white mb-4 md:mb-8 relative">
         <img src={currentQuestion.image_front_url} className="w-full h-full object-cover" alt="Q" />
       </div>
 
-      <div className="grid grid-cols-2 gap-3 w-full max-w-sm px-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-6 w-full max-w-sm md:max-w-2xl px-4">
         {options.map((opt, idx) => (
-          <button key={idx} onClick={() => handleAnswer(opt)} className="bg-white p-4 rounded-2xl border-b-4 border-slate-200 active:border-0 active:translate-y-1 transition-all shadow-sm font-black text-slate-700 italic text-sm select-none" style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }} onTouchStart={(e) => e.preventDefault()}>
+          <button 
+            key={idx} 
+            onClick={() => handleAnswer(opt)} 
+            className="bg-white p-4 md:p-8 rounded-2xl border-b-4 border-slate-200 active:border-0 active:translate-y-1 transition-all shadow-sm font-black text-slate-700 italic text-base md:text-2xl select-none" 
+            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }} 
+            onTouchStart={(e) => e.preventDefault()}
+            onTouchMove={(e) => e.preventDefault()}
+            onSelectStart={(e) => e.preventDefault()}
+            onDragStart={(e) => e.preventDefault()}
+          >
             {(opt.pinyin_vocab || opt.pinyin || '').toLowerCase()}
           </button>
         ))}

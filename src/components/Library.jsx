@@ -10,7 +10,14 @@ export default function Library({
   setLibFlipped 
 }) {
   return (
-    <div className="space-y-4 pb-10">
+    <div 
+      className="space-y-4 pb-10 select-none"
+      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+      onTouchStart={(e) => e.preventDefault()}
+      onTouchMove={(e) => e.preventDefault()}
+      onSelectStart={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+    >
       <div className="flex items-center mb-4">
         <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black italic underline uppercase text-xs">← Back to Menu</button>
       </div>
@@ -37,7 +44,14 @@ export default function Library({
         )}
       </div>
       {libraryDetail && (
-        <div className="fixed inset-0 bg-slate-900/95 z-[70] flex flex-col items-center justify-center p-6 text-center">
+        <div 
+          className="fixed inset-0 bg-slate-900/95 z-[70] flex flex-col items-center justify-center p-6 text-center select-none"
+          style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+          onTouchStart={(e) => e.preventDefault()}
+          onTouchMove={(e) => e.preventDefault()}
+          onSelectStart={(e) => e.preventDefault()}
+          onDragStart={(e) => e.preventDefault()}
+        >
           <button onClick={() => setLibraryDetail(null)} className="absolute top-6 right-6 text-white text-3xl font-bold">&times;</button>
           <div className="w-full max-w-sm aspect-[3/4] rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white mb-8">
             <img src={libFlipped ? libraryDetail.image_back_url : libraryDetail.image_front_url} className="w-full h-full object-cover" alt="detail" />
