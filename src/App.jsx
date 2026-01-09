@@ -41,6 +41,7 @@ export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [libraryDetail, setLibraryDetail] = useState(null);
   const [libFlipped, setLibFlipped] = useState(false);
+  const [username, setUsername] = useState('');
 
   // --- 1. Initial Load ---
   useEffect(() => {
@@ -49,9 +50,17 @@ export default function App() {
         setUser(session.user); setPage('dashboard');
         fetchInitialData(session.user.id);
         fetchUserSettings(session.user.id);
+        fetchUsername(session.user.id);
       }
     });
   }, []);
+
+  // ดึง username เมื่อ user เปลี่ยน
+  useEffect(() => {
+    if (user?.id) {
+      fetchUsername(user.id);
+    }
+  }, [user?.id]);
 
   const fetchUserSettings = async (userId) => {
     const { data } = await supabase.from('user_settings').select('*').eq('user_id', userId).single();
@@ -62,6 +71,49 @@ export default function App() {
       setSchedules(data.schedules || { lv3: [], lv4: [], lv5: [], lv6: [] }); 
     }
     else { await supabase.from('user_settings').insert([{ user_id: userId }]); }
+  };
+
+  const fetchUsername = async (userId) => {
+    if (!userId) return;
+    
+    try {
+      // ดึงข้อมูล username จากตาราง profiles
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('username, display_name, email')
+        .eq('user_id', userId)
+        .single();
+
+      if (!error && profile) {
+        // ลำดับความสำคัญ: username > display_name (ถ้าไม่ใช่ email) > username จาก email
+        let displayName = profile.username;
+        
+        if (!displayName || displayName.trim() === '') {
+          if (profile.display_name && !profile.display_name.includes('@')) {
+            displayName = profile.display_name;
+          } else {
+            displayName = profile.email ? profile.email.split('@')[0] : null;
+          }
+        }
+        
+        if (!displayName || displayName.trim() === '') {
+          displayName = profile.email || 'User';
+        }
+        
+        setUsername(displayName);
+      } else {
+        // ถ้าไม่มีข้อมูลใน profiles ให้ใช้ username จาก email
+        const currentUser = user || (await supabase.auth.getUser()).data.user;
+        const fallbackName = currentUser?.email ? currentUser.email.split('@')[0] : currentUser?.user_metadata?.username || 'User';
+        setUsername(fallbackName);
+      }
+    } catch (error) {
+      console.error('Error fetching username:', error);
+      // Fallback: ใช้ username จาก email
+      const currentUser = user || (await supabase.auth.getUser()).data.user;
+      const fallbackName = currentUser?.email ? currentUser.email.split('@')[0] : 'User';
+      setUsername(fallbackName);
+    }
   };
 
   const saveSettings = async (newTimer, newGameTimer, newTypeTimer, newSchedules) => {
@@ -277,7 +329,14 @@ export default function App() {
       onDragStart={(e) => e.preventDefault()}
     >
       <header className="p-4 bg-white shadow-sm border-b-4 border-orange-500 flex justify-between items-center sticky top-0 z-40">
-        <h1 className="font-black text-orange-600 text-xl uppercase italic tracking-tighter">Nihao Game</h1>
+        <div className="flex flex-col">
+          <h1 className="font-black text-orange-600 text-xl uppercase italic tracking-tighter">Nihao Game</h1>
+          {username && (
+            <div className="text-xs font-black text-slate-500 uppercase italic mt-0.5">
+              👤 {username}
+            </div>
+          )}
+        </div>
         <button onClick={() => setIsMenuOpen(true)} className="w-12 h-10 bg-slate-800 text-white rounded-xl flex items-center justify-center text-2xl shadow-lg">☰</button>
       </header>
 
@@ -295,7 +354,7 @@ export default function App() {
           </div>
         )}
 
-        {page === 'dashboard' && <Dashboard setPage={setPage} />}
+        {page === 'dashboard' && <Dashboard setPage={setPage} user={user} />}
         {page === 'fc-chars' && <Flashcards setPage={setPage} levelCounts={levelCounts} schedules={schedules} checkLevelAvailable={checkLevelAvailable} startLevelGame={startLevelGame} />}
         {page === 'fc-play' && currentCard && <FlashcardGame setPage={setPage} activeLevel={activeLevel} currentCard={currentCard} setCurrentCard={setCurrentCard} timer={timer} isFlipped={isFlipped} setIsFlipped={setIsFlipped} gameQueue={gameQueue} handleAnswer={handleAnswer} setGameActive={setGameActive} />}
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}
