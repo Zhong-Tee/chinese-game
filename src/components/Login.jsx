@@ -34,6 +34,19 @@ export default function Login({ setPage, setUser, fetchInitialData, fetchUserSet
       setPage('dashboard');
       fetchInitialData(data.user.id);
       fetchUserSettings(data.user.id);
+      
+      // บันทึกการ login
+      try {
+        await supabase.from('user_logins').insert({
+          user_id: data.user.id
+        });
+        
+        // ตรวจสอบและให้สติกเกอร์อัตโนมัติ
+        await supabase.rpc('check_and_unlock_stickers', { p_user_id: data.user.id });
+      } catch (err) {
+        console.error('Error logging login or checking stickers:', err);
+        // ไม่แสดง error ให้ user เพราะไม่ใช่ปัญหาหลัก
+      }
     }
     setLoading(false);
   };

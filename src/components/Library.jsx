@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 export default function Library({ 
   setPage, 
@@ -9,6 +9,7 @@ export default function Library({
   libFlipped, 
   setLibFlipped 
 }) {
+  const [showSentence, setShowSentence] = useState(false);
   return (
     <div 
       className="space-y-4 pb-10 select-none"
@@ -32,7 +33,7 @@ export default function Library({
               return idA - idB;
             })
             .map(card => (
-          <div key={card?.id1 || card?.id || Math.random()} onClick={() => { setLibraryDetail(card); setLibFlipped(false); }} className="aspect-[3/4] rounded-xl overflow-hidden shadow-md border-2 border-white active:scale-95 transition">
+          <div key={card?.id1 || card?.id || Math.random()} onClick={() => { setLibraryDetail(card); setLibFlipped(false); setShowSentence(false); }} className="aspect-[3/4] rounded-xl overflow-hidden shadow-md border-2 border-white active:scale-95 transition">
             <img src={card?.image_front_url || ''} className="w-full h-full object-cover" alt="thumb" />
           </div>
             ))
@@ -46,11 +47,57 @@ export default function Library({
           style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
           onDragStart={(e) => e.preventDefault()}
         >
-          <button onClick={() => setLibraryDetail(null)} className="absolute top-6 right-6 text-white text-3xl font-bold">&times;</button>
-          <div className="w-full max-w-sm aspect-[3/4] rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white mb-8">
-            <img src={libFlipped ? libraryDetail.image_back_url : libraryDetail.image_front_url} className="w-full h-full object-cover" alt="detail" />
-          </div>
-          <button onClick={() => setLibFlipped(!libFlipped)} className="bg-orange-500 text-white px-10 py-4 rounded-full font-black uppercase shadow-xl">{libFlipped ? "หน้า" : "คำแปล"}</button>
+          <button onClick={() => { setLibraryDetail(null); setShowSentence(false); }} className="absolute top-6 right-6 text-white text-3xl font-bold">&times;</button>
+          
+          {showSentence ? (
+            // หน้าแสดงประโยค
+            <>
+              <div className="w-full max-w-2xl aspect-[8/3] rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white mb-4">
+                <img src={libraryDetail.sentence_url || libraryDetail.image_front_url} className="w-full h-full object-cover" alt="sentence" />
+              </div>
+              
+              {/* กล่องข้อความแชทสำหรับคำแปล */}
+              {libraryDetail.translate && (
+                <div className="w-full max-w-2xl mb-6">
+                  <div className="bg-white rounded-2xl p-4 shadow-lg border-2 border-slate-200">
+                    <div className="text-slate-800 text-[24pt] font-bold leading-relaxed text-left">
+                      {libraryDetail.translate}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <button 
+                onClick={() => setShowSentence(false)} 
+                className="bg-slate-600 text-white px-10 py-4 rounded-full font-black uppercase shadow-xl"
+              >
+                ← ย้อนกลับ
+              </button>
+            </>
+          ) : (
+            // หน้าแสดงการ์ดปกติ
+            <>
+              <div className="w-full max-w-sm aspect-[3/4] rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white mb-8">
+                <img src={libFlipped ? libraryDetail.image_back_url : libraryDetail.image_front_url} className="w-full h-full object-cover" alt="detail" />
+              </div>
+              
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => setLibFlipped(!libFlipped)} 
+                  className="bg-orange-500 text-white px-8 py-4 rounded-full font-black uppercase shadow-xl"
+                >
+                  {libFlipped ? "หน้า" : "คำแปล"}
+                </button>
+                
+                <button 
+                  onClick={() => setShowSentence(true)} 
+                  className="bg-blue-500 text-white px-8 py-4 rounded-full font-black uppercase shadow-xl"
+                >
+                  ประโยค
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

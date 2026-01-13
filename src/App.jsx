@@ -51,6 +51,17 @@ export default function App() {
         fetchInitialData(session.user.id);
         fetchUserSettings(session.user.id);
         fetchUsername(session.user.id);
+        
+        // บันทึกการ login (ถ้ายังไม่ได้บันทึกวันนี้)
+        supabase.from('user_logins').insert({
+          user_id: session.user.id
+        }).then(() => {
+          // ตรวจสอบและให้สติกเกอร์อัตโนมัติ
+          supabase.rpc('check_and_unlock_stickers', { p_user_id: session.user.id });
+        }).catch(err => {
+          // ถ้ามี error (อาจบันทึกไปแล้ว) ไม่เป็นไร
+          console.log('Login already recorded or error:', err);
+        });
       }
     });
   }, []);
@@ -359,7 +370,7 @@ export default function App() {
         {page === 'fc-play' && currentCard && <FlashcardGame setPage={setPage} activeLevel={activeLevel} currentCard={currentCard} setCurrentCard={setCurrentCard} timer={timer} isFlipped={isFlipped} setIsFlipped={setIsFlipped} gameQueue={gameQueue} handleAnswer={handleAnswer} setGameActive={setGameActive} />}
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}
         {page === 'score' && <Score user={user} selectedIds={selectedIds} levelCounts={levelCounts} setPage={setPage} />}
-        {page === 'rewards' && <Rewards setPage={setPage} />}
+        {page === 'rewards' && <Rewards user={user} setPage={setPage} />}
         {page === 'comics' && <Comics setPage={setPage} />}
         
         {(page === 'settings' || page === 'set-schedule') && (
@@ -470,17 +481,20 @@ export default function App() {
                     const idB = Number(b?.id1 || b?.id || 0);
                     return idA - idB;
                   })
-                  .map(card => {
+                  .map((card, index) => {
                     const cardId = Number(card?.id1 || card?.id);
                     const isSelected = selectedIds.includes(cardId);
                   return (
                     <div 
                       key={card?.id1 || card?.id || Math.random()} 
                       onClick={() => toggleWordSelection(cardId)} 
-                      className={`p-4 rounded-2xl border-2 text-center transition-all select-none ${isSelected ? "bg-orange-500 border-orange-600 text-white shadow-lg" : "bg-white border-slate-100"}`}
+                      className={`p-4 rounded-2xl border-2 text-center transition-all select-none relative ${isSelected ? "bg-orange-500 border-orange-600 text-white shadow-lg" : "bg-white border-slate-100"}`}
                       style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
       onDragStart={(e) => e.preventDefault()}
                     >
+                      <div className={`absolute top-1 left-1 text-[10px] font-black ${isSelected ? 'text-orange-100' : 'text-slate-400'}`}>
+                        {index + 1}
+                      </div>
                       <div className="text-2xl font-bold">{card?.cn || ''}</div>
                       <div className={`text-[9px] font-bold uppercase ${isSelected ? 'text-white' : 'text-slate-400'}`}>{card?.pinyin || ''}</div>
                     </div>
