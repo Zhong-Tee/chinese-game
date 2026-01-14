@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { optimizeImageUrl } from '../utils/imageOptimizer';
+import { preloadNextImages } from '../utils/imageLoader';
 
 export default function FlashcardGame({ 
   setPage, 
@@ -12,6 +14,22 @@ export default function FlashcardGame({
   handleAnswer, 
   setGameActive 
 }) {
+  // Lazy Load: โหลดภาพถัดไป 3-5 ภาพล่วงหน้าใน background
+  useEffect(() => {
+    if (currentCard && gameQueue.length > 0) {
+      // หา index ของ currentCard ใน queue
+      const currentIndex = gameQueue.findIndex(
+        card => (card.id1 || card.id) === (currentCard.id1 || currentCard.id)
+      );
+      
+      if (currentIndex >= 0 && currentIndex < gameQueue.length - 1) {
+        // โหลดภาพถัดไป 5 ภาพ (background loading)
+        const nextCards = gameQueue.slice(currentIndex + 1, currentIndex + 6);
+        preloadNextImages(nextCards, 5);
+      }
+    }
+  }, [currentCard, gameQueue]);
+
   return (
     <div 
       className="flex flex-col items-center select-none"
@@ -46,11 +64,21 @@ export default function FlashcardGame({
         <div className={`relative w-full h-full transition-transform duration-500 preserve-3d ${isFlipped ? 'rotate-y-180' : ''}`}>
           {/* หน้าการ์ด (ภาษาจีน) */}
           <div className="absolute w-full h-full backface-hidden rounded-[2.5rem] overflow-hidden shadow-2xl border-8 border-white">
-            <img src={currentCard.image_front_url} className="w-full h-full object-cover" alt="front" />
+            <img 
+              src={optimizeImageUrl(currentCard.image_front_url)} 
+              className="w-full h-full object-cover" 
+              alt="front"
+              loading="eager" // โหลดทันทีเพราะเป็นภาพปัจจุบัน
+            />
           </div>
           {/* หลังการ์ด (คำแปล) */}
           <div className="absolute w-full h-full backface-hidden rotate-y-180 rounded-[2.5rem] overflow-hidden shadow-2xl border-8 border-white">
-            <img src={currentCard.image_back_url} className="w-full h-full object-cover" alt="back" />
+            <img 
+              src={optimizeImageUrl(currentCard.image_back_url)} 
+              className="w-full h-full object-cover" 
+              alt="back"
+              loading="eager" // โหลดทันทีเพราะเป็นภาพปัจจุบัน
+            />
           </div>
         </div>
       </div>

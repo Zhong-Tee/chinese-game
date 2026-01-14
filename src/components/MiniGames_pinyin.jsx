@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { optimizeImageUrl } from '../utils/imageOptimizer';
+import { preloadNextImages } from '../utils/imageLoader';
 
 export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, timerSetting, setPage }) {
   const [mode, setMode] = useState('normal');
@@ -106,6 +108,15 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
     setOptions([correctWord, ...wrongOptions].sort(() => 0.5 - Math.random()));
     setCurrentQuestion(correctWord);
     setTimer(timerSetting);
+    
+    // Lazy Load: โหลดภาพถัดไป 3-5 ภาพล่วงหน้า
+    if (currentQueue && currentQueue.length > 1) {
+      const nextIds = currentQueue.slice(1, 6); // 5 ภาพถัดไป
+      const nextCards = nextIds.map(nextId => 
+        allMasterCards.find(c => (c.id1 || c.id) === nextId)
+      ).filter(Boolean);
+      preloadNextImages(nextCards, 5);
+    }
   };
 
   // 2. ระบบบันทึกคะแนนลง DB (Upsert)
@@ -428,7 +439,12 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
       )}
 
       <div className="w-full max-w-[280px] md:max-w-[400px] lg:max-w-[500px] aspect-[3/4] rounded-[2rem] overflow-hidden shadow-2xl border-4 md:border-8 border-white mb-4 md:mb-8 relative">
-        <img src={currentQuestion.image_front_url} className="w-full h-full object-cover" alt="Q" />
+        <img 
+          src={optimizeImageUrl(currentQuestion.image_front_url)} 
+          className="w-full h-full object-cover" 
+          alt="Q"
+          loading="eager"
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:gap-6 w-full max-w-sm md:max-w-2xl px-4">

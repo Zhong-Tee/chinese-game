@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { optimizeImageUrl } from '../utils/imageOptimizer';
+import { preloadNextImages } from '../utils/imageLoader';
 
 export default function MiniGames_type({ user, allMasterCards, selectedIds, timerSetting, setPage }) {
   const [mode, setMode] = useState('normal');
@@ -108,6 +110,16 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
     setUserInput(''); // รีเซ็ต input
     setTimer(timerSetting);
     setIsChecking(false);
+    
+    // Lazy Load: โหลดภาพถัดไป 3-5 ภาพล่วงหน้า
+    if (currentQueue && currentQueue.length > 1) {
+      const nextIds = currentQueue.slice(1, 6); // 5 ภาพถัดไป
+      const nextCards = nextIds.map(nextId => 
+        allMasterCards.find(c => (c.id1 || c.id) === nextId)
+      ).filter(Boolean);
+      preloadNextImages(nextCards, 5);
+    }
+    
     // Focus ที่ input field
     setTimeout(() => {
       if (inputRef.current) {

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { optimizeImageUrl } from '../utils/imageOptimizer';
 
 export default function Library({ 
   setPage, 
@@ -34,7 +35,12 @@ export default function Library({
             })
             .map(card => (
           <div key={card?.id1 || card?.id || Math.random()} onClick={() => { setLibraryDetail(card); setLibFlipped(false); setShowSentence(false); }} className="aspect-[3/4] rounded-xl overflow-hidden shadow-md border-2 border-white active:scale-95 transition">
-            <img src={card?.image_front_url || ''} className="w-full h-full object-cover" alt="thumb" />
+            <img 
+              src={optimizeImageUrl(card?.image_front_url || '')} 
+              className="w-full h-full object-cover" 
+              alt="thumb"
+              loading="lazy"
+            />
           </div>
             ))
         ) : (
@@ -53,7 +59,12 @@ export default function Library({
             // หน้าแสดงประโยค
             <>
               <div className="w-full max-w-2xl aspect-[8/3] rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white mb-4">
-                <img src={libraryDetail.sentence_url || libraryDetail.image_front_url} className="w-full h-full object-cover" alt="sentence" />
+                <img 
+                  src={optimizeImageUrl(libraryDetail.sentence_url || libraryDetail.image_front_url)} 
+                  className="w-full h-full object-cover" 
+                  alt="sentence"
+                  loading="eager"
+                />
               </div>
               
               {/* กล่องข้อความแชทสำหรับคำแปล */}
@@ -78,7 +89,12 @@ export default function Library({
             // หน้าแสดงการ์ดปกติ
             <>
               <div className="w-full max-w-sm aspect-[3/4] rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white mb-8">
-                <img src={libFlipped ? libraryDetail.image_back_url : libraryDetail.image_front_url} className="w-full h-full object-cover" alt="detail" />
+                <img 
+                  src={optimizeImageUrl(libFlipped ? libraryDetail.image_back_url : libraryDetail.image_front_url)} 
+                  className="w-full h-full object-cover" 
+                  alt="detail"
+                  loading="eager"
+                />
               </div>
               
               <div className="flex gap-4">

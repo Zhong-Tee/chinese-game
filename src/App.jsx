@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import Dashboard from './components/Dashboard';
 import Login from './components/Login';
@@ -13,15 +13,16 @@ import MiniGames_type from './components/MiniGames_type';
 import Score from './components/Score';
 import Rewards from './components/Rewards';
 import Comics from './components/Comics';
+import { lazyLoadImages, preloadNextImages } from './utils/imageLoader';
 
 export default function App() {
   const [page, setPage] = useState('login');
   const [user, setUser] = useState(null);
   
   // Settings & Data
-  const [timerSetting, setTimerSetting] = useState(5); // สำหรับ Flashcard
-  const [gameTimerSetting, setGameTimerSetting] = useState(5); // สำหรับ Mini Games
-  const [typeTimerSetting, setTypeTimerSetting] = useState(5); // สำหรับ Type Game
+  const [timerSetting, setTimerSetting] = useState(10); // สำหรับ Flashcard
+  const [gameTimerSetting, setGameTimerSetting] = useState(10); // สำหรับ Mini Games
+  const [typeTimerSetting, setTypeTimerSetting] = useState(60); // สำหรับ Type Game
   const [schedules, setSchedules] = useState({ lv3: [], lv4: [], lv5: [], lv6: [] });
   const [allMasterCards, setAllMasterCards] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -31,7 +32,7 @@ export default function App() {
   const [activeLevel, setActiveLevel] = useState(1);
   const [currentCard, setCurrentCard] = useState(null);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [timer, setTimer] = useState(5);
+  const [timer, setTimer] = useState(10); // ใช้ค่าเดียวกับ timerSetting default
   const [gameActive, setGameActive] = useState(false);
   const [gameQueue, setGameQueue] = useState([]);
 
@@ -42,6 +43,9 @@ export default function App() {
   const [libraryDetail, setLibraryDetail] = useState(null);
   const [libFlipped, setLibFlipped] = useState(false);
   const [username, setUsername] = useState('');
+  
+  // Audio Context สำหรับเสียงเตือนเวลา
+  const audioContextRef = useRef(null);
 
   // --- 1. Initial Load ---
   useEffect(() => {
@@ -76,9 +80,9 @@ export default function App() {
   const fetchUserSettings = async (userId) => {
     const { data } = await supabase.from('user_settings').select('*').eq('user_id', userId).single();
     if (data) { 
-      setTimerSetting(data.timer_setting || 5); 
-      setGameTimerSetting(data.game_timer_setting || data.minigame_timer || 5); // เพิ่ม fallback minigame_timer
-      setTypeTimerSetting(data.type_timer || 5); // ดึงค่า type_timer
+      setTimerSetting(data.timer_setting || 10); 
+      setGameTimerSetting(data.game_timer_setting || data.minigame_timer || 10); // เพิ่ม fallback minigame_timer
+      setTypeTimerSetting(data.type_timer || 60); // ดึงค่า type_timer
       setSchedules(data.schedules || { lv3: [], lv4: [], lv5: [], lv6: [] }); 
     }
     else { await supabase.from('user_settings').insert([{ user_id: userId }]); }
@@ -194,10 +198,14 @@ export default function App() {
 
   const startLevelGame = async (level) => {
     try {
-      setActiveLevel(level); setIsPreloading(true); setPreloadProgress(0);
+      setActiveLevel(level); 
+      setIsPreloading(true); 
+      setPreloadProgress(0);
+      
       let query = supabase.from('user_progress').select('flashcard_id').eq('user_id', user.id);
       if (level === 'mistakes') query = query.gte('wrong_count', 3); 
       else query = query.eq('level', level).lt('wrong_count', 3);
+      
       const { data: progress, error: progressError } = await query;
       if (progressError) {
         console.error('Error fetching progress:', progressError);
@@ -205,49 +213,48 @@ export default function App() {
         alert("เกิดข้อผิดพลาด: " + progressError.message);
         return;
       }
+      
       if (!progress || progress.length === 0) { 
         setIsPreloading(false); 
         alert("ไม่มีคำศัพท์"); 
         return; 
       }
+      
       // แปลง flashcard_id เป็น number ก่อน query
       const flashcardIds = progress.map(p => Number(p.flashcard_id)).filter(id => !isNaN(id));
       console.log('Flashcard IDs for game:', flashcardIds);
-      const { data: cards, error: cardsError } = await supabase.from('flashcards').select('*').in('id1', flashcardIds);
+      
+      const { data: cards, error: cardsError } = await supabase
+        .from('flashcards')
+        .select('*')
+        .in('id1', flashcardIds);
+        
       if (cardsError) {
         console.error('Error fetching cards:', cardsError);
         setIsPreloading(false);
         alert("เกิดข้อผิดพลาด: " + cardsError.message);
         return;
       }
+      
       if (!cards || cards.length === 0) {
         setIsPreloading(false);
         alert("ไม่พบคำศัพท์");
         return;
       }
-      console.log('Loading', cards.length, 'cards');
-      let loaded = 0;
-      const urls = cards.flatMap(c => [c.image_front_url, c.image_back_url]).filter(url => url);
-      console.log('Total images to load:', urls.length);
-      for (const url of urls) {
-        await new Promise(r => { 
-          const img = new Image(); 
-          img.src = url; 
-          img.onload = () => { 
-            loaded++; 
-            setPreloadProgress(Math.floor((loaded/(urls.length || 1))*100)); 
-            r(); 
-          };
-          img.onerror = () => {
-            console.warn('Failed to load image:', url);
-            loaded++;
-            setPreloadProgress(Math.floor((loaded/(urls.length || 1))*100));
-            r();
-          };
-        });
-      }
+      
+      // สร้าง game queue (สุ่มลำดับ)
+      const shuffledCards = cards.sort(() => Math.random() - 0.5);
+      setGameQueue(shuffledCards);
+      
+      console.log('Preloading first', Math.min(6, shuffledCards.length), 'cards');
+      
+      // ใช้ Lazy Loading: โหลดเฉพาะภาพแรก + 5 ภาพถัดไป (รวม 6 ภาพ)
+      // แทนที่จะโหลดทุกภาพ ทำให้โหลดเร็วขึ้นมาก
+      await lazyLoadImages(shuffledCards, 6, (progress) => {
+        setPreloadProgress(progress);
+      });
+      
       setIsPreloading(false); 
-      setGameQueue(cards.sort(() => Math.random() - 0.5)); 
       setPage('fc-play'); 
       setGameActive(true);
     } catch (error) {
@@ -265,10 +272,54 @@ export default function App() {
     }
   }, [gameQueue, currentCard, gameActive, timerSetting]);
 
+  // ฟังก์ชันเล่นเสียงเตือนเวลา
+  const playSound = (type) => {
+    try {
+      // สร้างหรือใช้ AudioContext instance เดียว
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      
+      const audioContext = audioContextRef.current;
+      
+      // Resume ถ้า AudioContext ถูก suspend
+      if (audioContext.state === 'suspended') {
+        audioContext.resume().catch(err => console.log('Failed to resume audio:', err));
+      }
+      
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      if (type === 'timer-warning') {
+        // เสียงเตือนเวลาใกล้หมด - เสียงเตือนตื่นเต้น
+        oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // A4
+        oscillator.frequency.setValueAtTime(554.37, audioContext.currentTime + 0.05); // C#5
+        gainNode.gain.setValueAtTime(0.25, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.15);
+      }
+    } catch (error) {
+      console.log('ไม่สามารถเล่นเสียงได้:', error);
+    }
+  };
+
   useEffect(() => {
     let interval;
     if (gameActive && currentCard && !isFlipped && timer > 0) {
-      interval = setInterval(() => setTimer(t => t - 1), 1000);
+      interval = setInterval(() => {
+        setTimer(t => {
+          const newTime = t - 1;
+          // เล่นเสียงเตือนเมื่อเหลือ 5 วินาทีหรือน้อยกว่า
+          if (newTime <= 5 && newTime > 0) {
+            playSound('timer-warning');
+          }
+          return newTime;
+        });
+      }, 1000);
     } else if (timer === 0 && !isFlipped && gameActive) { setIsFlipped(true); }
     return () => clearInterval(interval);
   }, [timer, isFlipped, gameActive, currentCard]);
@@ -473,6 +524,71 @@ export default function App() {
               <button onClick={() => setPage('settings')} className="text-orange-600 font-black italic underline uppercase text-xs">← Back</button>
               <div className="bg-orange-600 text-white px-4 py-1 rounded-full font-black text-xs">Selected {selectedIds.length}</div>
             </div>
+            
+            {/* ฟีเจอร์เลือกแบบช่วง (1-100) */}
+            <div className="bg-white p-4 rounded-2xl border-2 border-orange-200 mb-4 shadow-sm">
+              <label className="block text-xs font-black text-slate-600 mb-2 uppercase">เลือกแบบช่วง (1-100)</label>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number"
+                  min="1"
+                  max={allMasterCards.length}
+                  placeholder={`จำนวนคำ (เช่น 200) - สูงสุด ${allMasterCards.length}`}
+                  className="flex-1 px-4 py-2 border-2 border-slate-200 rounded-xl text-center font-bold text-sm"
+                  id="range-select-input"
+                  style={{ userSelect: 'auto', WebkitUserSelect: 'auto' }}
+                />
+                <button
+                  onClick={async () => {
+                    if (!user || !user.id) {
+                      alert('กรุณาเข้าสู่ระบบก่อน');
+                      return;
+                    }
+                    
+                    const input = document.getElementById('range-select-input');
+                    const count = parseInt(input.value);
+                    if (!count || count < 1 || count > allMasterCards.length) {
+                      alert(`กรุณากรอกตัวเลขระหว่าง 1-${allMasterCards.length}`);
+                      return;
+                    }
+                    
+                    // หาคำศัพท์ที่ยังไม่ได้เลือก (1 ถึง count)
+                    const sortedCards = [...allMasterCards].sort((a, b) => {
+                      const idA = Number(a?.id1 || a?.id || 0);
+                      const idB = Number(b?.id1 || b?.id || 0);
+                      return idA - idB;
+                    });
+                    
+                    const toSelect = sortedCards.slice(0, count)
+                      .map(c => Number(c?.id1 || c?.id))
+                      .filter(id => !selectedIds.includes(id));
+                    
+                    if (toSelect.length === 0) {
+                      alert('คำศัพท์เหล่านี้ถูกเลือกไปแล้ว');
+                      return;
+                    }
+                    
+                    // บันทึกลง DB
+                    const inserts = toSelect.map(id => ({
+                      user_id: user.id,
+                      flashcard_id: id,
+                      level: 1,
+                      wrong_count: 0
+                    }));
+                    
+                    await supabase.from('user_progress').insert(inserts);
+                    await fetchInitialData(user.id);
+                    input.value = '';
+                    alert(`เลือก ${toSelect.length} คำศัพท์เรียบร้อยแล้ว`);
+                  }}
+                  className="bg-orange-500 text-white px-6 py-2 rounded-xl font-black uppercase text-xs shadow-lg hover:bg-orange-600 transition-colors"
+                  style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+                >
+                  เลือก
+                </button>
+              </div>
+            </div>
+            
             <div className="grid grid-cols-3 gap-2">
               {allMasterCards && allMasterCards.length > 0 ? (
                 allMasterCards

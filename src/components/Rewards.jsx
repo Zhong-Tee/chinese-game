@@ -63,24 +63,8 @@ export default function Rewards({ user, setPage }) {
                 setSelectedBook(book);
                 fetchStickers(book.id);
               }}
-              className="bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-lg hover:shadow-xl transition-all"
+              className="bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-lg"
             >
-              {/* แสดงรูป icon_url ถ้ามี */}
-              {book.icon_url ? (
-                <div className="mb-4 flex justify-center">
-                  <img
-                    src={book.icon_url}
-                    alt={book.name}
-                    className="w-32 h-32 object-contain drop-shadow-lg"
-                  />
-                </div>
-              ) : (
-                <div className="mb-4 flex justify-center">
-                  <div className="w-32 h-32 bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl flex items-center justify-center shadow-inner">
-                    <span className="text-5xl">📚</span>
-                  </div>
-                </div>
-              )}
               <h3 className="font-black text-lg mb-2">{book.name}</h3>
               <p className="text-sm text-slate-600">{book.description}</p>
             </button>
@@ -109,18 +93,15 @@ export default function Rewards({ user, setPage }) {
                       className="w-full h-auto"
                     />
                   ) : (
-                    <div className="relative w-full flex items-center justify-center min-h-[120px]">
-                      {/* รูปเงาสีดำ - ใช้ filter เพื่อทำให้เป็นเงาสีดำสนิท */}
+                    <div className="relative">
+                      {/* รูปเงา */}
                       <img
                         src={sticker.image_url}
                         alt={sticker.name}
-                        className="w-full h-auto"
-                        style={{
-                          filter: 'brightness(0) saturate(0)',
-                          WebkitFilter: 'brightness(0) saturate(0)',
-                          opacity: 0.4,
-                        }}
+                        className="w-full h-auto opacity-30 grayscale"
                       />
+                      {/* เงามืดทับ */}
+                      <div className="absolute inset-0 bg-slate-800/50 rounded-lg"></div>
                     </div>
                   )}
                   <p className="text-xs text-center mt-2 font-bold">{sticker.name}</p>
