@@ -58,13 +58,13 @@ export default function Library({
           {showSentence ? (
             // หน้าแสดงประโยค
             <>
-              <div className="w-full max-w-2xl aspect-[8/3] rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white mb-4">
-                <img 
-                  src={optimizeImageUrl(libraryDetail.sentence_url || libraryDetail.image_front_url)} 
-                  className="w-full h-full object-cover" 
-                  alt="sentence"
-                  loading="eager"
-                />
+              {/* กล่องข้อความสำหรับประโยค */}
+              <div className="w-full max-w-2xl mb-6">
+                <div className="bg-white rounded-2xl p-4 shadow-lg border-2 border-slate-200">
+                  <div className="text-slate-800 text-[24pt] font-bold leading-relaxed text-left">
+                    {libraryDetail.sentence_test || libraryDetail.sentence_text || libraryDetail.sentence || 'ไม่มีข้อมูลประโยค'}
+                  </div>
+                </div>
               </div>
               
               {/* กล่องข้อความแชทสำหรับคำแปล */}
