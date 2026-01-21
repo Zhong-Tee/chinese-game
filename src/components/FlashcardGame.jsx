@@ -34,7 +34,11 @@ export default function FlashcardGame({
     <div 
       className="flex flex-col items-center select-none"
       style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-      onDragStart={(e) => e.preventDefault()}
+      onDragStart={(e) => {
+        if (e.target.tagName === 'IMG') {
+          e.preventDefault();
+        }
+      }}
     >
       {/* Header ของเกม */}
       <div className="w-full flex justify-between items-center mb-6 px-2">

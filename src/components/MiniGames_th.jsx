@@ -356,7 +356,11 @@ export default function MiniGames_th({ user, allMasterCards, selectedIds, timerS
       <div 
         className="flex flex-col items-center justify-center min-h-[80vh] select-none"
         style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-        onDragStart={(e) => e.preventDefault()}
+        onDragStart={(e) => {
+          if (e.target.tagName === 'IMG') {
+            e.preventDefault();
+          }
+        }}
       >
         <div className="text-center mb-8">
           <h1 className="text-4xl md:text-6xl font-black italic uppercase text-emerald-600 mb-4">เกมแปลไทย</h1>
@@ -396,7 +400,11 @@ export default function MiniGames_th({ user, allMasterCards, selectedIds, timerS
     <div 
       className="flex flex-col items-center select-none" 
             style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-            onDragStart={(e) => e.preventDefault()}
+            onDragStart={(e) => {
+              if (e.target.tagName === 'IMG') {
+                e.preventDefault();
+              }
+            }}
     >
       <div className="w-full flex justify-between items-center mb-4">
         <button onClick={() => setPage('minigames')} className="text-slate-800 font-black text-xs underline italic uppercase">Exit</button>
@@ -454,7 +462,11 @@ export default function MiniGames_th({ user, allMasterCards, selectedIds, timerS
             onClick={() => handleAnswer(opt)} 
             className="bg-white p-4 md:p-8 rounded-2xl border-b-4 border-slate-200 active:border-0 active:translate-y-1 transition-all shadow-sm font-black text-slate-700 italic uppercase text-base md:text-2xl select-none" 
             style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-            onDragStart={(e) => e.preventDefault()}
+            onDragStart={(e) => {
+              if (e.target.tagName === 'IMG') {
+                e.preventDefault();
+              }
+            }}
           >
             {opt.th}
           </button>

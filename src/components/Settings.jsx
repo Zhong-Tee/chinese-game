@@ -14,8 +14,12 @@ export default function Settings({
     return (
       <div 
         className="space-y-6 pt-4 select-none"
-        style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-        onDragStart={(e) => e.preventDefault()}
+        style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y' }}
+        onDragStart={(e) => {
+          if (e.target.tagName === 'IMG') {
+            e.preventDefault();
+          }
+        }}
       >
         <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline">← Back</button>
         <h2 className="text-2xl font-black text-center uppercase italic">Settings</h2>
@@ -117,8 +121,12 @@ export default function Settings({
     return (
       <div 
         className="space-y-4 pt-2 select-none"
-        style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-        onDragStart={(e) => e.preventDefault()}
+        style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y' }}
+        onDragStart={(e) => {
+          if (e.target.tagName === 'IMG') {
+            e.preventDefault();
+          }
+        }}
       >
         <button onClick={() => setPage('settings')} className="text-orange-600 font-black underline italic uppercase text-xs">← BACK</button>
         <h2 className="text-xl font-black uppercase italic mb-4">Scheduling</h2>

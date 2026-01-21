@@ -14,8 +14,12 @@ export default function Library({
   return (
     <div 
       className="space-y-4 pb-10 select-none"
-      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-      onDragStart={(e) => e.preventDefault()}
+      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y' }}
+      onDragStart={(e) => {
+        if (e.target.tagName === 'IMG') {
+          e.preventDefault();
+        }
+      }}
     >
       <div className="flex items-center mb-4">
         <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black italic underline uppercase text-xs">← Back to Menu</button>
@@ -51,7 +55,11 @@ export default function Library({
         <div 
           className="fixed inset-0 bg-slate-900/95 z-[70] flex flex-col items-center justify-center p-6 text-center select-none"
           style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-          onDragStart={(e) => e.preventDefault()}
+          onDragStart={(e) => {
+            if (e.target.tagName === 'IMG') {
+              e.preventDefault();
+            }
+          }}
         >
           <button onClick={() => { setLibraryDetail(null); setShowSentence(false); }} className="absolute top-6 right-6 text-white text-3xl font-bold">&times;</button>
           

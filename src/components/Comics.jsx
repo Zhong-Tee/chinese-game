@@ -4,8 +4,12 @@ export default function Comics({ setPage }) {
   return (
     <div 
       className="min-h-screen flex flex-col items-center justify-center p-6 text-center select-none"
-      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-      onDragStart={(e) => e.preventDefault()}
+      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y' }}
+      onDragStart={(e) => {
+        if (e.target.tagName === 'IMG') {
+          e.preventDefault();
+        }
+      }}
     >
       <div className="max-w-md w-full space-y-8">
         <div className="space-y-4">

@@ -423,7 +423,11 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
       <div 
         className="flex flex-col items-center justify-center min-h-[80vh] select-none"
         style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-        onDragStart={(e) => e.preventDefault()}
+        onDragStart={(e) => {
+          if (e.target.tagName === 'IMG') {
+            e.preventDefault();
+          }
+        }}
       >
         <div className="text-center mb-8">
           <h1 className="text-4xl md:text-6xl font-black italic uppercase text-indigo-600 mb-4">เกมพิมพ์คำ</h1>
@@ -465,7 +469,11 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
     <div 
       className="flex flex-col items-center select-none" 
       style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-      onDragStart={(e) => e.preventDefault()}
+      onDragStart={(e) => {
+        if (e.target.tagName === 'IMG') {
+          e.preventDefault();
+        }
+      }}
     >
       <div className="w-full flex justify-between items-center mb-4">
         <button onClick={() => setPage('minigames')} className="text-slate-800 font-black text-xs underline italic uppercase select-none" style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>Exit</button>

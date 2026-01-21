@@ -370,7 +370,11 @@ export default function App() {
     <div 
       className={`fixed inset-0 bg-slate-900/95 z-50 flex flex-col items-center justify-center transition-all duration-300 select-none ${isMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
       style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-      onDragStart={(e) => e.preventDefault()}
+      onDragStart={(e) => {
+        if (e.target.tagName === 'IMG') {
+          e.preventDefault();
+        }
+      }}
     >
       <button onClick={() => setIsMenuOpen(false)} className="absolute top-6 right-6 text-white text-4xl">&times;</button>
       <div className="flex flex-col space-y-8 text-center text-white font-black italic text-2xl uppercase">
@@ -387,8 +391,20 @@ export default function App() {
   return (
     <div 
       className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-10 overflow-x-hidden select-none" 
-      style={{ overscrollBehavior: 'contain', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-      onDragStart={(e) => e.preventDefault()}
+      style={{ 
+        touchAction: 'pan-y',
+        WebkitOverflowScrolling: 'touch',
+        userSelect: 'none', 
+        WebkitUserSelect: 'none', 
+        MozUserSelect: 'none', 
+        msUserSelect: 'none' 
+      }}
+      onDragStart={(e) => {
+        // ป้องกันเฉพาะการ drag รูปภาพ แต่อนุญาต scroll
+        if (e.target.tagName === 'IMG') {
+          e.preventDefault();
+        }
+      }}
     >
       <header className="p-4 bg-white shadow-sm border-b-4 border-orange-500 flex justify-between items-center sticky top-0 z-40">
         <div className="flex flex-col">
@@ -404,12 +420,16 @@ export default function App() {
 
       <MenuOverlay />
 
-      <main className="max-w-md mx-auto p-4">
+      <main className="max-w-md mx-auto p-4" style={{ touchAction: 'pan-y' }}>
         {isPreloading && (
           <div 
             className="fixed inset-0 bg-white/95 z-[60] flex flex-col items-center justify-center p-10 text-center select-none"
             style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-            onDragStart={(e) => e.preventDefault()}
+            onDragStart={(e) => {
+              if (e.target.tagName === 'IMG') {
+                e.preventDefault();
+              }
+            }}
           >
             <h2 className="text-xl font-black italic uppercase text-orange-600">Preparing...</h2>
             <div className="w-full bg-slate-100 h-4 rounded-full mt-8 border"><div className="bg-orange-500 h-full transition-all" style={{width: `${preloadProgress}%`}}></div></div>
@@ -444,8 +464,12 @@ export default function App() {
         {page === 'minigames' && (
           <div 
             className="grid grid-cols-1 gap-4 pt-4 select-none"
-            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-            onDragStart={(e) => e.preventDefault()}
+            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y' }}
+            onDragStart={(e) => {
+              if (e.target.tagName === 'IMG') {
+                e.preventDefault();
+              }
+            }}
           >
             <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline text-left mb-2">← Back</button>
             <button onClick={() => setPage('minigame-th')} className="h-28 bg-emerald-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 transform active:scale-95 transition-all text-xl italic">
@@ -517,8 +541,12 @@ export default function App() {
         {page === 'select-words' && (
           <div 
             className="space-y-4 pb-10 text-center select-none"
-            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-            onDragStart={(e) => e.preventDefault()}
+            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y' }}
+            onDragStart={(e) => {
+              if (e.target.tagName === 'IMG') {
+                e.preventDefault();
+              }
+            }}
           >
             <div className="flex justify-between items-center sticky top-20 bg-slate-50 py-2 z-10 px-2">
               <button onClick={() => setPage('settings')} className="text-orange-600 font-black italic underline uppercase text-xs">← Back</button>
@@ -605,8 +633,12 @@ export default function App() {
                       key={card?.id1 || card?.id || Math.random()} 
                       onClick={() => toggleWordSelection(cardId)} 
                       className={`p-4 rounded-2xl border-2 text-center transition-all select-none relative ${isSelected ? "bg-orange-500 border-orange-600 text-white shadow-lg" : "bg-white border-slate-100"}`}
-                      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-      onDragStart={(e) => e.preventDefault()}
+                      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y' }}
+                      onDragStart={(e) => {
+                        if (e.target.tagName === 'IMG') {
+                          e.preventDefault();
+                        }
+                      }}
                     >
                       <div className={`absolute top-1 left-1 text-[10px] font-black ${isSelected ? 'text-orange-100' : 'text-slate-400'}`}>
                         {index + 1}

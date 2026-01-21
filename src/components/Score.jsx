@@ -281,8 +281,12 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
   return (
     <div 
       className="space-y-6 pt-4 pb-10 select-none"
-      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-      onDragStart={(e) => e.preventDefault()}
+      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y' }}
+      onDragStart={(e) => {
+        if (e.target.tagName === 'IMG') {
+          e.preventDefault();
+        }
+      }}
     >
       <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline">← Back</button>
       <h2 className="text-3xl font-black text-center uppercase italic mb-6">📊 Score Dashboard</h2>
