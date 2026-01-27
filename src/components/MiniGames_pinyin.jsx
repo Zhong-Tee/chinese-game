@@ -13,19 +13,31 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
   const [timer, setTimer] = useState(timerSetting);
   const [gameQueue, setGameQueue] = useState([]); // คิวคำศัพท์
   const [reviewCount, setReviewCount] = useState(0); // จำนวนคำศัพท์ใน Review Mode
+  const [reviewCountDisplay, setReviewCountDisplay] = useState(0); // จำนวนคำศัพท์ที่เหลือใน Review Mode (แสดงผล)
   const [showFeedback, setShowFeedback] = useState(false); // แสดง feedback
   const [feedbackType, setFeedbackType] = useState(null); // 'correct' หรือ 'wrong'
   const [showCombo, setShowCombo] = useState(false); // แสดง Combo X2
   const audioContextRef = useRef(null); // AudioContext instance เดียว
 
-  // ฟังก์ชันดึง Review count จาก DB
+  // ฟังก์ชันดึง Review count จาก DB (แยกตาม game_type: pinyin)
   const fetchReviewCount = async () => {
     const { data } = await supabase
       .from('user_progress')
-      .select('flashcard_id')
-      .eq('user_id', user.id)
-      .gt('minigame_wrong_count', 0);
-    return data?.length || 0;
+      .select('flashcard_id, minigame_wrong_count')
+      .eq('user_id', user.id);
+    
+    if (!data) return 0;
+    
+    // ถ้า minigame_wrong_count เป็น JSON object ให้เช็ค game_type 'pinyin'
+    // ถ้าเป็น number ให้ใช้ค่าเดิม (backward compatibility)
+    const count = data.filter(item => {
+      if (typeof item.minigame_wrong_count === 'object' && item.minigame_wrong_count !== null) {
+        return (item.minigame_wrong_count.pinyin || 0) > 0;
+      }
+      return (item.minigame_wrong_count || 0) > 0;
+    }).length;
+    
+    return count;
   };
 
   // 1. ฟังก์ชันดึงคะแนนเดิมจาก DB และสร้างคิว
@@ -37,8 +49,14 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
     // สร้างคิวคำศัพท์
     let poolIds = [];
     if (mode === 'review') {
-      const { data: reviewData } = await supabase.from('user_progress').select('flashcard_id').eq('user_id', user.id).gt('minigame_wrong_count', 0);
-      poolIds = reviewData?.map(d => d.flashcard_id) || [];
+      const { data: reviewData } = await supabase.from('user_progress').select('flashcard_id, minigame_wrong_count').eq('user_id', user.id);
+      // กรองเฉพาะคำที่มี minigame_wrong_count > 0 สำหรับ game_type 'pinyin'
+      poolIds = (reviewData || []).filter(item => {
+        if (typeof item.minigame_wrong_count === 'object' && item.minigame_wrong_count !== null) {
+          return (item.minigame_wrong_count.pinyin || 0) > 0;
+        }
+        return (item.minigame_wrong_count || 0) > 0;
+      }).map(d => d.flashcard_id);
     } else {
       poolIds = selectedIds;
     }
@@ -51,17 +69,24 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
       alert("ไม่มีคำศัพท์ให้เล่น"); setPage('minigames'); return;
     }
 
-    // ดึงคำที่เล่นไปแล้วจาก Session Storage (แยกตาม game_type และ mode)
+    // ดึงคำที่เล่นไปแล้วจาก Local Storage (แยกตาม game_type และ mode)
     const storageKey = `playedWords_pinyin_${mode}`;
-    const playedWords = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
+    const playedWords = JSON.parse(localStorage.getItem(storageKey) || '[]');
     
-    // กรองคำที่เล่นไปแล้วออก
-    const remainingIds = poolIds.filter(id => !playedWords.includes(id));
+    // กรองคำที่เล่นไปแล้วออก (เฉพาะคำที่ยังอยู่ใน poolIds)
+    // และกรองคำที่ถูก reset แล้วออกจาก playedWords (คำที่ไม่อยู่ใน poolIds)
+    const validPlayedWords = playedWords.filter(id => poolIds.includes(id));
+    if (validPlayedWords.length !== playedWords.length) {
+      // อัพเดท localStorage ให้มีเฉพาะคำที่ยังอยู่ใน poolIds
+      localStorage.setItem(storageKey, JSON.stringify(validPlayedWords));
+    }
+    
+    const remainingIds = poolIds.filter(id => !validPlayedWords.includes(id));
     
     let shuffled;
     // ถ้าเล่นครบทุกคำแล้ว ให้ reset และเริ่มใหม่
     if (remainingIds.length === 0) {
-      sessionStorage.removeItem(storageKey);
+      localStorage.removeItem(storageKey);
       shuffled = poolIds.sort(() => Math.random() - 0.5);
     } else {
       // สุ่มเฉพาะคำที่ยังไม่เล่น
@@ -85,7 +110,22 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
   // ดึง reviewCount เมื่อ component mount เพื่อแสดงในหน้า Start Screen
   useEffect(() => {
     if (!gameStarted && user?.id) {
-      fetchReviewCount().then(count => setReviewCount(count));
+      // คำนวณ reviewCountDisplay ทันที (ไม่ต้องรอคลิก Review)
+      supabase.from('user_progress').select('flashcard_id, minigame_wrong_count').eq('user_id', user.id).then(({ data: reviewData }) => {
+        const poolIds = (reviewData || []).filter(item => {
+          if (typeof item.minigame_wrong_count === 'object' && item.minigame_wrong_count !== null) {
+            return (item.minigame_wrong_count.pinyin || 0) > 0;
+          }
+          return (item.minigame_wrong_count || 0) > 0;
+        }).map(d => d.flashcard_id);
+        
+        const reviewStorageKey = `playedWords_pinyin_review`;
+        const reviewPlayedWords = JSON.parse(localStorage.getItem(reviewStorageKey) || '[]');
+        const validPlayedWords = reviewPlayedWords.filter(id => poolIds.includes(id));
+        const remaining = poolIds.length - validPlayedWords.length;
+        setReviewCountDisplay(remaining > 0 ? remaining : (poolIds.length > 0 ? poolIds.length : 0));
+        setReviewCount(poolIds.length);
+      });
     }
   }, [gameStarted, user?.id]);
 
@@ -96,9 +136,9 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
 
   const loadNextQuestion = (id, currentQueue) => {
     if (!id) { 
-      // Reset Session Storage เมื่อจบเกม
+      // Reset Local Storage เมื่อจบเกม
       const storageKey = `playedWords_pinyin_${mode}`;
-      sessionStorage.removeItem(storageKey);
+      localStorage.removeItem(storageKey);
       alert("🎉 จบเกม! คุณเล่นครบทุกคำแล้ว"); 
       setPage('minigames'); 
       return; 
@@ -235,21 +275,37 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
         playSound('correct');
       }
 
-      // บันทึกคำที่เล่นไปแล้วใน Session Storage
+      // บันทึกคำที่เล่นไปแล้วใน Local Storage
       const storageKey = `playedWords_pinyin_${mode}`;
-      const playedWords = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
+      const playedWords = JSON.parse(localStorage.getItem(storageKey) || '[]');
       if (!playedWords.includes(questionId)) {
         playedWords.push(questionId);
-        sessionStorage.setItem(storageKey, JSON.stringify(playedWords));
+        localStorage.setItem(storageKey, JSON.stringify(playedWords));
       }
 
       // กรณี Review Mode
       if (mode === 'review') {
-        await supabase.from('user_progress').update({ minigame_wrong_count: 0 }).eq('user_id', user.id).eq('flashcard_id', questionId);
+        // อัพเดท minigame_wrong_count แยกตาม game_type 'pinyin' (reset เป็น 0)
+        const { data: prog } = await supabase.from('user_progress').select('minigame_wrong_count').eq('user_id', user.id).eq('flashcard_id', questionId).single();
+        let newWrongCount = {};
+        if (typeof prog?.minigame_wrong_count === 'object' && prog?.minigame_wrong_count !== null) {
+          newWrongCount = { ...prog.minigame_wrong_count, pinyin: 0 };
+        } else {
+          newWrongCount = { pinyin: 0 };
+        }
+        await supabase.from('user_progress').update({ minigame_wrong_count: newWrongCount }).eq('user_id', user.id).eq('flashcard_id', questionId);
         
         // อัพเดท reviewCount และกรองคำที่ reset ออกจาก queue
         const newCount = await fetchReviewCount();
         setReviewCount(newCount);
+        
+        // อัพเดท reviewCountDisplay
+        const reviewStorageKey = `playedWords_pinyin_review`;
+        const reviewPlayedWords = JSON.parse(localStorage.getItem(reviewStorageKey) || '[]');
+        const validPlayedWords = reviewPlayedWords.filter(id => id !== questionId); // ลบคำที่ตอบถูกออก
+        localStorage.setItem(reviewStorageKey, JSON.stringify(validPlayedWords));
+        const remaining = newCount - validPlayedWords.length;
+        setReviewCountDisplay(remaining > 0 ? remaining : (newCount > 0 ? newCount : 0));
         
         // กรองคำที่ reset แล้วออกจาก gameQueue
         const filteredQueue = gameQueue.filter(id => id !== questionId);
@@ -269,9 +325,9 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
         if (filteredQueue.length > 0) {
           loadNextQuestion(filteredQueue[0], filteredQueue);
         } else {
-          // ถ้าเล่นครบแล้ว ให้ reset Session Storage
+          // ถ้าเล่นครบแล้ว ให้ reset Local Storage
           const storageKey = `playedWords_pinyin_${mode}`;
-          sessionStorage.removeItem(storageKey);
+          localStorage.removeItem(storageKey);
           alert("🎉 จบเกม Review! คุณตอบถูกทุกคำแล้ว");
           setPage('minigames');
         }
@@ -283,23 +339,72 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
       setShowFeedback(true);
       playSound('wrong');
       
-      // บันทึกคำที่เล่นไปแล้วใน Session Storage (แม้ตอบผิดก็บันทึก)
+      // บันทึกคำที่เล่นไปแล้วใน Local Storage (แม้ตอบผิดก็บันทึก)
       const storageKey = `playedWords_pinyin_${mode}`;
-      const playedWords = JSON.parse(sessionStorage.getItem(storageKey) || '[]');
+      const playedWords = JSON.parse(localStorage.getItem(storageKey) || '[]');
       if (!playedWords.includes(questionId)) {
         playedWords.push(questionId);
-        sessionStorage.setItem(storageKey, JSON.stringify(playedWords));
+        localStorage.setItem(storageKey, JSON.stringify(playedWords));
       }
       
       newStreak = 0;
       newScore = Math.max(0, newScore - 3);
       const { data: prog } = await supabase.from('user_progress').select('minigame_wrong_count').eq('user_id', user.id).eq('flashcard_id', questionId).single();
-      await supabase.from('user_progress').update({ minigame_wrong_count: (prog?.minigame_wrong_count || 0) + 1, level: 1 }).eq('user_id', user.id).eq('flashcard_id', questionId);
       
-      // ถ้าใน Review Mode และตอบผิด ให้อัพเดท reviewCount (เพิ่มขึ้น)
+      // อัพเดท minigame_wrong_count แยกตาม game_type 'pinyin'
+      let newWrongCount = {};
+      if (typeof prog?.minigame_wrong_count === 'object' && prog?.minigame_wrong_count !== null) {
+        newWrongCount = { ...prog.minigame_wrong_count, pinyin: (prog.minigame_wrong_count.pinyin || 0) + 1 };
+      } else {
+        // ถ้าเป็น number เก่า ให้แปลงเป็น object
+        const oldCount = prog?.minigame_wrong_count || 0;
+        newWrongCount = { pinyin: oldCount + 1 };
+      }
+      
+      await supabase.from('user_progress').update({ minigame_wrong_count: newWrongCount, level: 1 }).eq('user_id', user.id).eq('flashcard_id', questionId);
+      
+      // ถ้าใน Review Mode และตอบผิด
       if (mode === 'review') {
+        // ไม่ reset minigame_wrong_count (เก็บไว้ใน Review)
+        // แต่ให้ลบออกจาก queue ชั่วคราว (ไม่แสดงทันทีในรอบนี้) และจะสุ่มใหม่ในรอบถัดไป
+        const nextQueue = gameQueue.filter(id => id !== questionId);
+        setGameQueue(nextQueue);
+        
+        // อัพเดท reviewCount (เพิ่มขึ้นเพราะตอบผิด)
         const newCount = await fetchReviewCount();
         setReviewCount(newCount);
+        
+        // อัพเดท reviewCountDisplay
+        const reviewStorageKey = `playedWords_pinyin_review`;
+        const reviewPlayedWords = JSON.parse(localStorage.getItem(reviewStorageKey) || '[]');
+        const remaining = newCount - reviewPlayedWords.length;
+        setReviewCountDisplay(remaining > 0 ? remaining : (newCount > 0 ? newCount : 0));
+        
+        // ซ่อน feedback หลังจาก 1 วินาที
+        setTimeout(() => {
+          setShowFeedback(false);
+          setFeedbackType(null);
+        }, 1000);
+        
+        setScore(newScore);
+        setStreak(newStreak);
+        syncScore(newScore, newStreak);
+        
+        // ถ้ายังมีคำศัพท์เหลืออยู่ ให้โหลดคำต่อไป
+        if (nextQueue.length > 0) {
+          setTimeout(() => {
+            loadNextQuestion(nextQueue[0], nextQueue);
+          }, 1500);
+        } else {
+          // ถ้าเล่นครบแล้ว ให้ reset Local Storage
+          const storageKey = `playedWords_pinyin_${mode}`;
+          localStorage.removeItem(storageKey);
+          setTimeout(() => {
+            alert("🎉 จบเกม Review! คุณเล่นครบทุกคำแล้ว");
+            setPage('minigames');
+          }, 1500);
+        }
+        return;
       }
     }
     
@@ -316,10 +421,10 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
     const nextQueue = gameQueue.slice(1);
     setGameQueue(nextQueue);
     
-    // ถ้าเล่นครบแล้ว ให้ reset Session Storage
+    // ถ้าเล่นครบแล้ว ให้ reset Local Storage
     if (nextQueue.length === 0) {
       const storageKey = `playedWords_pinyin_${mode}`;
-      sessionStorage.removeItem(storageKey);
+      localStorage.removeItem(storageKey);
       alert("🎉 จบเกม! คุณเล่นครบทุกคำแล้ว");
       setPage('minigames');
       return;
@@ -349,8 +454,13 @@ export default function MiniGames_pinyin({ user, allMasterCards, selectedIds, ti
 
   // หน้า Start Screen
   if (!gameStarted) {
-    const normalCount = mode === 'normal' ? selectedIds.length : selectedIds.length;
-    const reviewCountDisplay = reviewCount;
+    // คำนวณจำนวนคำที่เหลือใน Normal mode (ไม่รวมคำที่เล่นไปแล้ว)
+    const normalStorageKey = `playedWords_pinyin_normal`;
+    const normalPlayedWords = JSON.parse(localStorage.getItem(normalStorageKey) || '[]');
+    const normalRemaining = selectedIds.filter(id => !normalPlayedWords.includes(id));
+    const normalCount = normalRemaining.length > 0 ? normalRemaining.length : selectedIds.length;
+    
+    // reviewCountDisplay จะถูกคำนวณใหม่ใน useEffect ด้านล่าง
     
     return (
       <div 
