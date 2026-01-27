@@ -10,12 +10,8 @@ export default function Flashcards({
   return (
     <div 
       className="space-y-4 pt-2 text-center pb-20 select-none"
-      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y' }}
-      onDragStart={(e) => {
-        if (e.target.tagName === 'IMG') {
-          e.preventDefault();
-        }
-      }}
+      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+      onDragStart={(e) => e.preventDefault()}
     >
       <div className="flex items-center mb-4">
         <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline">← Back to Menu</button>

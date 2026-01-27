@@ -37,8 +37,6 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
     }
   });
 
-  const [userProfiles, setUserProfiles] = useState({}); // เก็บ email ของแต่ละ user
-
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('personal');
   const [rankingGameType, setRankingGameType] = useState('overall');
@@ -125,119 +123,15 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
         type: []
       };
 
-      // แก้ไขส่วนนี้: group by user_id ก่อน
       ['th', 'pinyin', 'vol', 'type'].forEach(gameType => {
-        const gameScoresMap = {};
-        
-        // Group by user_id และ sum total_score
-        allScores
+        const gameScores = allScores
           ?.filter(s => s.game_type === gameType)
-          .forEach(score => {
-            if (!gameScoresMap[score.user_id]) {
-              gameScoresMap[score.user_id] = 0;
-            }
-            gameScoresMap[score.user_id] += score.total_score || 0;
-          });
-        
-        // แปลงเป็น array และ sort
-        const gameScores = Object.entries(gameScoresMap)
-          .map(([userId, total]) => ({ user_id: userId, total_score: total }))
+          .map(s => ({ user_id: s.user_id, total_score: s.total_score || 0 }))
           .sort((a, b) => b.total_score - a.total_score)
-          .slice(0, 100);
-        
+          .slice(0, 100) || [];
         gameRankings[gameType] = gameScores;
       });
 
-      // ดึงข้อมูล user profiles (email) สำหรับทุก user ที่มีคะแนน
-      const allUserIds = [...new Set([
-        ...overallRanking.map(r => r.user_id),
-        ...gameRankings.th.map(r => r.user_id),
-        ...gameRankings.pinyin.map(r => r.user_id),
-        ...gameRankings.vol.map(r => r.user_id),
-        ...gameRankings.type.map(r => r.user_id)
-      ])];
-
-      const profilesMap = {};
-      
-      // วิธีที่ 1: Query จากตาราง profiles (ถ้ามี)
-      try {
-        const { data: profiles, error: profileError } = await supabase
-          .from('profiles')
-          .select('user_id, email, display_name, username')
-          .in('user_id', allUserIds);
-        
-        if (!profileError && profiles) {
-          profiles.forEach(profile => {
-            // ลำดับความสำคัญ: username > display_name (ถ้าไม่ใช่ email) > username จาก email > email
-            let displayName = profile.username;
-            
-            // ถ้าไม่มี username หรือ username ว่าง ให้ใช้ display_name
-            if (!displayName || displayName.trim() === '') {
-              // ตรวจสอบว่า display_name เป็น email หรือไม่ (มี @)
-              if (profile.display_name && !profile.display_name.includes('@')) {
-                displayName = profile.display_name;
-              } else {
-                // ถ้า display_name เป็น email หรือไม่มี ให้ใช้ username จาก email
-                displayName = profile.email ? profile.email.split('@')[0] : null;
-              }
-            }
-            
-            // ถ้ายังไม่มี ให้ใช้ email หรือ 'Unknown User'
-            if (!displayName || displayName.trim() === '') {
-              displayName = profile.email || 'Unknown User';
-            }
-            
-            profilesMap[profile.user_id] = displayName;
-          });
-        }
-      } catch (profileError) {
-        console.log('Profiles table not available:', profileError);
-      }
-
-      // วิธีที่ 2: ใช้ข้อมูลจาก user object ที่ login อยู่ (สำหรับ user ปัจจุบัน)
-      // ถ้ายังไม่มีข้อมูลใน profilesMap
-      if (user?.id && !profilesMap[user.id]) {
-        // ลองดึงจาก user metadata หรือ email
-        const currentUserName = user.user_metadata?.display_name || 
-                               user.user_metadata?.username ||
-                               (user.email ? user.email.split('@')[0] : null) ||
-                               user.email || 
-                               'คุณ';
-        profilesMap[user.id] = currentUserName;
-      }
-
-      // วิธีที่ 3: ใช้ RPC function (ถ้ามี) สำหรับ user ที่ยังไม่มีข้อมูล
-      if (Object.keys(profilesMap).length < allUserIds.length) {
-        try {
-          const { data: profiles, error: profileError } = await supabase
-            .rpc('get_user_emails', { user_ids: allUserIds });
-          
-          if (!profileError && profiles) {
-            profiles.forEach(profile => {
-              if (profile.id && !profilesMap[profile.id]) {
-                // ลำดับความสำคัญ: display_name > username จาก email > email
-                profilesMap[profile.id] = profile.display_name || 
-                                         (profile.email ? profile.email.split('@')[0] : null) ||
-                                         profile.email || 
-                                         'Unknown User';
-              }
-            });
-          }
-        } catch (rpcError) {
-          // RPC function ไม่มี หรือ error
-        }
-      }
-
-      // ถ้ายังไม่มีข้อมูล ให้ใช้ username จาก email หรือแสดง user_id แบบสั้นๆ
-      allUserIds.forEach(userId => {
-        if (!profilesMap[userId]) {
-          // ลองดึง email จาก user_scores หรือตารางอื่น (ถ้ามี)
-          // หรือแสดง user_id แบบสั้นๆ
-          profilesMap[userId] = `User ${userId.substring(0, 8)}...`;
-        }
-      });
-
-      setUserProfiles(profilesMap);
       setRankings({
         overall: overallRanking,
         byGame: gameRankings
@@ -281,12 +175,8 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
   return (
     <div 
       className="space-y-6 pt-4 pb-10 select-none"
-      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y' }}
-      onDragStart={(e) => {
-        if (e.target.tagName === 'IMG') {
-          e.preventDefault();
-        }
-      }}
+      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+      onDragStart={(e) => e.preventDefault()}
     >
       <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline">← Back</button>
       <h2 className="text-3xl font-black text-center uppercase italic mb-6">📊 Score Dashboard</h2>
@@ -513,10 +403,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
                       )}
                       <div>
                         <div className={`font-black ${isCurrentUser ? 'text-orange-600' : 'text-slate-800'}`}>
-                          {isCurrentUser 
-                            ? '✨ คุณ' 
-                            : userProfiles[item.user_id] || `User #${index + 1}`
-                          }
+                          {isCurrentUser ? '✨ คุณ' : `User #${index + 1}`}
                         </div>
                       </div>
                     </div>

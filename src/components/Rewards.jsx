@@ -1,7 +1,6 @@
 // src/components/Rewards.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { optimizeImageUrl } from '../utils/imageOptimizer';
 
 export default function Rewards({ user, setPage }) {
   const [books, setBooks] = useState([]);
@@ -66,16 +65,6 @@ export default function Rewards({ user, setPage }) {
               }}
               className="bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-lg"
             >
-              {book.icon_url && (
-                <div className="w-full aspect-square mb-3 flex items-center justify-center bg-slate-50 rounded-xl overflow-hidden">
-                  <img
-                    src={optimizeImageUrl(book.icon_url)}
-                    alt={book.name}
-                    className="w-full h-full object-contain"
-                    loading="lazy"
-                  />
-                </div>
-              )}
               <h3 className="font-black text-lg mb-2">{book.name}</h3>
               <p className="text-sm text-slate-600">{book.description}</p>
             </button>
@@ -99,22 +88,21 @@ export default function Rewards({ user, setPage }) {
                 >
                   {unlocked ? (
                     <img
-                      src={optimizeImageUrl(sticker.image_url)}
+                      src={sticker.image_url}
                       alt={sticker.name}
                       className="w-full h-auto"
-                      style={{ filter: 'drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3))' }}
-                      loading="lazy"
                     />
                   ) : (
-                    <img
-                      src={optimizeImageUrl(sticker.image_url)}
-                      alt={sticker.name}
-                      className="w-full h-auto"
-                      style={{ 
-                        filter: 'grayscale(100%) brightness(0.1) contrast(0.1)',
-                      }}
-                      loading="lazy"
-                    />
+                    <div className="relative">
+                      {/* รูปเงา */}
+                      <img
+                        src={sticker.image_url}
+                        alt={sticker.name}
+                        className="w-full h-auto opacity-30 grayscale"
+                      />
+                      {/* เงามืดทับ */}
+                      <div className="absolute inset-0 bg-slate-800/50 rounded-lg"></div>
+                    </div>
                   )}
                   <p className="text-xs text-center mt-2 font-bold">{sticker.name}</p>
                 </div>

@@ -109,17 +109,32 @@ export default function MiniGames_th({ user, allMasterCards, selectedIds, timerS
 
   // ดึง reviewCount เมื่อ component mount หรือกลับมาหน้า Start Screen
   useEffect(() => {
-    if (!gameStarted && user?.id) {
+    // ตรวจสอบว่า user พร้อมหรือยัง (สำคัญใน production)
+    if (!gameStarted && user && user.id) {
+      console.log('[MiniGames_th] useEffect triggered, user.id:', user.id);
+      
       // คำนวณ reviewCountDisplay ทันที (ไม่ต้องรอคลิก Review)
       const fetchReviewDisplay = async () => {
         try {
+          console.log('[MiniGames_th] Starting fetchReviewDisplay...');
+          
           const { data: reviewData, error } = await supabase
             .from('user_progress')
             .select('flashcard_id, minigame_wrong_count')
             .eq('user_id', user.id);
           
           if (error) {
-            console.error('Error fetching review count:', error);
+            console.error('[MiniGames_th] Error fetching review count:', error);
+            // ไม่ return แต่ให้ set เป็น 0 แทน
+            setReviewCountDisplay(0);
+            setReviewCount(0);
+            return;
+          }
+          
+          if (!reviewData) {
+            console.warn('[MiniGames_th] No review data returned');
+            setReviewCountDisplay(0);
+            setReviewCount(0);
             return;
           }
           
@@ -139,7 +154,7 @@ export default function MiniGames_th({ user, allMasterCards, selectedIds, timerS
             const stored = localStorage.getItem(reviewStorageKey);
             reviewPlayedWords = stored ? JSON.parse(stored) : [];
           } catch (e) {
-            console.error('Error reading localStorage:', e);
+            console.error('[MiniGames_th] Error reading localStorage:', e);
             reviewPlayedWords = [];
           }
           
@@ -163,13 +178,23 @@ export default function MiniGames_th({ user, allMasterCards, selectedIds, timerS
           setReviewCountDisplay(displayCount);
           setReviewCount(poolIds.length);
         } catch (error) {
-          console.error('Error in fetchReviewDisplay:', error);
+          console.error('[MiniGames_th] Error in fetchReviewDisplay:', error);
+          // Set fallback value
+          setReviewCountDisplay(0);
+          setReviewCount(0);
         }
       };
       
-      fetchReviewDisplay();
+      // ใช้ setTimeout เพื่อให้แน่ใจว่า user object พร้อมแล้ว (สำหรับ production)
+      const timeoutId = setTimeout(() => {
+        fetchReviewDisplay();
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
+    } else if (!gameStarted && !user) {
+      console.log('[MiniGames_th] User not ready yet, waiting...');
     }
-  }, [gameStarted, user?.id]);
+  }, [gameStarted, user]); // เปลี่ยนจาก user?.id เป็น user
 
   const handleStartGame = () => {
     setGameStarted(true);
