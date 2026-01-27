@@ -273,17 +273,22 @@ export default function App() {
   return (
     <div 
       className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-10 overflow-x-hidden select-none" 
-      style={{ overscrollBehavior: 'contain', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+      style={{ overscrollBehavior: 'contain', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}
       onDragStart={(e) => e.preventDefault()}
     >
       <header className="p-4 bg-white shadow-sm border-b-4 border-orange-500 flex justify-between items-center sticky top-0 z-40">
-        <h1 className="font-black text-orange-600 text-xl uppercase italic tracking-tighter">Nihao Game</h1>
+        <div className="flex flex-col">
+          <h1 className="font-black text-orange-600 text-xl uppercase italic tracking-tighter">Nihao Game</h1>
+          {user?.email && (
+            <p className="text-xs text-slate-600 font-bold mt-1">{user.email.replace('@nihao.com', '')}</p>
+          )}
+        </div>
         <button onClick={() => setIsMenuOpen(true)} className="w-12 h-10 bg-slate-800 text-white rounded-xl flex items-center justify-center text-2xl shadow-lg">☰</button>
       </header>
 
       <MenuOverlay />
 
-      <main className="max-w-md mx-auto p-4">
+      <main className="max-w-md mx-auto p-4" style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}>
         {isPreloading && (
           <div 
             className="fixed inset-0 bg-white/95 z-[60] flex flex-col items-center justify-center p-10 text-center select-none"
@@ -295,7 +300,7 @@ export default function App() {
           </div>
         )}
 
-        {page === 'dashboard' && <Dashboard setPage={setPage} />}
+        {page === 'dashboard' && <Dashboard setPage={setPage} user={user} />}
         {page === 'fc-chars' && <Flashcards setPage={setPage} levelCounts={levelCounts} schedules={schedules} checkLevelAvailable={checkLevelAvailable} startLevelGame={startLevelGame} />}
         {page === 'fc-play' && currentCard && <FlashcardGame setPage={setPage} activeLevel={activeLevel} currentCard={currentCard} setCurrentCard={setCurrentCard} timer={timer} isFlipped={isFlipped} setIsFlipped={setIsFlipped} gameQueue={gameQueue} handleAnswer={handleAnswer} setGameActive={setGameActive} />}
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}

@@ -12,7 +12,7 @@ export default function Library({
   return (
     <div 
       className="space-y-4 pb-10 select-none"
-      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}
       onDragStart={(e) => e.preventDefault()}
     >
       <div className="flex items-center mb-4">

@@ -10,7 +10,7 @@ export default function Flashcards({
   return (
     <div 
       className="space-y-4 pt-2 text-center pb-20 select-none"
-      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}
       onDragStart={(e) => e.preventDefault()}
     >
       <div className="flex items-center mb-4">

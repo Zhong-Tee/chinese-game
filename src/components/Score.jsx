@@ -175,7 +175,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
   return (
     <div 
       className="space-y-6 pt-4 pb-10 select-none"
-      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}
       onDragStart={(e) => e.preventDefault()}
     >
       <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline">← Back</button>

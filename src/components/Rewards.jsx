@@ -49,7 +49,11 @@ export default function Rewards({ user, setPage }) {
   };
 
   return (
-    <div className="space-y-4 pb-10">
+    <div 
+      className="space-y-4 pb-10 select-none"
+      style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}
+      onDragStart={(e) => e.preventDefault()}
+    >
       <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black italic underline uppercase text-xs">← Back</button>
       <h2 className="text-2xl font-black italic uppercase text-center mb-6">🏆 Rewards</h2>
       
