@@ -111,21 +111,46 @@ export default function MiniGames_th({ user, allMasterCards, selectedIds, timerS
   useEffect(() => {
     if (!gameStarted && user?.id) {
       // คำนวณ reviewCountDisplay ทันที (ไม่ต้องรอคลิก Review)
-      supabase.from('user_progress').select('flashcard_id, minigame_wrong_count').eq('user_id', user.id).then(({ data: reviewData }) => {
-        const poolIds = (reviewData || []).filter(item => {
-          if (typeof item.minigame_wrong_count === 'object' && item.minigame_wrong_count !== null) {
-            return (item.minigame_wrong_count.th || 0) > 0;
+      const fetchReviewDisplay = async () => {
+        try {
+          const { data: reviewData, error } = await supabase
+            .from('user_progress')
+            .select('flashcard_id, minigame_wrong_count')
+            .eq('user_id', user.id);
+          
+          if (error) {
+            console.error('Error fetching review count:', error);
+            return;
           }
-          return (item.minigame_wrong_count || 0) > 0;
-        }).map(d => d.flashcard_id);
-        
-        const reviewStorageKey = `playedWords_th_review`;
-        const reviewPlayedWords = JSON.parse(localStorage.getItem(reviewStorageKey) || '[]');
-        const validPlayedWords = reviewPlayedWords.filter(id => poolIds.includes(id));
-        const remaining = poolIds.length - validPlayedWords.length;
-        setReviewCountDisplay(remaining > 0 ? remaining : (poolIds.length > 0 ? poolIds.length : 0));
-        setReviewCount(poolIds.length);
-      });
+          
+          const poolIds = (reviewData || []).filter(item => {
+            if (typeof item.minigame_wrong_count === 'object' && item.minigame_wrong_count !== null) {
+              return (item.minigame_wrong_count.th || 0) > 0;
+            }
+            return (item.minigame_wrong_count || 0) > 0;
+          }).map(d => d.flashcard_id);
+          
+          // ใช้ try-catch สำหรับ localStorage (อาจมีปัญหาในบาง browser)
+          let reviewPlayedWords = [];
+          try {
+            const reviewStorageKey = `playedWords_th_review`;
+            const stored = localStorage.getItem(reviewStorageKey);
+            reviewPlayedWords = stored ? JSON.parse(stored) : [];
+          } catch (e) {
+            console.error('Error reading localStorage:', e);
+            reviewPlayedWords = [];
+          }
+          
+          const validPlayedWords = reviewPlayedWords.filter(id => poolIds.includes(id));
+          const remaining = poolIds.length - validPlayedWords.length;
+          setReviewCountDisplay(remaining > 0 ? remaining : (poolIds.length > 0 ? poolIds.length : 0));
+          setReviewCount(poolIds.length);
+        } catch (error) {
+          console.error('Error in fetchReviewDisplay:', error);
+        }
+      };
+      
+      fetchReviewDisplay();
     }
   }, [gameStarted, user?.id]);
 
