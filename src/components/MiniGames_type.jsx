@@ -109,7 +109,7 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
     }
   }, [mode, gameStarted]);
 
-  // ดึง reviewCount เมื่อ component mount เพื่อแสดงในหน้า Start Screen
+  // ดึง reviewCount เมื่อ component mount หรือกลับมาหน้า Start Screen
   useEffect(() => {
     if (!gameStarted && user?.id) {
       // คำนวณ reviewCountDisplay ทันที (ไม่ต้องรอคลิก Review)
@@ -132,6 +132,8 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
             return (item.minigame_wrong_count || 0) > 0;
           }).map(d => d.flashcard_id);
           
+          console.log('[MiniGames_type] Review poolIds:', poolIds.length);
+          
           // ใช้ try-catch สำหรับ localStorage (อาจมีปัญหาในบาง browser)
           let reviewPlayedWords = [];
           try {
@@ -143,9 +145,24 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
             reviewPlayedWords = [];
           }
           
+          console.log('[MiniGames_type] Review playedWords:', reviewPlayedWords.length);
+          
           const validPlayedWords = reviewPlayedWords.filter(id => poolIds.includes(id));
-          const remaining = poolIds.length - validPlayedWords.length;
-          setReviewCountDisplay(remaining > 0 ? remaining : (poolIds.length > 0 ? poolIds.length : 0));
+          const remaining = Math.max(0, poolIds.length - validPlayedWords.length);
+          
+          console.log('[MiniGames_type] Review calculation:', {
+            poolIds: poolIds.length,
+            reviewPlayedWords: reviewPlayedWords.length,
+            validPlayedWords: validPlayedWords.length,
+            remaining: remaining
+          });
+          
+          // ถ้า remaining > 0 แสดง remaining, ถ้าไม่แสดง poolIds.length (ถ้ามีคำใน pool)
+          const displayCount = remaining > 0 ? remaining : poolIds.length;
+          
+          console.log('[MiniGames_type] Setting reviewCountDisplay:', displayCount);
+          
+          setReviewCountDisplay(displayCount);
           setReviewCount(poolIds.length);
         } catch (error) {
           console.error('Error in fetchReviewDisplay:', error);
