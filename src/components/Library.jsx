@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 export default function Library({ 
   setPage, 
@@ -9,6 +9,12 @@ export default function Library({
   libFlipped, 
   setLibFlipped 
 }) {
+  const [libView, setLibView] = useState('front'); // 'front' | 'back' | 'sentence'
+
+  useEffect(() => {
+    if (libraryDetail) setLibView('front');
+  }, [libraryDetail]);
+
   return (
     <div 
       className="space-y-4 pb-10 select-none"
@@ -42,15 +48,51 @@ export default function Library({
       </div>
       {libraryDetail && (
         <div 
-          className="fixed inset-0 bg-slate-900/95 z-[70] flex flex-col items-center justify-center p-6 text-center select-none"
+          className="fixed inset-0 bg-slate-900/95 z-[70] flex flex-col items-center justify-center p-6 text-center select-none overflow-y-auto"
           style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
           onDragStart={(e) => e.preventDefault()}
         >
-          <button onClick={() => setLibraryDetail(null)} className="absolute top-6 right-6 text-white text-3xl font-bold">&times;</button>
-          <div className="w-full max-w-sm aspect-[3/4] rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white mb-8">
-            <img src={libFlipped ? libraryDetail.image_back_url : libraryDetail.image_front_url} className="w-full h-full object-cover" alt="detail" />
-          </div>
-          <button onClick={() => setLibFlipped(!libFlipped)} className="bg-orange-500 text-white px-10 py-4 rounded-full font-black uppercase shadow-xl">{libFlipped ? "หน้า" : "คำแปล"}</button>
+          <button onClick={() => setLibraryDetail(null)} className="absolute top-6 right-6 text-white text-3xl font-bold z-10">&times;</button>
+
+          {libView === 'sentence' ? (
+            <>
+              <div className="w-full max-w-sm rounded-2xl bg-white border-2 border-slate-200 shadow-xl p-6 mb-8 text-left space-y-4">
+                <div>
+                  <p className="text-orange-500 font-bold text-xs uppercase mb-1">ประโยค</p>
+                  <p className="text-slate-800 text-lg font-medium break-words">{libraryDetail.sentence_test || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-orange-500 font-bold text-xs uppercase mb-1">คำแปล</p>
+                  <p className="text-slate-800 text-lg font-medium break-words">{libraryDetail.translate || '—'}</p>
+                </div>
+              </div>
+              <button onClick={() => { setLibView('back'); setLibFlipped(true); }} className="bg-orange-500 text-white px-10 py-4 rounded-full font-black uppercase shadow-xl">คำแปล</button>
+            </>
+          ) : (
+            <>
+              <div className="w-full max-w-sm aspect-[3/4] rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white mb-8">
+                <img src={libView === 'back' ? libraryDetail.image_back_url : libraryDetail.image_front_url} className="w-full h-full object-cover" alt="detail" />
+              </div>
+              {libView === 'front' ? (
+                <button onClick={() => { setLibView('back'); setLibFlipped(true); }} className="bg-orange-500 text-white px-10 py-4 rounded-full font-black uppercase shadow-xl">คำแปล</button>
+              ) : (
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setLibView('front'); setLibFlipped(false); }}
+                    className="bg-slate-600 text-white px-8 py-4 rounded-full font-black uppercase shadow-xl"
+                  >
+                    หน้า
+                  </button>
+                  <button
+                    onClick={() => setLibView('sentence')}
+                    className="bg-orange-500 text-white px-8 py-4 rounded-full font-black uppercase shadow-xl"
+                  >
+                    ประโยค
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>

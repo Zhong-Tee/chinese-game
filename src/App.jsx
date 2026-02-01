@@ -308,11 +308,9 @@ export default function App() {
       if (activeLevel === 'mistakes') { nextLevel = 1; nextWrongCount = 0; }
       else { nextLevel = Math.min(activeLevel + 1, 7); nextWrongCount = currentWrong; }
     } else {
+      // ตอบผิดในเกม flashcard เท่านั้น — ไม่เพิ่มเข้า Settings (ใช้ปุ่ม "คำผิด" ใน header ถ้าต้องการเก็บเข้า list)
       nextLevel = 1;
       nextWrongCount = currentWrong + 1;
-      saveWrongWord(user.id, currentCard.id1 || currentCard.id, 'flashcard');
-      setWrongWordToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว');
-      setTimeout(() => setWrongWordToast(null), 2500);
     }
 
     await supabase.from('user_progress').update({ level: nextLevel, wrong_count: nextWrongCount }).eq('user_id', user.id).eq('flashcard_id', currentCard.id1 || currentCard.id);
