@@ -458,13 +458,63 @@ export default function App() {
         {page === 'select-words' && (
           <div 
             className="space-y-4 pb-10 text-center select-none"
-            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y' }}
             onDragStart={(e) => e.preventDefault()}
           >
-            <div className="flex justify-between items-center sticky top-20 bg-slate-50 py-2 z-10 px-2">
+            <div className="flex justify-between items-center sticky top-20 bg-slate-50 py-2 z-10 px-2 border-b border-slate-100">
               <button onClick={() => setPage('settings')} className="text-orange-600 font-black italic underline uppercase text-xs">← Back</button>
               <div className="bg-orange-600 text-white px-4 py-1 rounded-full font-black text-xs">Selected {selectedIds.length}</div>
             </div>
+
+            {/* เลือกแบบช่วง (1–N) — อยู่ใต้แถบ Back ให้ scroll เห็นได้บน Vercel */}
+            <div className="bg-white p-4 rounded-2xl border-2 border-orange-200 mb-4 shadow-sm">
+              <label className="block text-xs font-black text-slate-600 mb-2 uppercase">เลือกแบบช่วง (1–{allMasterCards?.length ?? 0})</label>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number"
+                  min="1"
+                  max={allMasterCards?.length ?? 0}
+                  placeholder={`จำนวนคำ (เช่น 200) — สูงสุด ${allMasterCards?.length ?? 0}`}
+                  className="flex-1 px-4 py-2 border-2 border-slate-200 rounded-xl text-center font-bold text-sm"
+                  id="range-select-input"
+                  style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
+                />
+                <button
+                  onClick={async () => {
+                    if (!user?.id) {
+                      alert('กรุณาเข้าสู่ระบบก่อน');
+                      return;
+                    }
+                    const input = document.getElementById('range-select-input');
+                    const count = parseInt(input?.value, 10);
+                    const max = allMasterCards?.length ?? 0;
+                    if (!count || count < 1 || count > max) {
+                      alert(`กรุณากรอกตัวเลขระหว่าง 1–${max}`);
+                      return;
+                    }
+                    const sorted = [...(allMasterCards || [])].sort((a, b) => {
+                      const idA = Number(a?.id1 || a?.id || 0);
+                      const idB = Number(b?.id1 || b?.id || 0);
+                      return idA - idB;
+                    });
+                    const toSelect = sorted.slice(0, count).map(c => Number(c?.id1 || c?.id)).filter(id => !isNaN(id) && !selectedIds.includes(id));
+                    if (toSelect.length === 0) {
+                      alert('คำศัพท์ในช่วงนี้ถูกเลือกไว้แล้ว');
+                      return;
+                    }
+                    const inserts = toSelect.map(id => ({ user_id: user.id, flashcard_id: id, level: 1, wrong_count: 0 }));
+                    await supabase.from('user_progress').insert(inserts);
+                    await fetchInitialData(user.id);
+                    if (input) input.value = '';
+                    alert(`เลือก ${toSelect.length} คำศัพท์เรียบร้อยแล้ว`);
+                  }}
+                  className="bg-orange-500 text-white px-6 py-2 rounded-xl font-black uppercase text-xs shadow-lg hover:bg-orange-600 transition-colors"
+                >
+                  เลือก
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-3 gap-2">
               {allMasterCards && allMasterCards.length > 0 ? (
                 allMasterCards
