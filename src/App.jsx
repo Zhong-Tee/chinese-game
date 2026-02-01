@@ -267,29 +267,11 @@ export default function App() {
         return;
       }
       console.log('Loading', cards.length, 'cards');
-      let loaded = 0;
-      const urls = cards.flatMap(c => [c.image_front_url, c.image_back_url]).filter(url => url);
-      console.log('Total images to load:', urls.length);
-      for (const url of urls) {
-        await new Promise(r => { 
-          const img = new Image(); 
-          img.src = url; 
-          img.onload = () => { 
-            loaded++; 
-            setPreloadProgress(Math.floor((loaded/(urls.length || 1))*100)); 
-            r(); 
-          };
-          img.onerror = () => {
-            console.warn('Failed to load image:', url);
-            loaded++;
-            setPreloadProgress(Math.floor((loaded/(urls.length || 1))*100));
-            r();
-          };
-        });
-      }
-      setIsPreloading(false); 
-      setGameQueue(cards.sort(() => Math.random() - 0.5)); 
-      setPage('fc-play'); 
+      // โหลดเฉพาะ 6 ใบแรก (front+back) แล้วเริ่มเกม — บน Vercel ไม่รอโหลดทั้งหมด
+      await lazyLoadImages(cards, 6, (p) => setPreloadProgress(p));
+      setIsPreloading(false);
+      setGameQueue(cards.sort(() => Math.random() - 0.5));
+      setPage('fc-play');
       setGameActive(true);
     } catch (error) {
       console.error('Error in startLevelGame:', error);
