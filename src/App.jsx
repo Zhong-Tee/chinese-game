@@ -45,9 +45,22 @@ export default function App() {
   const [libFlipped, setLibFlipped] = useState(false);
   const [username, setUsername] = useState('');
   const [wrongWordToast, setWrongWordToast] = useState(null); // popup "ได้เพิ่มคำผิดไว้ใน list ให้แล้ว"
+  // ลากนิ้ว/เมาส์เพื่อเลือกคำ (Select Study Words) — ต้องกดค้าง 2 วินาทีก่อนถึงจะลากได้
+  const [isDragSelecting, setIsDragSelecting] = useState(false);
+  const [dragSelectMode, setDragSelectMode] = useState('add'); // 'add' | 'remove'
+  const [dragTouchedIds, setDragTouchedIds] = useState([]);
   
   // Audio Context สำหรับเสียงเตือนเวลา
   const audioContextRef = useRef(null);
+  const selectWordsContainerRef = useRef(null);
+  const justFinishedDragRef = useRef(false);
+  const longPressTimerRef = useRef(null);
+  const longPressCardIdRef = useRef(null);
+  const longPressSelectedRef = useRef(false);
+  const longPressStartXYRef = useRef({ x: 0, y: 0 });
+  const [longPressDragActiveToast, setLongPressDragActiveToast] = useState(false); // popup "โหมดลากเลือกเปิดแล้ว"
+  const LONG_PRESS_MS = 2000;
+  const LONG_PRESS_MOVE_THRESHOLD_PX = 15; // เลื่อนเกินนี้ถึงจะยกเลิก long-press (กันมือถือสั่น)
 
   // --- 1. Initial Load ---
   useEffect(() => {
@@ -135,6 +148,90 @@ export default function App() {
     }
     setTimeout(() => fetchInitialData(user.id), 200);
   };
+
+  // จบการลากเลือก แล้วอัปเดต DB แบบ batch
+  const endDragSelect = useCallback(async () => {
+    if (!isDragSelecting || !user?.id || dragTouchedIds.length === 0) {
+      setIsDragSelecting(false);
+      setDragTouchedIds([]);
+      return;
+    }
+    const ids = [...new Set(dragTouchedIds)];
+    if (dragSelectMode === 'add') {
+      const toAdd = ids.filter(id => !selectedIds.includes(id));
+      if (toAdd.length > 0) {
+        await supabase.from('user_progress').insert(toAdd.map(id => ({ user_id: user.id, flashcard_id: id, level: 1, wrong_count: 0 })));
+        setSelectedIds(prev => [...new Set([...prev, ...toAdd])]);
+      }
+    } else {
+      const toRemove = ids.filter(id => selectedIds.includes(id));
+      if (toRemove.length > 0) {
+        for (const id of toRemove) {
+          await supabase.from('user_progress').delete().eq('user_id', user.id).eq('flashcard_id', id);
+        }
+        setSelectedIds(prev => prev.filter(id => !toRemove.includes(id)));
+      }
+    }
+    setIsDragSelecting(false);
+    setDragTouchedIds([]);
+    justFinishedDragRef.current = true;
+    setTimeout(() => { justFinishedDragRef.current = false; }, 180);
+    setTimeout(() => fetchInitialData(user.id), 200);
+  }, [isDragSelecting, user?.id, dragTouchedIds, dragSelectMode, selectedIds]);
+
+  // เริ่มโหมดลากเมื่อกดค้างครบ 2 วินาที (ใช้ค่าตอนกด ไม่ใช่ตอนครบเวลา)
+  const startLongPressDrag = useCallback((clientX, clientY) => {
+    if (longPressTimerRef.current != null) return;
+    const cardId = longPressCardIdRef.current;
+    const wasSelected = longPressSelectedRef.current;
+    if (cardId == null) return;
+    longPressStartXYRef.current = { x: clientX, y: clientY };
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTimerRef.current = null;
+      setIsDragSelecting(true);
+      setDragSelectMode(wasSelected ? 'remove' : 'add');
+      setDragTouchedIds([cardId]);
+      setLongPressDragActiveToast(true);
+      setTimeout(() => setLongPressDragActiveToast(false), 2500);
+    }, LONG_PRESS_MS);
+  }, []);
+
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimerRef.current != null) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  // ยกเลิก long-press เฉพาะเมื่อเลื่อนเกินเกณฑ์ (กันมือสั่นบนมือถือ)
+  const maybeClearLongPressOnMove = useCallback((clientX, clientY) => {
+    if (longPressTimerRef.current == null) return;
+    const start = longPressStartXYRef.current;
+    const dx = clientX - start.x;
+    const dy = clientY - start.y;
+    if (dx * dx + dy * dy > LONG_PRESS_MOVE_THRESHOLD_PX * LONG_PRESS_MOVE_THRESHOLD_PX) {
+      clearLongPressTimer();
+    }
+  }, [clearLongPressTimer]);
+
+  // ฟัง mouseup/touchend ที่ window: ยกเลิก long-press หรือจบการลาก
+  useEffect(() => {
+    const end = (e) => {
+      if (longPressTimerRef.current != null) {
+        clearLongPressTimer();
+        return;
+      }
+      if (isDragSelecting) endDragSelect();
+    };
+    window.addEventListener('mouseup', end);
+    window.addEventListener('touchend', end);
+    window.addEventListener('touchcancel', end);
+    return () => {
+      window.removeEventListener('mouseup', end);
+      window.removeEventListener('touchend', end);
+      window.removeEventListener('touchcancel', end);
+    };
+  }, [isDragSelecting, endDragSelect, clearLongPressTimer]);
 
   const startLevelGame = async (level) => {
     try {
@@ -455,15 +552,55 @@ export default function App() {
           />
         )}
         
-        {page === 'select-words' && (
+        {page === 'select-words' && (() => {
+          const effectiveSelectedIds = isDragSelecting
+            ? (dragSelectMode === 'add'
+              ? [...new Set([...selectedIds, ...dragTouchedIds])]
+              : selectedIds.filter(id => !dragTouchedIds.includes(id)))
+            : selectedIds;
+          return (
           <div 
+            ref={selectWordsContainerRef}
             className="space-y-4 pb-10 text-center select-none"
-            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y' }}
+            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: isDragSelecting ? 'none' : 'pan-y' }}
             onDragStart={(e) => e.preventDefault()}
+            onMouseMove={(e) => {
+              if (isDragSelecting && e.buttons === 1) {
+                const el = document.elementFromPoint(e.clientX, e.clientY);
+                const cardEl = el?.closest('[data-card-id]');
+                const id = cardEl ? parseInt(cardEl.getAttribute('data-card-id'), 10) : NaN;
+                if (!isNaN(id)) setDragTouchedIds(prev => prev.includes(id) ? prev : [...prev, id]);
+              } else if (longPressTimerRef.current != null) {
+                maybeClearLongPressOnMove(e.clientX, e.clientY);
+              }
+            }}
+            onTouchMove={(e) => {
+              if (isDragSelecting && e.touches[0]) {
+                e.preventDefault();
+                const t = e.touches[0];
+                const el = document.elementFromPoint(t.clientX, t.clientY);
+                const cardEl = el?.closest('[data-card-id]');
+                const id = cardEl ? parseInt(cardEl.getAttribute('data-card-id'), 10) : NaN;
+                if (!isNaN(id)) setDragTouchedIds(prev => prev.includes(id) ? prev : [...prev, id]);
+              } else if (longPressTimerRef.current != null && e.touches[0]) {
+                maybeClearLongPressOnMove(e.touches[0].clientX, e.touches[0].clientY);
+              }
+            }}
           >
+            {longPressDragActiveToast && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+                <div className="bg-orange-500 text-white px-6 py-4 rounded-2xl shadow-xl font-black text-center text-sm animate-pulse max-w-[90%]">
+                  โหมดลากเลือกเปิดแล้ว — ลากผ่านคำที่ต้องการ
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-between items-center sticky top-20 bg-slate-50 py-2 z-10 px-2 border-b border-slate-100">
               <button onClick={() => setPage('settings')} className="text-orange-600 font-black italic underline uppercase text-xs">← Back</button>
-              <div className="bg-orange-600 text-white px-4 py-1 rounded-full font-black text-xs">Selected {selectedIds.length}</div>
+              <div className="flex flex-col items-end">
+                <div className="bg-orange-600 text-white px-4 py-1 rounded-full font-black text-xs">Selected {selectedIds.length}</div>
+                <span className="text-[10px] text-slate-400 mt-0.5">กดค้าง 2 วินาที แล้วลากเพื่อเลือกหลายคำ</span>
+              </div>
             </div>
 
             {/* เลือกแบบช่วง (1–N) — อยู่ใต้แถบ Back ให้ scroll เห็นได้บน Vercel */}
@@ -525,14 +662,33 @@ export default function App() {
                   })
                   .map(card => {
                     const cardId = Number(card?.id1 || card?.id);
-                    const isSelected = selectedIds.includes(cardId);
-                  return (
-                    <div 
-                      key={card?.id1 || card?.id || Math.random()} 
-                      onClick={() => toggleWordSelection(cardId)} 
-                      className={`p-4 rounded-2xl border-2 text-center transition-all select-none ${isSelected ? "bg-orange-500 border-orange-600 text-white shadow-lg" : "bg-white border-slate-100"}`}
+                    const isSelected = effectiveSelectedIds.includes(cardId);
+                    const isDragHighlight = isDragSelecting && dragTouchedIds.includes(cardId);
+                    return (
+                    <div
+                      key={card?.id1 ?? card?.id}
+                      data-card-id={cardId}
+                      onClick={() => {
+                        if (justFinishedDragRef.current) return;
+                        toggleWordSelection(cardId);
+                      }}
+                      onMouseDown={(e) => {
+                        if (!user?.id) return;
+                        longPressCardIdRef.current = cardId;
+                        longPressSelectedRef.current = selectedIds.includes(cardId);
+                        startLongPressDrag(e.clientX, e.clientY);
+                      }}
+                      onTouchStart={(e) => {
+                        if (!user?.id || !e.touches[0]) return;
+                        const t = e.touches[0];
+                        longPressCardIdRef.current = cardId;
+                        longPressSelectedRef.current = selectedIds.includes(cardId);
+                        startLongPressDrag(t.clientX, t.clientY);
+                      }}
+                      onContextMenu={(e) => e.preventDefault()}
+                      className={`p-4 rounded-2xl border-2 text-center transition-all select-none ${isSelected ? "bg-orange-500 border-orange-600 text-white shadow-lg" : "bg-white border-slate-100"} ${isDragHighlight ? "ring-2 ring-orange-400 ring-offset-1" : ""}`}
                       style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-      onDragStart={(e) => e.preventDefault()}
+                      onDragStart={(e) => e.preventDefault()}
                     >
                       <div className="text-2xl font-bold">{card?.cn || ''}</div>
                       <div className={`text-[9px] font-bold uppercase ${isSelected ? 'text-white' : 'text-slate-400'}`}>{card?.pinyin || ''}</div>
@@ -544,7 +700,8 @@ export default function App() {
               )}
             </div>
           </div>
-        )}
+        );
+        })()}
       </main>
     </div>
   );
