@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { preloadNextImages } from '../utils/imageLoader';
 
 export default function FlashcardGame({ 
   setPage, 
+  setWrongWordToast,
+  onAddCurrentToWrongList,
   activeLevel, 
   currentCard, 
   setCurrentCard, 
@@ -12,6 +15,28 @@ export default function FlashcardGame({
   handleAnswer, 
   setGameActive 
 }) {
+  const showWrongToast = (msg) => {
+    if (setWrongWordToast) {
+      setWrongWordToast(msg);
+      setTimeout(() => setWrongWordToast(null), 2500);
+    }
+  };
+  const handleWrongButton = () => {
+    if (onAddCurrentToWrongList) onAddCurrentToWrongList();
+    else showWrongToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว ดูรายการได้ที่ Settings');
+  };
+  useEffect(() => {
+    if (currentCard && gameQueue.length > 0) {
+      const currentIndex = gameQueue.findIndex(
+        card => (card.id1 || card.id) === (currentCard.id1 || currentCard.id)
+      );
+      if (currentIndex >= 0 && currentIndex < gameQueue.length - 1) {
+        const nextCards = gameQueue.slice(currentIndex + 1, currentIndex + 6);
+        preloadNextImages(nextCards, 5);
+      }
+    }
+  }, [currentCard, gameQueue]);
+
   return (
     <div 
       className="flex flex-col items-center select-none"
@@ -19,14 +44,21 @@ export default function FlashcardGame({
       onDragStart={(e) => e.preventDefault()}
     >
       {/* Header ของเกม */}
-      <div className="w-full flex justify-between items-center mb-6 px-2">
-        <button 
-          onClick={() => { setPage('fc-chars'); setGameActive(false); setCurrentCard(null); }} 
-          className="text-slate-800 font-black text-xs underline italic uppercase"
-        >
-          Cancel
-        </button>
-        
+      <div className="w-full flex justify-between items-center mb-6 px-2 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => { setPage('fc-chars'); setGameActive(false); setCurrentCard(null); }} 
+            className="text-slate-800 font-black text-xs underline italic uppercase"
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={handleWrongButton} 
+            className="bg-amber-500 text-white px-2 py-1 rounded-full font-black text-[10px] italic uppercase"
+          >
+            คำผิด
+          </button>
+        </div>
         <div className="flex gap-2 font-black italic text-[10px]">
           <div className="bg-orange-600 text-white px-3 py-1 rounded-full shadow-sm">
             {activeLevel === 'mistakes' ? 'FIX' : 'LV ' + activeLevel}

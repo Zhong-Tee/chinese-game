@@ -2,6 +2,8 @@ import { optimizeImageUrl } from './imageOptimizer';
 
 /**
  * โหลดภาพแบบ Parallel (หลายภาพพร้อมกัน) แบ่งเป็น batch
+ * เมื่อ deploy บน Vercel: ต้องตั้ง CORS ที่ Supabase Storage ให้รวม origin ของ Vercel
+ * (เช่น https://xxx.vercel.app) เพื่อให้รูปโหลดได้จาก domain นั้น
  * @param {string[]} urls - Array ของ image URLs
  * @param {number} batchSize - จำนวนภาพที่โหลดพร้อมกันในแต่ละ batch (default: 5)
  * @param {function} onProgress - Callback function ที่รับ progress (0-100)
@@ -32,6 +34,7 @@ export const loadImagesInBatches = async (urls, batchSize = 5, onProgress) => {
         });
         
         const img = new Image();
+        img.crossOrigin = 'anonymous';
         
         img.onload = () => {
           loaded++;
@@ -109,17 +112,19 @@ export const preloadNextImages = (cards, count = 3) => {
   
   const preloadCount = Math.min(count, cards.length);
   
-  // โหลดใน background (ไม่รอผลลัพธ์)
+  // โหลดใน background (ไม่รอผลลัพธ์) — ใช้ crossOrigin เพื่อให้โหลดจาก Supabase ได้บน Vercel
   for (let i = 0; i < preloadCount; i++) {
     const card = cards[i];
     
     if (card?.image_front_url) {
       const img1 = new Image();
+      img1.crossOrigin = 'anonymous';
       img1.src = optimizeImageUrl(card.image_front_url);
     }
     
     if (card?.image_back_url) {
       const img2 = new Image();
+      img2.crossOrigin = 'anonymous';
       img2.src = optimizeImageUrl(card.image_back_url);
     }
   }

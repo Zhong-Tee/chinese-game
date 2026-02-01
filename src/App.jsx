@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import Dashboard from './components/Dashboard';
 import Login from './components/Login';
@@ -13,6 +13,8 @@ import MiniGames_type from './components/MiniGames_type';
 import Score from './components/Score';
 import Rewards from './components/Rewards';
 import Comics from './components/Comics';
+import { lazyLoadImages, preloadNextImages } from './utils/imageLoader';
+import { saveWrongWord } from './utils/wrongWordsStorage';
 
 export default function App() {
   const [page, setPage] = useState('login');
@@ -41,6 +43,11 @@ export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [libraryDetail, setLibraryDetail] = useState(null);
   const [libFlipped, setLibFlipped] = useState(false);
+  const [username, setUsername] = useState('');
+  const [wrongWordToast, setWrongWordToast] = useState(null); // popup "ได้เพิ่มคำผิดไว้ใน list ให้แล้ว"
+  
+  // Audio Context สำหรับเสียงเตือนเวลา
+  const audioContextRef = useRef(null);
 
   // --- 1. Initial Load ---
   useEffect(() => {
@@ -221,7 +228,13 @@ export default function App() {
     if (isCorrect) {
       if (activeLevel === 'mistakes') { nextLevel = 1; nextWrongCount = 0; }
       else { nextLevel = Math.min(activeLevel + 1, 7); nextWrongCount = currentWrong; }
-    } else { nextLevel = 1; nextWrongCount = currentWrong + 1; }
+    } else {
+      nextLevel = 1;
+      nextWrongCount = currentWrong + 1;
+      saveWrongWord(user.id, currentCard.id1 || currentCard.id, 'flashcard');
+      setWrongWordToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว');
+      setTimeout(() => setWrongWordToast(null), 2500);
+    }
 
     await supabase.from('user_progress').update({ level: nextLevel, wrong_count: nextWrongCount }).eq('user_id', user.id).eq('flashcard_id', currentCard.id1 || currentCard.id);
     setGameQueue(gameQueue.slice(1)); setCurrentCard(null); fetchInitialData(user.id);
@@ -272,9 +285,23 @@ export default function App() {
 
   return (
     <div 
-      className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-10 overflow-x-hidden select-none" 
-      style={{ overscrollBehavior: 'contain', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}
-      onDragStart={(e) => e.preventDefault()}
+      className="bg-slate-50 font-sans text-slate-800 pb-10 overflow-x-hidden select-none" 
+      style={{ 
+        minHeight: '100vh',
+        maxHeight: '100vh',
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        touchAction: 'pan-y',
+        userSelect: 'none', 
+        WebkitUserSelect: 'none', 
+        MozUserSelect: 'none', 
+        msUserSelect: 'none' 
+      }}
+      onDragStart={(e) => {
+        if (e.target.tagName === 'IMG') {
+          e.preventDefault();
+        }
+      }}
     >
       <header className="p-4 bg-white shadow-sm border-b-4 border-orange-500 flex justify-between items-center sticky top-0 z-40">
         <div className="flex flex-col">
@@ -288,7 +315,14 @@ export default function App() {
 
       <MenuOverlay />
 
-      <main className="max-w-md mx-auto p-4" style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}>
+      {/* Toast: ได้เพิ่มคำผิดไว้ใน list ให้แล้ว */}
+      {wrongWordToast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] bg-amber-500 text-white px-6 py-3 rounded-2xl shadow-xl font-black text-sm italic text-center max-w-[90%]">
+          {wrongWordToast}
+        </div>
+      )}
+
+      <main className="max-w-md mx-auto p-4" style={{ touchAction: 'pan-y' }}>
         {isPreloading && (
           <div 
             className="fixed inset-0 bg-white/95 z-[60] flex flex-col items-center justify-center p-10 text-center select-none"
@@ -302,7 +336,28 @@ export default function App() {
 
         {page === 'dashboard' && <Dashboard setPage={setPage} user={user} />}
         {page === 'fc-chars' && <Flashcards setPage={setPage} levelCounts={levelCounts} schedules={schedules} checkLevelAvailable={checkLevelAvailable} startLevelGame={startLevelGame} />}
-        {page === 'fc-play' && currentCard && <FlashcardGame setPage={setPage} activeLevel={activeLevel} currentCard={currentCard} setCurrentCard={setCurrentCard} timer={timer} isFlipped={isFlipped} setIsFlipped={setIsFlipped} gameQueue={gameQueue} handleAnswer={handleAnswer} setGameActive={setGameActive} />}
+        {page === 'fc-play' && currentCard && (
+          <FlashcardGame
+            setPage={setPage}
+            setWrongWordToast={setWrongWordToast}
+            onAddCurrentToWrongList={() => {
+              if (currentCard && user?.id) {
+                saveWrongWord(user.id, currentCard.id1 || currentCard.id, 'flashcard');
+                setWrongWordToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว ดูรายการได้ที่ Settings');
+                setTimeout(() => setWrongWordToast(null), 2500);
+              }
+            }}
+            activeLevel={activeLevel}
+            currentCard={currentCard}
+            setCurrentCard={setCurrentCard}
+            timer={timer}
+            isFlipped={isFlipped}
+            setIsFlipped={setIsFlipped}
+            gameQueue={gameQueue}
+            handleAnswer={handleAnswer}
+            setGameActive={setGameActive}
+          />
+        )}
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}
         {page === 'score' && <Score user={user} selectedIds={selectedIds} levelCounts={levelCounts} setPage={setPage} />}
         {page === 'rewards' && <Rewards setPage={setPage} />}
@@ -312,6 +367,8 @@ export default function App() {
           <Settings 
             page={page} 
             setPage={setPage} 
+            user={user}
+            allMasterCards={allMasterCards}
             timerSetting={timerSetting} 
             setTimerSetting={setTimerSetting} 
             gameTimerSetting={gameTimerSetting}

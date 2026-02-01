@@ -1,13 +1,22 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { getWrongWords, deleteWrongWord } from '../utils/wrongWordsStorage';
 
 export default function Settings({ 
-  page, setPage, timerSetting, setTimerSetting, 
+  page, setPage, user, allMasterCards,
+  timerSetting, setTimerSetting, 
   gameTimerSetting, setGameTimerSetting,
   typeTimerSetting, setTypeTimerSetting,
   schedules, setSchedules, saveSettings 
 }) {
   const daysOfWeek = ["จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์", "อาทิตย์"];
   const datesOfMonth = Array.from({ length: 30 }, (_, i) => i + 1);
+  const [wrongWordsList, setWrongWordsList] = useState([]);
+
+  useEffect(() => {
+    if (page === 'settings' && user?.id) {
+      getWrongWords(user.id).then(setWrongWordsList);
+    }
+  }, [page, user?.id]);
 
   // --- 1. หน้าตั้งค่าหลัก ---
   if (page === 'settings') {
@@ -107,6 +116,47 @@ export default function Settings({
 
           <button onClick={() => setPage('select-words')} className="w-full bg-orange-500 text-white p-4 rounded-3xl font-black uppercase italic shadow-lg shadow-orange-100">📂 Select Study Words</button>
           <button onClick={() => setPage('set-schedule')} className="w-full bg-slate-800 text-white p-4 rounded-3xl font-black uppercase italic shadow-lg">📅 Set Level Schedule</button>
+
+          {/* รายการคำผิด (จากมินิเกม กด WRONG) */}
+          <div className="pt-4 border-t border-slate-100">
+            <h3 className="text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">คำผิด</h3>
+            {wrongWordsList.length === 0 ? (
+              <p className="text-slate-400 text-sm italic">ยังไม่มีคำที่บันทึกเป็นคำผิด</p>
+            ) : (
+              <ul className="space-y-2 max-h-64 overflow-y-auto">
+                {wrongWordsList.map((item, i) => {
+                  const card = (allMasterCards || []).find(c => (c.id1 || c.id) === item.flashcard_id);
+                  const gameLabel = { th: 'เกมแปลไทย', pinyin: 'Pinyin', vol: 'เติมคำ', type: 'ฝึกพิมพ์', flashcard: 'Flashcard' }[item.game_type] || item.game_type;
+                  const dateStr = item.created_at ? new Date(item.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) : '';
+                  return (
+                    <li key={item.id || `${item.flashcard_id}-${item.created_at}-${i}`} className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left flex justify-between items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-start gap-2">
+                          <div>
+                            <span className="font-bold text-slate-800">{card?.cn || '—'}</span>
+                            <span className="text-slate-500 text-sm ml-1">{card?.pinyin || ''}</span>
+                            <div className="text-red-600 text-sm font-medium">{card?.th || ''}</div>
+                          </div>
+                          <span className="text-[10px] text-slate-400 whitespace-nowrap">{gameLabel} · {dateStr}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!item.id) return;
+                          const ok = await deleteWrongWord(item.id);
+                          if (ok) setWrongWordsList(prev => prev.filter(w => w.id !== item.id));
+                        }}
+                        className="shrink-0 bg-red-500 hover:bg-red-600 text-white text-xs font-black px-2 py-1 rounded-lg uppercase"
+                      >
+                        ลบ
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
     );

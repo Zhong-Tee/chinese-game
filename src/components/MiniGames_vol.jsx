@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { getPlayedIds, setPlayedIds, clearPlayedIds } from '../utils/minigamePlayedStorage';
+import { saveWrongWord } from '../utils/wrongWordsStorage';
 import { optimizeImageUrl } from '../utils/imageOptimizer';
 import { preloadNextImages } from '../utils/imageLoader';
 
@@ -14,9 +16,11 @@ export default function MiniGames_vol({ user, allMasterCards, selectedIds, timer
   const [gameQueue, setGameQueue] = useState([]); // คิวคำศัพท์
   const [reviewCount, setReviewCount] = useState(0); // จำนวนคำศัพท์ใน Review Mode
   const [reviewCountDisplay, setReviewCountDisplay] = useState(0); // จำนวนคำศัพท์ที่เหลือใน Review Mode (แสดงผล)
+  const [normalCount, setNormalCount] = useState(0); // จำนวนคำที่เหลือใน Normal (sync จาก DB)
   const [showFeedback, setShowFeedback] = useState(false); // แสดง feedback
   const [feedbackType, setFeedbackType] = useState(null); // 'correct' หรือ 'wrong'
   const [showCombo, setShowCombo] = useState(false); // แสดง Combo X2
+  const [wrongWordToast, setWrongWordToast] = useState(null); // popup "ได้เพิ่มคำผิดไว้ใน list ให้แล้ว"
   const audioContextRef = useRef(null); // AudioContext instance เดียว
 
   // ฟังก์ชันดึง Review count จาก DB (แยกตาม game_type: vol)
@@ -69,33 +73,20 @@ export default function MiniGames_vol({ user, allMasterCards, selectedIds, timer
       alert("ไม่มีคำศัพท์ให้เล่น"); setPage('minigames'); return;
     }
 
-    // ดึงคำที่เล่นไปแล้วจาก Local Storage (แยกตาม game_type และ mode)
-    const storageKey = `playedWords_vol_${mode}`;
-    const playedWords = JSON.parse(localStorage.getItem(storageKey) || '[]');
-    
-    // กรองคำที่เล่นไปแล้วออก (เฉพาะคำที่ยังอยู่ใน poolIds)
-    // และกรองคำที่ถูก reset แล้วออกจาก playedWords (คำที่ไม่อยู่ใน poolIds)
+    const playedWords = await getPlayedIds(user.id, 'vol', mode);
     const validPlayedWords = playedWords.filter(id => poolIds.includes(id));
     if (validPlayedWords.length !== playedWords.length) {
-      // อัพเดท localStorage ให้มีเฉพาะคำที่ยังอยู่ใน poolIds
-      localStorage.setItem(storageKey, JSON.stringify(validPlayedWords));
+      await setPlayedIds(user.id, 'vol', mode, validPlayedWords);
     }
-    
     const remainingIds = poolIds.filter(id => !validPlayedWords.includes(id));
-    
     let shuffled;
-    // ถ้าเล่นครบทุกคำแล้ว ให้ reset และเริ่มใหม่
     if (remainingIds.length === 0) {
-      localStorage.removeItem(storageKey);
+      await clearPlayedIds(user.id, 'vol', mode);
       shuffled = poolIds.sort(() => Math.random() - 0.5);
     } else {
-      // สุ่มเฉพาะคำที่ยังไม่เล่น
       shuffled = remainingIds.sort(() => Math.random() - 0.5);
     }
-    
     setGameQueue(shuffled);
-    
-    // เริ่มเกมเมื่อกด Start
     if (gameStarted) {
       loadNextQuestion(shuffled[0], shuffled);
     }
@@ -107,69 +98,25 @@ export default function MiniGames_vol({ user, allMasterCards, selectedIds, timer
     }
   }, [mode, gameStarted]);
 
-  // ดึง reviewCount เมื่อ component mount หรือกลับมาหน้า Start Screen
+  // ดึง reviewCount + normalCount จาก DB เมื่ออยู่หน้า Start Screen
   useEffect(() => {
     if (!gameStarted && user?.id) {
-      // คำนวณ reviewCountDisplay ทันที (ไม่ต้องรอคลิก Review)
-      const fetchReviewDisplay = async () => {
-        try {
-          const { data: reviewData, error } = await supabase
-            .from('user_progress')
-            .select('flashcard_id, minigame_wrong_count')
-            .eq('user_id', user.id);
-          
-          if (error) {
-            console.error('Error fetching review count:', error);
-            return;
+      (async () => {
+        const { data: reviewData } = await supabase.from('user_progress').select('flashcard_id, minigame_wrong_count').eq('user_id', user.id);
+        const reviewPoolIds = (reviewData || []).filter(item => {
+          if (typeof item.minigame_wrong_count === 'object' && item.minigame_wrong_count !== null) {
+            return (item.minigame_wrong_count.vol || 0) > 0;
           }
-          
-          const poolIds = (reviewData || []).filter(item => {
-            if (typeof item.minigame_wrong_count === 'object' && item.minigame_wrong_count !== null) {
-              return (item.minigame_wrong_count.vol || 0) > 0;
-            }
-            return (item.minigame_wrong_count || 0) > 0;
-          }).map(d => d.flashcard_id);
-          
-          console.log('[MiniGames_vol] Review poolIds:', poolIds.length);
-          
-          // ใช้ try-catch สำหรับ localStorage (อาจมีปัญหาในบาง browser)
-          let reviewPlayedWords = [];
-          try {
-            const reviewStorageKey = `playedWords_vol_review`;
-            const stored = localStorage.getItem(reviewStorageKey);
-            reviewPlayedWords = stored ? JSON.parse(stored) : [];
-          } catch (e) {
-            console.error('Error reading localStorage:', e);
-            reviewPlayedWords = [];
-          }
-          
-          console.log('[MiniGames_vol] Review playedWords:', reviewPlayedWords.length);
-          
-          const validPlayedWords = reviewPlayedWords.filter(id => poolIds.includes(id));
-          const remaining = Math.max(0, poolIds.length - validPlayedWords.length);
-          
-          console.log('[MiniGames_vol] Review calculation:', {
-            poolIds: poolIds.length,
-            reviewPlayedWords: reviewPlayedWords.length,
-            validPlayedWords: validPlayedWords.length,
-            remaining: remaining
-          });
-          
-          // ถ้า remaining > 0 แสดง remaining, ถ้าไม่แสดง poolIds.length (ถ้ามีคำใน pool)
-          const displayCount = remaining > 0 ? remaining : poolIds.length;
-          
-          console.log('[MiniGames_vol] Setting reviewCountDisplay:', displayCount);
-          
-          setReviewCountDisplay(displayCount);
-          setReviewCount(poolIds.length);
-        } catch (error) {
-          console.error('Error in fetchReviewDisplay:', error);
-        }
-      };
-      
-      fetchReviewDisplay();
+          return (item.minigame_wrong_count || 0) > 0;
+        }).map(d => d.flashcard_id);
+        setReviewCountDisplay(reviewPoolIds.length);
+        setReviewCount(reviewPoolIds.length);
+        const normalPlayedWords = await getPlayedIds(user.id, 'vol', 'normal');
+        const normalRemaining = selectedIds.filter(id => !normalPlayedWords.includes(id));
+        setNormalCount(normalRemaining.length > 0 ? normalRemaining.length : selectedIds.length);
+      })();
     }
-  }, [gameStarted, user?.id]);
+  }, [gameStarted, user?.id, selectedIds]);
 
   const handleStartGame = () => {
     setGameStarted(true);
@@ -178,9 +125,7 @@ export default function MiniGames_vol({ user, allMasterCards, selectedIds, timer
 
   const loadNextQuestion = (id, currentQueue) => {
     if (!id) { 
-      // Reset Local Storage เมื่อจบเกม
-      const storageKey = `playedWords_vol_${mode}`;
-      localStorage.removeItem(storageKey);
+      clearPlayedIds(user.id, 'vol', mode);
       alert("🎉 จบเกม! คุณเล่นครบทุกคำแล้ว"); 
       setPage('minigames'); 
       return; 
@@ -317,39 +262,33 @@ export default function MiniGames_vol({ user, allMasterCards, selectedIds, timer
         playSound('correct');
       }
 
-      // บันทึกคำที่เล่นไปแล้วใน Local Storage
-      const storageKey = `playedWords_vol_${mode}`;
-      const playedWords = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      const playedWords = await getPlayedIds(user.id, 'vol', mode);
       if (!playedWords.includes(questionId)) {
-        playedWords.push(questionId);
-        localStorage.setItem(storageKey, JSON.stringify(playedWords));
+        await setPlayedIds(user.id, 'vol', mode, [...playedWords, questionId]);
       }
 
-      // กรณี Review Mode
       if (mode === 'review') {
-        // อัพเดท minigame_wrong_count แยกตาม game_type 'vol' (reset เป็น 0)
-        const { data: prog } = await supabase.from('user_progress').select('minigame_wrong_count').eq('user_id', user.id).eq('flashcard_id', questionId).single();
+        const idsToTry = [questionId, String(questionId), Number(questionId)].filter((v, i, a) => a.indexOf(v) === i && v != null && v !== '');
+        const { data: prog } = await supabase.from('user_progress').select('minigame_wrong_count').eq('user_id', user.id).eq('flashcard_id', idsToTry[0]).maybeSingle();
         let newWrongCount = {};
         if (typeof prog?.minigame_wrong_count === 'object' && prog?.minigame_wrong_count !== null) {
           newWrongCount = { ...prog.minigame_wrong_count, vol: 0 };
         } else {
           newWrongCount = { vol: 0 };
         }
-        await supabase.from('user_progress').update({ minigame_wrong_count: newWrongCount }).eq('user_id', user.id).eq('flashcard_id', questionId);
-        
-        // อัพเดท reviewCount และกรองคำที่ reset ออกจาก queue
+        let updateOk = false;
+        for (const idVal of idsToTry) {
+          const { data: updated, error: updateErr } = await supabase.from('user_progress').update({ minigame_wrong_count: newWrongCount }).eq('user_id', user.id).eq('flashcard_id', idVal).select('flashcard_id').maybeSingle();
+          if (!updateErr && updated) {
+            updateOk = true;
+            break;
+          }
+          if (updateErr) console.warn('Review reset update failed (flashcard_id=', idVal, ')', updateErr.message);
+        }
+        if (!updateOk) console.warn('Review reset: no row updated for flashcard_id', questionId, '- check RLS on user_progress');
         const newCount = await fetchReviewCount();
         setReviewCount(newCount);
-        
-        // อัพเดท reviewCountDisplay
-        const reviewStorageKey = `playedWords_vol_review`;
-        const reviewPlayedWords = JSON.parse(localStorage.getItem(reviewStorageKey) || '[]');
-        const validPlayedWords = reviewPlayedWords.filter(id => id !== questionId); // ลบคำที่ตอบถูกออก
-        localStorage.setItem(reviewStorageKey, JSON.stringify(validPlayedWords));
-        const remaining = newCount - validPlayedWords.length;
-        setReviewCountDisplay(remaining > 0 ? remaining : (newCount > 0 ? newCount : 0));
-        
-        // กรองคำที่ reset แล้วออกจาก gameQueue
+        setReviewCountDisplay(newCount);
         const filteredQueue = gameQueue.filter(id => id !== questionId);
         setGameQueue(filteredQueue);
         
@@ -367,26 +306,22 @@ export default function MiniGames_vol({ user, allMasterCards, selectedIds, timer
         if (filteredQueue.length > 0) {
           loadNextQuestion(filteredQueue[0], filteredQueue);
         } else {
-          // ถ้าเล่นครบแล้ว ให้ reset Local Storage
-          const storageKey = `playedWords_vol_${mode}`;
-          localStorage.removeItem(storageKey);
+          await clearPlayedIds(user.id, 'vol', mode);
           alert("🎉 จบเกม Review! คุณตอบถูกทุกคำแล้ว");
           setPage('minigames');
         }
         return;
       }
     } else {
-      // แสดง feedback และเล่นเสียงเมื่อตอบผิด
       setFeedbackType('wrong');
       setShowFeedback(true);
       playSound('wrong');
-      
-      // บันทึกคำที่เล่นไปแล้วใน Local Storage (แม้ตอบผิดก็บันทึก)
-      const storageKey = `playedWords_vol_${mode}`;
-      const playedWords = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      saveWrongWord(user.id, questionId, 'vol');
+      setWrongWordToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว');
+      setTimeout(() => setWrongWordToast(null), 2500);
+      const playedWords = await getPlayedIds(user.id, 'vol', mode);
       if (!playedWords.includes(questionId)) {
-        playedWords.push(questionId);
-        localStorage.setItem(storageKey, JSON.stringify(playedWords));
+        await setPlayedIds(user.id, 'vol', mode, [...playedWords, questionId]);
       }
       
       newStreak = 0;
@@ -412,16 +347,6 @@ export default function MiniGames_vol({ user, allMasterCards, selectedIds, timer
         const nextQueue = gameQueue.filter(id => id !== questionId);
         setGameQueue(nextQueue);
         
-        // อัพเดท reviewCount (เพิ่มขึ้นเพราะตอบผิด)
-        const newCount = await fetchReviewCount();
-        setReviewCount(newCount);
-        
-        // อัพเดท reviewCountDisplay
-        const reviewStorageKey = `playedWords_vol_review`;
-        const reviewPlayedWords = JSON.parse(localStorage.getItem(reviewStorageKey) || '[]');
-        const remaining = newCount - reviewPlayedWords.length;
-        setReviewCountDisplay(remaining > 0 ? remaining : (newCount > 0 ? newCount : 0));
-        
         // ซ่อน feedback หลังจาก 1 วินาที
         setTimeout(() => {
           setShowFeedback(false);
@@ -438,9 +363,7 @@ export default function MiniGames_vol({ user, allMasterCards, selectedIds, timer
             loadNextQuestion(nextQueue[0], nextQueue);
           }, 1500);
         } else {
-          // ถ้าเล่นครบแล้ว ให้ reset Local Storage
-          const storageKey = `playedWords_vol_${mode}`;
-          localStorage.removeItem(storageKey);
+          await clearPlayedIds(user.id, 'vol', mode);
           setTimeout(() => {
             alert("🎉 จบเกม Review! คุณเล่นครบทุกคำแล้ว");
             setPage('minigames');
@@ -450,7 +373,6 @@ export default function MiniGames_vol({ user, allMasterCards, selectedIds, timer
       }
     }
     
-    // ซ่อน feedback หลังจาก 1 วินาที
     setTimeout(() => {
       setShowFeedback(false);
       setFeedbackType(null);
@@ -458,15 +380,13 @@ export default function MiniGames_vol({ user, allMasterCards, selectedIds, timer
 
     setScore(newScore);
     setStreak(newStreak);
-    syncScore(newScore, newStreak); // บันทึกลง DB
+    syncScore(newScore, newStreak);
 
     const nextQueue = gameQueue.slice(1);
     setGameQueue(nextQueue);
     
-    // ถ้าเล่นครบแล้ว ให้ reset Local Storage
     if (nextQueue.length === 0) {
-      const storageKey = `playedWords_vol_${mode}`;
-      localStorage.removeItem(storageKey);
+      await clearPlayedIds(user.id, 'vol', mode);
       alert("🎉 จบเกม! คุณเล่นครบทุกคำแล้ว");
       setPage('minigames');
       return;
@@ -494,16 +414,7 @@ export default function MiniGames_vol({ user, allMasterCards, selectedIds, timer
     return () => clearInterval(interval);
   }, [timer, currentQuestion, gameStarted]);
 
-  // หน้า Start Screen
   if (!gameStarted) {
-    // คำนวณจำนวนคำที่เหลือใน Normal mode (ไม่รวมคำที่เล่นไปแล้ว)
-    const normalStorageKey = `playedWords_vol_normal`;
-    const normalPlayedWords = JSON.parse(localStorage.getItem(normalStorageKey) || '[]');
-    const normalRemaining = selectedIds.filter(id => !normalPlayedWords.includes(id));
-    const normalCount = normalRemaining.length > 0 ? normalRemaining.length : selectedIds.length;
-    
-    // reviewCountDisplay จะถูกคำนวณใหม่ใน useEffect ด้านล่าง
-    
     return (
       <div 
         className="flex flex-col items-center justify-center min-h-[80vh] select-none"
@@ -558,11 +469,14 @@ export default function MiniGames_vol({ user, allMasterCards, selectedIds, timer
               }
             }}
     >
-      <div className="w-full flex justify-between items-center mb-4">
-        <button onClick={() => setPage('minigames')} className="text-slate-800 font-black text-xs underline italic uppercase">Exit</button>
+      <div className="w-full flex justify-between items-center mb-4 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <button onClick={() => setPage('minigames')} className="text-slate-800 font-black text-xs underline italic uppercase">Exit</button>
+          <button onClick={async () => { const qId = currentQuestion?.id1 ?? currentQuestion?.id; if (qId != null) await saveWrongWord(user.id, qId, 'vol'); setWrongWordToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว ดูรายการได้ที่ Settings'); setTimeout(() => setWrongWordToast(null), 2500); }} className="bg-amber-500 text-white px-2 py-1 rounded-full font-black text-[10px] italic uppercase">คำผิด</button>
+        </div>
         <div className="flex gap-2">
            <div className="bg-orange-600 text-white px-3 py-1 rounded-full font-black text-[10px] italic">SCORE: {score}</div>
-           <div className="bg-slate-800 text-white px-3 py-1 rounded-full font-black text-[10px] italic uppercase">Left: {gameQueue.length}</div>
+           <div className="bg-slate-800 text-white px-3 py-1 rounded-full font-black text-[10px] italic uppercase">Left: {mode === 'review' ? reviewCountDisplay : gameQueue.length}</div>
         </div>
         <div className={`text-3xl font-black italic ${timer < 3 ? 'text-red-600 animate-pulse' : 'text-slate-800'}`}>{timer}s</div>
       </div>
@@ -624,6 +538,12 @@ export default function MiniGames_vol({ user, allMasterCards, selectedIds, timer
           </button>
         ))}
       </div>
+
+      {wrongWordToast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] bg-amber-500 text-white px-6 py-3 rounded-2xl shadow-xl font-black text-sm italic text-center max-w-[90%]">
+          {wrongWordToast}
+        </div>
+      )}
     </div>
   );
 }
