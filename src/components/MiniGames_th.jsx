@@ -317,7 +317,7 @@ export default function MiniGames_th({ user, allMasterCards, selectedIds, timerS
       setFeedbackType('wrong');
       setShowFeedback(true);
       playSound('wrong');
-      saveWrongWord(user.id, questionId, 'th');
+      saveWrongWord(user.id, questionId, 'th', currentQuestion);
       setWrongWordToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว');
       setTimeout(() => setWrongWordToast(null), 2500);
       const playedWords = await getPlayedIds(user.id, 'th', mode);
@@ -472,7 +472,7 @@ export default function MiniGames_th({ user, allMasterCards, selectedIds, timerS
       <div className="w-full flex justify-between items-center mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <button onClick={() => setPage('minigames')} className="text-slate-800 font-black text-xs underline italic uppercase">Exit</button>
-          <button onClick={async () => { const qId = currentQuestion?.id1 ?? currentQuestion?.id; if (qId != null) await saveWrongWord(user.id, qId, 'th'); setWrongWordToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว ดูรายการได้ที่ Settings'); setTimeout(() => setWrongWordToast(null), 2500); }} className="bg-amber-500 text-white px-2 py-1 rounded-full font-black text-[10px] italic uppercase">คำผิด</button>
+          <button onClick={async () => { const qId = currentQuestion?.id1 ?? currentQuestion?.id; if (qId != null) await saveWrongWord(user.id, qId, 'th', currentQuestion); setWrongWordToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว ดูรายการได้ที่ Settings'); setTimeout(() => setWrongWordToast(null), 2500); }} className="bg-amber-500 text-white px-2 py-1 rounded-full font-black text-[10px] italic uppercase">คำผิด</button>
         </div>
         <div className="flex gap-2">
            <div className="bg-orange-600 text-white px-3 py-1 rounded-full font-black text-[10px] italic">SCORE: {score}</div>

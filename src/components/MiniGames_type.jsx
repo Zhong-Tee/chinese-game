@@ -336,7 +336,7 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
       setFeedbackType('wrong');
       setShowFeedback(true);
       playSound('wrong');
-      saveWrongWord(user.id, questionId, 'type');
+      saveWrongWord(user.id, questionId, 'type', currentQuestion);
       setWrongWordToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว');
       setTimeout(() => setWrongWordToast(null), 2500);
       const playedWords = await getPlayedIds(user.id, 'type', mode);
@@ -528,7 +528,7 @@ export default function MiniGames_type({ user, allMasterCards, selectedIds, time
       <div className="w-full flex justify-between items-center mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <button onClick={() => setPage('minigames')} className="text-slate-800 font-black text-xs underline italic uppercase select-none" style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>Exit</button>
-          <button onClick={async () => { const qId = currentQuestion?.id1 ?? currentQuestion?.id; if (qId != null) await saveWrongWord(user.id, qId, 'type'); setWrongWordToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว ดูรายการได้ที่ Settings'); setTimeout(() => setWrongWordToast(null), 2500); }} className="bg-amber-500 text-white px-2 py-1 rounded-full font-black text-[10px] italic uppercase">คำผิด</button>
+          <button onClick={async () => { const qId = currentQuestion?.id1 ?? currentQuestion?.id; if (qId != null) await saveWrongWord(user.id, qId, 'type', currentQuestion); setWrongWordToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว ดูรายการได้ที่ Settings'); setTimeout(() => setWrongWordToast(null), 2500); }} className="bg-amber-500 text-white px-2 py-1 rounded-full font-black text-[10px] italic uppercase">คำผิด</button>
         </div>
         <div className="flex gap-2">
            <div className="bg-orange-600 text-white px-3 py-1 rounded-full font-black text-[10px] italic">SCORE: {score}</div>

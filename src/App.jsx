@@ -556,7 +556,7 @@ export default function App() {
             setWrongWordToast={setWrongWordToast}
             onAddCurrentToWrongList={() => {
               if (currentCard && user?.id) {
-                saveWrongWord(user.id, currentCard.id1 || currentCard.id, 'flashcard');
+                saveWrongWord(user.id, currentCard.id1 || currentCard.id, 'flashcard', currentCard);
                 setWrongWordToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว ดูรายการได้ที่ Settings');
                 setTimeout(() => setWrongWordToast(null), 2500);
               }
