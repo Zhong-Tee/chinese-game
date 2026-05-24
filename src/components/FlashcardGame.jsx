@@ -89,7 +89,7 @@ export default function FlashcardGame({
             >
               {currentCard.cn || '-'}
             </h2>
-            {currentCard.pinyin && (
+            {stage === 'meaning' && currentCard.pinyin && (
               <p
                 className="text-slate-600 font-bold mt-1 break-words"
                 style={{ fontSize: 'clamp(1.45rem, 7vw, 2.1rem)' }}
@@ -106,12 +106,14 @@ export default function FlashcardGame({
                 >
                   {currentCard.vocabulary || '-'}
                 </div>
-                <div
-                  className="font-bold text-slate-600 mt-1 break-words"
-                  style={{ fontSize: 'clamp(1.05rem, 4.8vw, 1.35rem)' }}
-                >
-                  {currentCard.pinyin_vocab || '-'}
-                </div>
+                {stage === 'meaning' && (
+                  <div
+                    className="font-bold text-slate-600 mt-1 break-words"
+                    style={{ fontSize: 'clamp(1.05rem, 4.8vw, 1.35rem)' }}
+                  >
+                    {currentCard.pinyin_vocab || '-'}
+                  </div>
+                )}
               </div>
             )}
           </div>
