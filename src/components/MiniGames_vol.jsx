@@ -2,8 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { getPlayedIds, setPlayedIds, clearPlayedIds } from '../utils/minigamePlayedStorage';
 import { saveWrongWord } from '../utils/wrongWordsStorage';
-import { optimizeImageUrl } from '../utils/imageOptimizer';
-import { preloadNextImages } from '../utils/imageLoader';
 
 export default function MiniGames_vol({ user, allMasterCards, selectedIds, timerSetting, setPage }) {
   const [mode, setMode] = useState('normal');
@@ -135,15 +133,6 @@ export default function MiniGames_vol({ user, allMasterCards, selectedIds, timer
     setOptions([correctWord, ...wrongOptions].sort(() => 0.5 - Math.random()));
     setCurrentQuestion(correctWord);
     setTimer(timerSetting);
-    
-    // Lazy Load: โหลดภาพถัดไป 3-5 ภาพล่วงหน้า
-    if (currentQueue && currentQueue.length > 1) {
-      const nextIds = currentQueue.slice(1, 6); // 5 ภาพถัดไป
-      const nextCards = nextIds.map(nextId => 
-        allMasterCards.find(c => (c.id1 || c.id) === nextId)
-      ).filter(Boolean);
-      preloadNextImages(nextCards, 5);
-    }
   };
 
   // 2. ระบบบันทึกคะแนนลง DB (Upsert)
@@ -512,13 +501,20 @@ export default function MiniGames_vol({ user, allMasterCards, selectedIds, timer
         </div>
       )}
 
-      <div className="w-full max-w-[480px] md:max-w-[960px] lg:max-w-[1200px] aspect-[8/3] rounded-[2rem] overflow-hidden shadow-2xl border-4 md:border-8 border-white mb-4 md:mb-8 relative">
-        <img 
-          src={optimizeImageUrl(currentQuestion.sentence_url || currentQuestion.image_front_url)} 
-          className="w-full h-full object-cover" 
-          alt="Q"
-          loading="eager"
-        />
+      <div className="w-full max-w-[480px] md:max-w-[960px] lg:max-w-[1200px] rounded-[2rem] shadow-2xl border-4 md:border-8 border-white mb-4 md:mb-8 relative bg-[#F3E8FF] p-5 md:p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+          <div className="rounded-2xl bg-white/75 p-4 text-center flex flex-col justify-center">
+            <div className="text-[3.5rem] md:text-[4.5rem] leading-none font-black text-slate-900 break-words">{currentQuestion.cn || '—'}</div>
+            <div className="text-xl md:text-2xl font-bold text-slate-700 mt-1 break-words">{currentQuestion.pinyin || '—'}</div>
+          </div>
+          <div className="rounded-2xl bg-white/75 p-4 text-left">
+            <div className="text-xs uppercase font-black text-slate-500">Sentence</div>
+            <div className="text-2xl md:text-3xl font-black text-slate-900 mt-1 break-words">{currentQuestion.sentence_test || '—'}</div>
+            <div className="text-xs uppercase font-black text-slate-500 mt-3">Vocabulary</div>
+            <div className="text-2xl font-black text-slate-900 mt-1 break-words">{currentQuestion.vocabulary || '—'}</div>
+            <div className="text-lg font-bold text-slate-700 mt-1 break-words">{currentQuestion.pinyin_vocab || '—'}</div>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:gap-6 w-full max-w-sm md:max-w-2xl px-4">
