@@ -503,6 +503,7 @@ export default function App() {
   );
 
   if (page === 'login') return <Login setPage={setPage} setUser={setUser} fetchInitialData={fetchInitialData} fetchUserSettings={fetchUserSettings} />;
+  const shouldShowTopBar = page !== 'fc-play';
 
   return (
     <div 
@@ -524,17 +525,20 @@ export default function App() {
         }
       }}
     >
-      <header className="p-4 bg-white shadow-sm border-b-4 border-orange-500 flex justify-between items-center sticky top-0 z-40">
-        <div className="flex flex-col">
-          <h1 className="font-black text-orange-600 text-xl uppercase italic tracking-tighter">Nihao Game</h1>
-          {user?.email && (
-            <p className="text-xs text-slate-600 font-bold mt-1">{user.email.replace('@nihao.com', '')}</p>
-          )}
-        </div>
-        <button onClick={() => setIsMenuOpen(true)} className="w-12 h-10 bg-slate-800 text-white rounded-xl flex items-center justify-center text-2xl shadow-lg">☰</button>
-      </header>
-
-      <MenuOverlay />
+      {shouldShowTopBar && (
+        <>
+          <header className="p-4 bg-white shadow-sm border-b-4 border-orange-500 flex justify-between items-center sticky top-0 z-40">
+            <div className="flex flex-col">
+              <h1 className="font-black text-orange-600 text-xl uppercase italic tracking-tighter">Nihao Game</h1>
+              {user?.email && (
+                <p className="text-xs text-slate-600 font-bold mt-1">{user.email.replace('@nihao.com', '')}</p>
+              )}
+            </div>
+            <button onClick={() => setIsMenuOpen(true)} className="w-12 h-10 bg-slate-800 text-white rounded-xl flex items-center justify-center text-2xl shadow-lg">☰</button>
+          </header>
+          <MenuOverlay />
+        </>
+      )}
 
       {/* Toast: ได้เพิ่มคำผิดไว้ใน list ให้แล้ว */}
       {wrongWordToast && (

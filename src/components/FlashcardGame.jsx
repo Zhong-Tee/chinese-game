@@ -62,23 +62,15 @@ export default function FlashcardGame({
             คำผิด
           </button>
         </div>
-        <div className="flex gap-2 font-black italic text-[10px]">
-          <div className="bg-orange-600 text-white px-3 py-1 rounded-full shadow-sm">
-            {activeLevel === 'mistakes' ? 'FIX' : 'LV ' + activeLevel}
-          </div>
-          <div className="bg-slate-800 text-white px-3 py-1 rounded-full shadow-sm uppercase tracking-tighter">
-            Left: {gameQueue.length}
-          </div>
-        </div>
 
         <div className={`text-3xl font-black italic ${timer < 3 ? 'text-red-600 animate-pulse' : 'text-slate-800'}`}>
           {timer}s
         </div>
       </div>
 
-      <div className="w-full flex flex-col" style={{ height: 'calc(100vh - 13.5rem)' }}>
+      <div className="w-full flex flex-col">
         <div
-          className="w-full rounded-[1.8rem] border-4 border-white/80 shadow-2xl p-4 sm:p-5 flex flex-col overflow-y-auto"
+          className="w-full rounded-[1.8rem] border-4 border-white/80 shadow-2xl p-4 sm:p-5 flex flex-col"
           style={{ backgroundColor: pastelCardBackground }}
         >
           <div className="text-center mb-3">
