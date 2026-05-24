@@ -6,10 +6,9 @@ export default function Library({
   selectedIds, 
   libraryDetail, 
   setLibraryDetail, 
-  libFlipped, 
   setLibFlipped 
 }) {
-  const [libView, setLibView] = useState('front'); // 'front' | 'back' | 'sentence'
+  const [libView, setLibView] = useState('front'); // 'front' | 'sentence'
 
   useEffect(() => {
     if (libraryDetail) setLibView('front');
@@ -38,8 +37,20 @@ export default function Library({
               return idA - idB;
             })
             .map(card => (
-          <div key={card?.id1 || card?.id || Math.random()} onClick={() => { setLibraryDetail(card); setLibFlipped(false); }} className="aspect-[3/4] rounded-xl overflow-hidden shadow-md border-2 border-white active:scale-95 transition">
-            <img src={card?.image_front_url || ''} className="w-full h-full object-cover" alt="thumb" />
+          <div
+            key={card?.id1 || card?.id}
+            onClick={() => { setLibraryDetail(card); setLibFlipped(false); }}
+            className="aspect-[3/4] rounded-xl shadow-md border-2 border-white active:scale-95 transition p-2.5 flex flex-col justify-between bg-[#FDE7CC]"
+          >
+            <div className="text-[10px] text-right text-slate-500 font-bold">{card?.id1 || card?.id}</div>
+            <div className="text-center">
+              <div className="text-4xl font-black text-slate-900 leading-tight break-words">{card?.cn || '—'}</div>
+              <div className="text-sm font-bold text-slate-700 mt-1 break-words">{card?.pinyin || '—'}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-black text-slate-900 leading-tight break-words">{card?.vocabulary || '—'}</div>
+              <div className="text-xs font-bold text-slate-700 mt-0.5 break-words">{card?.pinyin_vocab || '—'}</div>
+            </div>
           </div>
             ))
         ) : (
@@ -66,31 +77,31 @@ export default function Library({
                   <p className="text-slate-800 text-lg font-medium break-words">{libraryDetail.translate || '—'}</p>
                 </div>
               </div>
-              <button onClick={() => { setLibView('back'); setLibFlipped(true); }} className="bg-orange-500 text-white px-10 py-4 rounded-full font-black uppercase shadow-xl">คำแปล</button>
+              <button onClick={() => { setLibView('front'); setLibFlipped(false); }} className="bg-slate-600 text-white px-10 py-4 rounded-full font-black uppercase shadow-xl">การ์ด</button>
             </>
           ) : (
             <>
-              <div className="w-full max-w-sm aspect-[3/4] rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white mb-8">
-                <img src={libView === 'back' ? libraryDetail.image_back_url : libraryDetail.image_front_url} className="w-full h-full object-cover" alt="detail" />
-              </div>
-              {libView === 'front' ? (
-                <button onClick={() => { setLibView('back'); setLibFlipped(true); }} className="bg-orange-500 text-white px-10 py-4 rounded-full font-black uppercase shadow-xl">คำแปล</button>
-              ) : (
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => { setLibView('front'); setLibFlipped(false); }}
-                    className="bg-slate-600 text-white px-8 py-4 rounded-full font-black uppercase shadow-xl"
-                  >
-                    หน้า
-                  </button>
-                  <button
-                    onClick={() => setLibView('sentence')}
-                    className="bg-orange-500 text-white px-8 py-4 rounded-full font-black uppercase shadow-xl"
-                  >
-                    ประโยค
-                  </button>
+              <div className="w-full max-w-sm rounded-[2rem] shadow-2xl border-4 border-white mb-8 p-6 bg-[#FDE7CC]">
+                <div className="text-center space-y-3">
+                  <div className="text-7xl font-black text-slate-900 leading-none break-words">{libraryDetail.cn || '—'}</div>
+                  <div className="text-2xl font-bold text-slate-700 break-words">{libraryDetail.pinyin || '—'}</div>
+                  <div className="rounded-2xl bg-white/70 p-4 text-center mt-3">
+                    <div className="text-xs uppercase font-black text-slate-500">Vocabulary</div>
+                    <div className="text-3xl font-black text-slate-900 mt-1 break-words">{libraryDetail.vocabulary || '—'}</div>
+                    <div className="text-xl font-bold text-slate-700 mt-1 break-words">{libraryDetail.pinyin_vocab || '—'}</div>
+                  </div>
+                  <div className="rounded-2xl bg-white/70 p-4 text-center mt-2">
+                    <div className="text-xs uppercase font-black text-slate-500">คำแปลไทย</div>
+                    <div className="text-3xl font-black text-slate-900 mt-1 break-words">{libraryDetail.th || '—'}</div>
+                  </div>
                 </div>
-              )}
+              </div>
+              <button
+                onClick={() => setLibView('sentence')}
+                className="bg-orange-500 text-white px-10 py-4 rounded-full font-black uppercase shadow-xl"
+              >
+                ประโยค
+              </button>
             </>
           )}
         </div>

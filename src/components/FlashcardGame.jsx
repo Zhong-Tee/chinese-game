@@ -1,5 +1,4 @@
-import React, { useEffect } from 'react';
-import { preloadNextImages } from '../utils/imageLoader';
+import React from 'react';
 
 export default function FlashcardGame({ 
   setPage, 
@@ -9,10 +8,16 @@ export default function FlashcardGame({
   currentCard, 
   setCurrentCard, 
   timer, 
-  isFlipped, 
-  setIsFlipped, 
   gameQueue, 
-  handleAnswer, 
+  stage,
+  choices,
+  selectedAnswer,
+  correctAnswer,
+  isStageCorrect,
+  isStageAnswered,
+  isTimedOut,
+  onSelectChoice,
+  onContinueStage,
   setGameActive 
 }) {
   const showWrongToast = (msg) => {
@@ -25,26 +30,24 @@ export default function FlashcardGame({
     if (onAddCurrentToWrongList) onAddCurrentToWrongList();
     else showWrongToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว ดูรายการได้ที่ Settings');
   };
-  useEffect(() => {
-    if (currentCard && gameQueue.length > 0) {
-      const currentIndex = gameQueue.findIndex(
-        card => (card.id1 || card.id) === (currentCard.id1 || currentCard.id)
-      );
-      if (currentIndex >= 0 && currentIndex < gameQueue.length - 1) {
-        const nextCards = gameQueue.slice(currentIndex + 1, currentIndex + 6);
-        preloadNextImages(nextCards, 5);
-      }
-    }
-  }, [currentCard, gameQueue]);
+
+  const stageTitle = stage === 'pinyin'
+    ? 'ช่วงที่ 1: เลือก Pinyin'
+    : 'ช่วงที่ 2: เลือกคำแปลไทย';
+
+  const stageLabel = stage === 'pinyin' ? 'Pinyin ที่ถูกต้อง' : 'คำแปลไทยที่ถูกต้อง';
+  const canShowStageFeedback = isStageAnswered;
+  const shouldShowManualNext = isStageAnswered && (!isStageCorrect || isTimedOut);
+  const pastelCardBackground = stage === 'pinyin' ? '#FEF3C7' : '#E0F2FE';
 
   return (
     <div 
-      className="flex flex-col items-center select-none"
+      className="flex flex-col items-center select-none w-full"
       style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
       onDragStart={(e) => e.preventDefault()}
     >
       {/* Header ของเกม */}
-      <div className="w-full flex justify-between items-center mb-6 px-2 flex-wrap gap-2">
+      <div className="w-full flex justify-between items-center mb-4 px-1 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <button 
             onClick={() => { setPage('fc-chars'); setGameActive(false); setCurrentCard(null); }} 
@@ -73,47 +76,95 @@ export default function FlashcardGame({
         </div>
       </div>
 
-      {/* ตัวการ์ด (3D Flip) */}
-      <div className="w-full aspect-[3/4] perspective-1000 select-none">
-        <div className={`relative w-full h-full transition-transform duration-500 preserve-3d ${isFlipped ? 'rotate-y-180' : ''}`}>
-          {/* หน้าการ์ด (ภาษาจีน) */}
-          <div className="absolute w-full h-full backface-hidden rounded-[2.5rem] overflow-hidden shadow-2xl border-8 border-white">
-            <img src={currentCard.image_front_url} className="w-full h-full object-cover" alt="front" />
+      <div className="w-full flex flex-col" style={{ height: 'calc(100vh - 13.5rem)' }}>
+        <div
+          className="w-full rounded-[1.8rem] border-4 border-white/80 shadow-2xl p-4 sm:p-5 flex flex-col overflow-y-auto"
+          style={{ backgroundColor: pastelCardBackground }}
+        >
+          <div className="text-center mb-3">
+            <p className="text-xs font-black uppercase italic text-orange-600">{stageTitle}</p>
+            <h2
+              className="leading-none font-black mt-2 text-slate-900 break-words"
+              style={{ fontSize: 'clamp(4rem, 18vw, 6.3rem)' }}
+            >
+              {currentCard.cn || '-'}
+            </h2>
+            {currentCard.pinyin && (
+              <p
+                className="text-slate-600 font-bold mt-1 break-words"
+                style={{ fontSize: 'clamp(1.45rem, 7vw, 2.1rem)' }}
+              >
+                {currentCard.pinyin}
+              </p>
+            )}
+            {(currentCard.vocabulary || currentCard.pinyin_vocab) && (
+              <div className="mt-3 rounded-2xl bg-white/70 px-4 py-3 text-center">
+                <div className="text-xs font-black uppercase text-slate-500">Vocabulary</div>
+                <div
+                  className="font-black text-slate-900 mt-1 leading-snug break-words"
+                  style={{ fontSize: 'clamp(1.45rem, 6.2vw, 1.85rem)' }}
+                >
+                  {currentCard.vocabulary || '-'}
+                </div>
+                <div
+                  className="font-bold text-slate-600 mt-1 break-words"
+                  style={{ fontSize: 'clamp(1.05rem, 4.8vw, 1.35rem)' }}
+                >
+                  {currentCard.pinyin_vocab || '-'}
+                </div>
+              </div>
+            )}
           </div>
-          {/* หลังการ์ด (คำแปล) */}
-          <div className="absolute w-full h-full backface-hidden rotate-y-180 rounded-[2.5rem] overflow-hidden shadow-2xl border-8 border-white">
-            <img src={currentCard.image_back_url} className="w-full h-full object-cover" alt="back" />
+
+          <div className="grid grid-cols-1 gap-2.5">
+            {choices.map((choice, index) => {
+              const isSelected = selectedAnswer === choice;
+              const isCorrectChoice = correctAnswer === choice;
+              const showAsCorrect = canShowStageFeedback && isCorrectChoice;
+              const showAsWrong = canShowStageFeedback && isSelected && !isStageCorrect;
+
+              return (
+                <button
+                  key={`${stage}-${index}-${choice}`}
+                  onClick={() => onSelectChoice(choice)}
+                  disabled={isStageAnswered}
+                  className={`rounded-2xl border-2 px-4 py-2.5 font-black text-left transition text-[1.65rem] leading-tight ${
+                    showAsCorrect
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
+                      : showAsWrong
+                        ? 'border-red-600 bg-red-50 text-red-700'
+                        : isSelected
+                          ? 'border-blue-600 bg-blue-50 text-blue-700'
+                          : 'border-slate-200 bg-white text-slate-800'
+                  } ${isStageAnswered ? 'opacity-95' : 'active:scale-[0.98]'}`}
+                >
+                  <span className="mr-2 text-slate-400">{index + 1}.</span> {choice}
+                </button>
+              );
+            })}
           </div>
+
+          {canShowStageFeedback && (
+            <div className={`mt-4 rounded-2xl px-4 py-3 text-sm font-black ${isStageCorrect ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+              <span>{isTimedOut ? 'หมดเวลา' : isStageCorrect ? 'ตอบถูกต้อง' : 'ตอบผิด'}: </span>
+              <span>{stageLabel}: {correctAnswer || '-'}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="w-full mt-3 shrink-0">
+          {shouldShowManualNext ? (
+            <button
+              onClick={onContinueStage}
+              className="w-full py-3.5 rounded-2xl font-black uppercase italic bg-orange-500 text-white shadow-xl active:scale-95 transition"
+            >
+              ข้อถัดไป
+            </button>
+          ) : (
+            <div className="h-[52px]" />
+          )}
         </div>
       </div>
-
-      {/* ปุ่มควบคุม (จะแสดงเมื่อพลิกการ์ดแล้ว) */}
-      {isFlipped ? (
-        <div className="grid grid-cols-2 gap-4 w-full mt-10 animate-in zoom-in duration-300">
-          <button 
-            onClick={() => handleAnswer(false)} 
-            className="bg-red-600 text-white py-6 rounded-3xl font-black shadow-xl active:scale-90 transition uppercase italic select-none"
-            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-          >
-            WRONG
-          </button>
-          <button 
-            onClick={() => handleAnswer(true)} 
-            className="bg-emerald-600 text-white py-6 rounded-3xl font-black shadow-xl active:scale-90 transition uppercase italic select-none"
-            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-          >
-            CORRECT
-          </button>
-        </div>
-      ) : ( 
-        <button 
-          onClick={() => setIsFlipped(true)} 
-          className="mt-10 text-slate-300 font-black border-b-2 border-slate-200 text-xs uppercase italic select-none"
-          style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-        >
-          Tap to reveal
-        </button> 
-      )}
     </div>
   );
 }

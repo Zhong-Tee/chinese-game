@@ -13,7 +13,6 @@ import MiniGames_type from './components/MiniGames_type';
 import Score from './components/Score';
 import Rewards from './components/Rewards';
 import Comics from './components/Comics';
-import { lazyLoadImages, preloadNextImages } from './utils/imageLoader';
 import { saveWrongWord } from './utils/wrongWordsStorage';
 
 export default function App() {
@@ -32,14 +31,20 @@ export default function App() {
   // Game States
   const [activeLevel, setActiveLevel] = useState(1);
   const [currentCard, setCurrentCard] = useState(null);
-  const [isFlipped, setIsFlipped] = useState(false);
   const [timer, setTimer] = useState(5);
   const [gameActive, setGameActive] = useState(false);
   const [gameQueue, setGameQueue] = useState([]);
+  const [flashcardStage, setFlashcardStage] = useState('pinyin'); // pinyin | meaning | result
+  const [flashcardChoices, setFlashcardChoices] = useState([]);
+  const [flashcardSelectedAnswer, setFlashcardSelectedAnswer] = useState('');
+  const [flashcardCorrectAnswer, setFlashcardCorrectAnswer] = useState('');
+  const [flashcardStageCorrect, setFlashcardStageCorrect] = useState(false);
+  const [flashcardStageAnswered, setFlashcardStageAnswered] = useState(false);
+  const [flashcardStageResults, setFlashcardStageResults] = useState({ pinyin: null, meaning: null });
+  const [flashcardTimedOut, setFlashcardTimedOut] = useState(false);
+  const FLASHCARD_CORRECT_REVEAL_MS = 2000;
 
   // UI States
-  const [isPreloading, setIsPreloading] = useState(false);
-  const [preloadProgress, setPreloadProgress] = useState(0);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [libraryDetail, setLibraryDetail] = useState(null);
   const [libFlipped, setLibFlipped] = useState(false);
@@ -233,21 +238,54 @@ export default function App() {
     };
   }, [isDragSelecting, endDragSelect, clearLongPressTimer]);
 
+  const normalizeOptionText = (value) => String(value || '').trim();
+
+  const shuffleArray = (arr) => [...arr].sort(() => Math.random() - 0.5);
+
+  const buildChoices = useCallback((field, card) => {
+    const correct = normalizeOptionText(card?.[field]);
+    if (!correct) {
+      return { choices: ['ไม่พบคำตอบ', 'ไม่พบคำตอบ 2', 'ไม่พบคำตอบ 3', 'ไม่พบคำตอบ 4'], correctAnswer: '' };
+    }
+
+    const primaryPool = allMasterCards
+      .map(item => normalizeOptionText(item?.[field]))
+      .filter(Boolean);
+
+    const uniqueDistractors = [...new Set(primaryPool)].filter(text => text !== correct);
+    let distractors = shuffleArray(uniqueDistractors).slice(0, 3);
+
+    // ถ้าข้อมูลจริงมีไม่พอ 3 ตัวหลอก ให้เติมข้อความ fallback เพื่อให้ UI มี 4 ตัวเลือกเสมอ
+    while (distractors.length < 3) {
+      distractors.push(`ตัวเลือกอื่น ${distractors.length + 1}`);
+    }
+
+    return {
+      choices: shuffleArray([correct, ...distractors]),
+      correctAnswer: correct
+    };
+  }, [allMasterCards]);
+
+  const resetStageState = useCallback(() => {
+    setFlashcardSelectedAnswer('');
+    setFlashcardCorrectAnswer('');
+    setFlashcardStageCorrect(false);
+    setFlashcardStageAnswered(false);
+  }, []);
+
   const startLevelGame = async (level) => {
     try {
-      setActiveLevel(level); setIsPreloading(true); setPreloadProgress(0);
+      setActiveLevel(level);
       let query = supabase.from('user_progress').select('flashcard_id').eq('user_id', user.id);
       if (level === 'mistakes') query = query.gte('wrong_count', 3); 
       else query = query.eq('level', level).lt('wrong_count', 3);
       const { data: progress, error: progressError } = await query;
       if (progressError) {
         console.error('Error fetching progress:', progressError);
-        setIsPreloading(false);
         alert("เกิดข้อผิดพลาด: " + progressError.message);
         return;
       }
       if (!progress || progress.length === 0) { 
-        setIsPreloading(false); 
         alert("ไม่มีคำศัพท์"); 
         return; 
       }
@@ -257,65 +295,171 @@ export default function App() {
       const { data: cards, error: cardsError } = await supabase.from('flashcards').select('*').in('id1', flashcardIds);
       if (cardsError) {
         console.error('Error fetching cards:', cardsError);
-        setIsPreloading(false);
         alert("เกิดข้อผิดพลาด: " + cardsError.message);
         return;
       }
       if (!cards || cards.length === 0) {
-        setIsPreloading(false);
         alert("ไม่พบคำศัพท์");
         return;
       }
-      console.log('Loading', cards.length, 'cards');
-      // โหลดเฉพาะ 6 ใบแรก (front+back) แล้วเริ่มเกม — บน Vercel ไม่รอโหลดทั้งหมด
-      await lazyLoadImages(cards, 6, (p) => setPreloadProgress(p));
-      setIsPreloading(false);
-      setGameQueue(cards.sort(() => Math.random() - 0.5));
+      setGameQueue(shuffleArray(cards));
       setPage('fc-play');
       setGameActive(true);
     } catch (error) {
       console.error('Error in startLevelGame:', error);
-      setIsPreloading(false);
       alert("เกิดข้อผิดพลาด: " + error.message);
     }
   };
 
-  useEffect(() => {
-    if (gameActive && gameQueue.length > 0 && !currentCard) {
-      setCurrentCard(gameQueue[0]); setTimer(timerSetting); setIsFlipped(false);
-    } else if (gameActive && gameQueue.length === 0 && !currentCard) {
-      alert("🎉 จบช่วงการฝึกแล้ว!"); setPage('fc-chars'); setGameActive(false);
-    }
-  }, [gameQueue, currentCard, gameActive, timerSetting]);
+  const moveToNextCard = useCallback(async (isCardPassed) => {
+    if (!currentCard || !user?.id) return;
 
-  useEffect(() => {
-    let interval;
-    if (gameActive && currentCard && !isFlipped && timer > 0) {
-      interval = setInterval(() => setTimer(t => t - 1), 1000);
-    } else if (timer === 0 && !isFlipped && gameActive) { setIsFlipped(true); }
-    return () => clearInterval(interval);
-  }, [timer, isFlipped, gameActive, currentCard]);
+    let nextLevel;
+    let nextWrongCount;
+    const cardId = currentCard.id1 || currentCard.id;
+    const { data: currentProgress } = await supabase
+      .from('user_progress')
+      .select('wrong_count, level')
+      .eq('user_id', user.id)
+      .eq('flashcard_id', cardId)
+      .single();
 
-  const handleAnswer = async (isCorrect) => {
-    let nextLevel; let nextWrongCount;
-    const { data: currentProgress } = await supabase.from('user_progress').select('wrong_count, level').eq('user_id', user.id).eq('flashcard_id', currentCard.id1 || currentCard.id).single();
-    
-    // ป้องกันแอปพังถ้าหาข้อมูล progress ไม่เจอ
     const currentWrong = currentProgress?.wrong_count || 0;
-    const currentLv = currentProgress?.level || 1;
 
-    if (isCorrect) {
-      if (activeLevel === 'mistakes') { nextLevel = 1; nextWrongCount = 0; }
-      else { nextLevel = Math.min(activeLevel + 1, 7); nextWrongCount = currentWrong; }
+    if (isCardPassed) {
+      if (activeLevel === 'mistakes') {
+        nextLevel = 1;
+        nextWrongCount = 0;
+      } else {
+        nextLevel = Math.min(activeLevel + 1, 7);
+        nextWrongCount = currentWrong;
+      }
     } else {
-      // ตอบผิดในเกม flashcard เท่านั้น — ไม่เพิ่มเข้า Settings (ใช้ปุ่ม "คำผิด" ใน header ถ้าต้องการเก็บเข้า list)
       nextLevel = 1;
       nextWrongCount = currentWrong + 1;
     }
 
-    await supabase.from('user_progress').update({ level: nextLevel, wrong_count: nextWrongCount }).eq('user_id', user.id).eq('flashcard_id', currentCard.id1 || currentCard.id);
-    setGameQueue(gameQueue.slice(1)); setCurrentCard(null); fetchInitialData(user.id);
-  };
+    await supabase
+      .from('user_progress')
+      .update({ level: nextLevel, wrong_count: nextWrongCount })
+      .eq('user_id', user.id)
+      .eq('flashcard_id', cardId);
+
+    setGameQueue(prev => prev.slice(1));
+    setCurrentCard(null);
+    fetchInitialData(user.id);
+  }, [activeLevel, currentCard, user?.id]);
+
+  const handleStageAnswer = useCallback((choice) => {
+    if (!currentCard || flashcardStageAnswered) return;
+
+    const field = flashcardStage === 'pinyin' ? 'pinyin' : 'th';
+    const correctAnswer = normalizeOptionText(currentCard?.[field]);
+    const selectedAnswer = normalizeOptionText(choice);
+    const isCorrect = selectedAnswer === correctAnswer;
+
+    setFlashcardSelectedAnswer(selectedAnswer);
+    setFlashcardCorrectAnswer(correctAnswer);
+    setFlashcardStageCorrect(isCorrect);
+    setFlashcardStageAnswered(true);
+    setFlashcardTimedOut(false);
+
+    if (flashcardStage === 'pinyin') {
+      setFlashcardStageResults(prev => ({ ...prev, pinyin: isCorrect }));
+    } else if (flashcardStage === 'meaning') {
+      setFlashcardStageResults(prev => ({ ...prev, meaning: isCorrect }));
+    }
+  }, [currentCard, flashcardStage, flashcardStageAnswered]);
+
+  const moveToMeaningStage = useCallback(() => {
+    if (!currentCard) return;
+    const next = buildChoices('th', currentCard);
+    resetStageState();
+    setFlashcardStage('meaning');
+    setFlashcardChoices(next.choices);
+    setTimer(timerSetting);
+  }, [buildChoices, currentCard, resetStageState, timerSetting]);
+
+  const submitCurrentCard = useCallback(async () => {
+    const passed = flashcardStageResults.pinyin === true && flashcardStageResults.meaning === true;
+    await moveToNextCard(passed);
+  }, [flashcardStageResults.meaning, flashcardStageResults.pinyin, moveToNextCard]);
+
+  const handleContinueStage = useCallback(async () => {
+    if (!currentCard || !flashcardStageAnswered) return;
+    if (flashcardStage === 'pinyin') {
+      moveToMeaningStage();
+      return;
+    }
+    if (flashcardStage === 'meaning') {
+      await submitCurrentCard();
+    }
+  }, [currentCard, flashcardStageAnswered, flashcardStage, moveToMeaningStage, submitCurrentCard]);
+
+  const handleCardTimeout = useCallback(() => {
+    if (!gameActive || !currentCard || flashcardStageAnswered) return;
+
+    const field = flashcardStage === 'pinyin' ? 'pinyin' : 'th';
+    const correctAnswer = normalizeOptionText(currentCard?.[field]);
+
+    setFlashcardTimedOut(true);
+    setFlashcardSelectedAnswer('');
+    setFlashcardCorrectAnswer(correctAnswer);
+    setFlashcardStageCorrect(false);
+    setFlashcardStageAnswered(true);
+    if (flashcardStage === 'pinyin') {
+      setFlashcardStageResults(prev => ({ ...prev, pinyin: false }));
+    } else {
+      setFlashcardStageResults(prev => ({ ...prev, meaning: false }));
+    }
+  }, [currentCard, flashcardStage, flashcardStageAnswered, gameActive]);
+
+  useEffect(() => {
+    if (gameActive && gameQueue.length > 0 && !currentCard) {
+      const nextCard = gameQueue[0];
+      const firstStage = buildChoices('pinyin', nextCard);
+      setCurrentCard(nextCard);
+      setTimer(timerSetting);
+      setFlashcardStage('pinyin');
+      setFlashcardChoices(firstStage.choices);
+      setFlashcardStageResults({ pinyin: null, meaning: null });
+      setFlashcardTimedOut(false);
+      resetStageState();
+    } else if (gameActive && gameQueue.length === 0 && !currentCard) {
+      alert("🎉 จบช่วงการฝึกแล้ว!"); setPage('fc-chars'); setGameActive(false);
+    }
+  }, [buildChoices, currentCard, gameActive, gameQueue, resetStageState, timerSetting]);
+
+  useEffect(() => {
+    let interval;
+    if (gameActive && currentCard && !flashcardStageAnswered && timer > 0) {
+      interval = setInterval(() => setTimer(t => t - 1), 1000);
+    } else if (timer === 0 && !flashcardStageAnswered && gameActive) {
+      handleCardTimeout();
+    }
+    return () => clearInterval(interval);
+  }, [flashcardStageAnswered, gameActive, currentCard, handleCardTimeout, timer]);
+
+  useEffect(() => {
+    if (!gameActive || !currentCard || !flashcardStageAnswered || !flashcardStageCorrect) return;
+    const timeoutId = setTimeout(() => {
+      if (flashcardStage === 'pinyin') {
+        moveToMeaningStage();
+      } else if (flashcardStage === 'meaning') {
+        submitCurrentCard();
+      }
+    }, FLASHCARD_CORRECT_REVEAL_MS);
+    return () => clearTimeout(timeoutId);
+  }, [
+    FLASHCARD_CORRECT_REVEAL_MS,
+    flashcardStage,
+    flashcardStageAnswered,
+    flashcardStageCorrect,
+    gameActive,
+    currentCard,
+    moveToMeaningStage,
+    submitCurrentCard
+  ]);
 
   const checkLevelAvailable = (lv) => {
     if (lv === 'mistakes' || lv <= 2 || lv === 7) return true;
@@ -400,17 +544,6 @@ export default function App() {
       )}
 
       <main className="max-w-md mx-auto p-4" style={{ touchAction: 'pan-y' }}>
-        {isPreloading && (
-          <div 
-            className="fixed inset-0 bg-white/95 z-[60] flex flex-col items-center justify-center p-10 text-center select-none"
-            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-            onDragStart={(e) => e.preventDefault()}
-          >
-            <h2 className="text-xl font-black italic uppercase text-orange-600">Preparing...</h2>
-            <div className="w-full bg-slate-100 h-4 rounded-full mt-8 border"><div className="bg-orange-500 h-full transition-all" style={{width: `${preloadProgress}%`}}></div></div>
-          </div>
-        )}
-
         {page === 'dashboard' && <Dashboard setPage={setPage} user={user} />}
         {page === 'fc-chars' && <Flashcards setPage={setPage} levelCounts={levelCounts} schedules={schedules} checkLevelAvailable={checkLevelAvailable} startLevelGame={startLevelGame} />}
         {page === 'fc-play' && currentCard && (
@@ -428,10 +561,16 @@ export default function App() {
             currentCard={currentCard}
             setCurrentCard={setCurrentCard}
             timer={timer}
-            isFlipped={isFlipped}
-            setIsFlipped={setIsFlipped}
             gameQueue={gameQueue}
-            handleAnswer={handleAnswer}
+            stage={flashcardStage}
+            choices={flashcardChoices}
+            selectedAnswer={flashcardSelectedAnswer}
+            correctAnswer={flashcardCorrectAnswer}
+            isStageCorrect={flashcardStageCorrect}
+            isStageAnswered={flashcardStageAnswered}
+            isTimedOut={flashcardTimedOut}
+            onSelectChoice={handleStageAnswer}
+            onContinueStage={handleContinueStage}
             setGameActive={setGameActive}
           />
         )}
