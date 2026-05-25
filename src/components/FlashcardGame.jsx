@@ -1,7 +1,7 @@
 import React from 'react';
 
 export default function FlashcardGame({ 
-  setPage, 
+  onExitGame,
   setWrongWordToast,
   onAddCurrentToWrongList,
   activeLevel, 
@@ -18,7 +18,6 @@ export default function FlashcardGame({
   isTimedOut,
   onSelectChoice,
   onContinueStage,
-  setGameActive 
 }) {
   const showWrongToast = (msg) => {
     if (setWrongWordToast) {
@@ -50,7 +49,7 @@ export default function FlashcardGame({
       <div className="w-full flex justify-between items-center mb-4 px-1 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <button 
-            onClick={() => { setPage('fc-chars'); setGameActive(false); setCurrentCard(null); }} 
+            onClick={() => onExitGame?.()} 
             className="text-slate-800 font-black text-xs underline italic uppercase"
           >
             Cancel

@@ -11,9 +11,10 @@ import MiniGames_pinyin from './components/MiniGames_pinyin';
 import MiniGames_vol from './components/MiniGames_vol';
 import MiniGames_type from './components/MiniGames_type';
 import Score from './components/Score';
-import Rewards from './components/Rewards';
+import Statistics from './components/Statistics';
 import Comics from './components/Comics';
 import { saveWrongWord } from './utils/wrongWordsStorage';
+import { createFlashcardSessionTracker } from './utils/flashcardStatsStorage';
 
 export default function App() {
   const [page, setPage] = useState('login');
@@ -43,6 +44,21 @@ export default function App() {
   const [flashcardStageResults, setFlashcardStageResults] = useState({ pinyin: null, meaning: null });
   const [flashcardTimedOut, setFlashcardTimedOut] = useState(false);
   const FLASHCARD_CORRECT_REVEAL_MS = 2000;
+  const flashcardSessionRef = useRef(null);
+  if (!flashcardSessionRef.current) {
+    flashcardSessionRef.current = createFlashcardSessionTracker();
+  }
+
+  const endFlashcardSession = useCallback(async () => {
+    await flashcardSessionRef.current?.end();
+  }, []);
+
+  const handleExitFlashcardGame = useCallback(async () => {
+    await endFlashcardSession();
+    setPage('fc-chars');
+    setGameActive(false);
+    setCurrentCard(null);
+  }, [endFlashcardSession]);
 
   // UI States
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -303,6 +319,7 @@ export default function App() {
         return;
       }
       setGameQueue(shuffleArray(cards));
+      flashcardSessionRef.current?.start(level);
       setPage('fc-play');
       setGameActive(true);
     } catch (error) {
@@ -345,6 +362,7 @@ export default function App() {
       .eq('user_id', user.id)
       .eq('flashcard_id', cardId);
 
+    await flashcardSessionRef.current?.recordWord();
     setGameQueue(prev => prev.slice(1));
     setCurrentCard(null);
     fetchInitialData(user.id);
@@ -426,9 +444,13 @@ export default function App() {
       setFlashcardTimedOut(false);
       resetStageState();
     } else if (gameActive && gameQueue.length === 0 && !currentCard) {
-      alert("🎉 จบช่วงการฝึกแล้ว!"); setPage('fc-chars'); setGameActive(false);
+      endFlashcardSession().then(() => {
+        alert("🎉 จบช่วงการฝึกแล้ว!");
+        setPage('fc-chars');
+        setGameActive(false);
+      });
     }
-  }, [buildChoices, currentCard, gameActive, gameQueue, resetStageState, timerSetting]);
+  }, [buildChoices, currentCard, endFlashcardSession, gameActive, gameQueue, resetStageState, timerSetting]);
 
   useEffect(() => {
     let interval;
@@ -476,6 +498,9 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
+      if (flashcardSessionRef.current?.isActive()) {
+        await flashcardSessionRef.current.end();
+      }
       await supabase.auth.signOut();
       setUser(null);
       setPage('login');
@@ -495,7 +520,7 @@ export default function App() {
       <button onClick={() => setIsMenuOpen(false)} className="absolute top-6 right-6 text-white text-4xl">&times;</button>
       <div className="flex flex-col space-y-8 text-center text-white font-black italic text-2xl uppercase">
         <button onClick={() => {setPage('dashboard'); setIsMenuOpen(false);}}>🏠 Home</button>
-        <button onClick={() => {setPage('rewards'); setIsMenuOpen(false);}}>🏆 Award</button>
+        <button onClick={() => {setPage('statistics'); setIsMenuOpen(false);}}>📈 Statistics</button>
         <button onClick={() => {setPage('settings'); setIsMenuOpen(false);}}>⚙️ Setting</button>
         <button onClick={handleLogout} className="block text-red-400 pt-10 text-xl font-bold uppercase">🚪 Logout</button>
       </div>
@@ -552,7 +577,7 @@ export default function App() {
         {page === 'fc-chars' && <Flashcards setPage={setPage} levelCounts={levelCounts} schedules={schedules} checkLevelAvailable={checkLevelAvailable} startLevelGame={startLevelGame} />}
         {page === 'fc-play' && currentCard && (
           <FlashcardGame
-            setPage={setPage}
+            onExitGame={handleExitFlashcardGame}
             setWrongWordToast={setWrongWordToast}
             onAddCurrentToWrongList={() => {
               if (currentCard && user?.id) {
@@ -575,12 +600,11 @@ export default function App() {
             isTimedOut={flashcardTimedOut}
             onSelectChoice={handleStageAnswer}
             onContinueStage={handleContinueStage}
-            setGameActive={setGameActive}
           />
         )}
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}
         {page === 'score' && <Score user={user} selectedIds={selectedIds} levelCounts={levelCounts} setPage={setPage} />}
-        {page === 'rewards' && <Rewards setPage={setPage} />}
+        {page === 'statistics' && <Statistics user={user} setPage={setPage} />}
         {page === 'comics' && <Comics setPage={setPage} />}
         
         {(page === 'settings' || page === 'set-schedule') && (
