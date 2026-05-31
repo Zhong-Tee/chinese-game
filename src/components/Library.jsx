@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import SpeakerButton from './SpeakerButton';
+import { preloadChineseSpeech } from '../utils/chineseSpeech';
 
 export default function Library({ 
   setPage, 
@@ -13,6 +15,10 @@ export default function Library({
   useEffect(() => {
     if (libraryDetail) setLibView('front');
   }, [libraryDetail]);
+
+  useEffect(() => {
+    preloadChineseSpeech();
+  }, []);
 
   return (
     <div 
@@ -84,11 +90,29 @@ export default function Library({
               <div className="w-full max-w-sm rounded-[2rem] shadow-2xl border-4 border-white mb-8 p-6 bg-[#FDE7CC]">
                 <div className="text-center space-y-3">
                   <div className="text-7xl font-black text-slate-900 leading-none break-words">{libraryDetail.cn || '—'}</div>
-                  <div className="text-2xl font-bold text-slate-700 break-words">{libraryDetail.pinyin || '—'}</div>
+                  <div className="relative pr-11">
+                    <div className="text-2xl font-bold text-slate-700 break-words">{libraryDetail.pinyin || '—'}</div>
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2">
+                      <SpeakerButton
+                        text={libraryDetail.cn}
+                        label="ฟังเสียงตัวอักษรจีน"
+                        className="w-9 h-9"
+                      />
+                    </div>
+                  </div>
                   <div className="rounded-2xl bg-white/70 p-4 text-center mt-3">
                     <div className="text-xs uppercase font-black text-slate-500">Vocabulary</div>
                     <div className="text-3xl font-black text-slate-900 mt-1 break-words">{libraryDetail.vocabulary || '—'}</div>
-                    <div className="text-xl font-bold text-slate-700 mt-1 break-words">{libraryDetail.pinyin_vocab || '—'}</div>
+                    <div className="relative pr-10 mt-1">
+                      <div className="text-xl font-bold text-slate-700 break-words">{libraryDetail.pinyin_vocab || '—'}</div>
+                      <div className="absolute right-0 top-1/2 -translate-y-1/2">
+                        <SpeakerButton
+                          text={libraryDetail.vocabulary}
+                          label="ฟังเสียงคำศัพท์จีน"
+                          className="w-8 h-8"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div className="rounded-2xl bg-white/70 p-4 text-center mt-2">
                     <div className="text-xs uppercase font-black text-slate-500">คำแปลไทย</div>
