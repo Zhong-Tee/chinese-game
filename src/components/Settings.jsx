@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { getWrongWords, deleteWrongWord } from '../utils/wrongWordsStorage';
+import {
+  SPEECH_SPEED_LEVELS,
+  getSpeechSpeedLevel,
+  setSpeechSpeedLevel,
+  speakChinese,
+} from '../utils/chineseSpeech';
 
 export default function Settings({ 
   page, setPage, user, allMasterCards,
@@ -11,6 +17,7 @@ export default function Settings({
   const daysOfWeek = ["จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์", "อาทิตย์"];
   const datesOfMonth = Array.from({ length: 30 }, (_, i) => i + 1);
   const [wrongWordsList, setWrongWordsList] = useState([]);
+  const [speechSpeedLevel, setSpeechSpeedLevelState] = useState(getSpeechSpeedLevel);
 
   useEffect(() => {
     if (page === 'settings' && user?.id) {
@@ -30,6 +37,33 @@ export default function Settings({
         <h2 className="text-2xl font-black text-center uppercase italic">Settings</h2>
         
         <div className="bg-white p-6 rounded-[2.5rem] border-2 border-slate-100 shadow-sm space-y-8">
+          {/* ความเร็วเสียงอ่าน */}
+          <div className="text-center">
+            <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase text-sky-500">Speech Speed</label>
+            <div className="flex items-center justify-center gap-2">
+              {Object.entries(SPEECH_SPEED_LEVELS).map(([level, { label }]) => (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => {
+                    setSpeechSpeedLevel(level);
+                    setSpeechSpeedLevelState(level);
+                    speakChinese('你好');
+                  }}
+                  className={`flex-1 py-3 px-2 rounded-2xl font-black text-xs uppercase border-2 transition-all select-none ${
+                    speechSpeedLevel === level
+                      ? 'bg-sky-500 text-white border-sky-500 shadow-md'
+                      : 'bg-slate-50 text-slate-600 border-slate-100'
+                  }`}
+                  style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-2 italic">กดเพื่อทดลองฟัง — ใช้กับปุ่มลำโพงทุกหน้า</p>
+          </div>
+
           {/* ตั้งเวลา Flashcard */}
           <div className="text-center">
             <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase">Flashcard Timer</label>
