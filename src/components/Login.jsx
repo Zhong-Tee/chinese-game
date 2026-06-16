@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient'; // ต้องใช้ ../ เพราะถอยหลัง 1 step ไปหาไฟล์ข้างนอก
 
-export default function Login({ setPage, setUser, fetchInitialData, fetchUserSettings }) {
+export default function Login({ setPage, setUser, fetchInitialData, fetchUserSettings, checkAndAddDailyWords, setDailyNewWords }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -35,17 +35,20 @@ export default function Login({ setPage, setUser, fetchInitialData, fetchUserSet
       fetchInitialData(data.user.id);
       fetchUserSettings(data.user.id);
       
-      // บันทึกการ login
+      // บันทึกการ login + stickers
       try {
-        await supabase.from('user_logins').insert({
-          user_id: data.user.id
-        });
-        
-        // ตรวจสอบและให้สติกเกอร์อัตโนมัติ
+        await supabase.from('user_logins').insert({ user_id: data.user.id });
         await supabase.rpc('check_and_unlock_stickers', { p_user_id: data.user.id });
       } catch (err) {
         console.error('Error logging login or checking stickers:', err);
-        // ไม่แสดง error ให้ user เพราะไม่ใช่ปัญหาหลัก
+      }
+
+      // เช็คและเพิ่มคำศัพท์ประจำวัน
+      try {
+        const newWords = await checkAndAddDailyWords(data.user.id);
+        if (newWords && newWords.length > 0) setDailyNewWords(newWords);
+      } catch (err) {
+        console.error('Error checking daily words:', err);
       }
     }
     setLoading(false);

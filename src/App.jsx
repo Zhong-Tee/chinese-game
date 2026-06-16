@@ -60,6 +60,9 @@ export default function App() {
     setCurrentCard(null);
   }, [endFlashcardSession]);
 
+  // Daily new-words popup
+  const [dailyNewWords, setDailyNewWords] = useState(null);
+
   // UI States
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [libraryDetail, setLibraryDetail] = useState(null);
@@ -85,13 +88,17 @@ export default function App() {
 
   // --- 1. Initial Load ---
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) { 
-        setUser(session.user); setPage('dashboard');
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) {
+        setUser(session.user);
+        setPage('dashboard');
         fetchInitialData(session.user.id);
         fetchUserSettings(session.user.id);
+        const newWords = await checkAndAddDailyWords(session.user.id);
+        if (newWords && newWords.length > 0) setDailyNewWords(newWords);
       }
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchUserSettings = async (userId) => {
@@ -155,6 +162,57 @@ export default function App() {
       }
     } catch (error) {
       console.error('Error in fetchInitialData:', error);
+    }
+  };
+
+  const checkAndAddDailyWords = async (userId) => {
+    try {
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+      const { data: settings } = await supabase
+        .from('user_settings')
+        .select('last_daily_words_date')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (settings?.last_daily_words_date === today) return null;
+
+      const { data: allCards } = await supabase
+        .from('flashcards')
+        .select('id1, cn, pinyin, th')
+        .order('id1', { ascending: true });
+
+      if (!allCards || allCards.length === 0) return null;
+
+      const { data: progress } = await supabase
+        .from('user_progress')
+        .select('flashcard_id')
+        .eq('user_id', userId);
+
+      const selectedSet = new Set((progress || []).map(p => Number(p.flashcard_id)));
+      const unselected = allCards.filter(c => !selectedSet.has(Number(c.id1)));
+
+      if (unselected.length === 0) return null;
+
+      const toAdd = unselected.slice(0, Math.min(5, unselected.length));
+
+      const { error: insertError } = await supabase.from('user_progress').insert(
+        toAdd.map(card => ({ user_id: userId, flashcard_id: card.id1, level: 1, wrong_count: 0 }))
+      );
+
+      if (insertError) {
+        console.error('Error inserting daily words:', insertError);
+        return null;
+      }
+
+      await supabase
+        .from('user_settings')
+        .upsert({ user_id: userId, last_daily_words_date: today }, { onConflict: 'user_id' });
+
+      return toAdd;
+    } catch (err) {
+      console.error('Error in checkAndAddDailyWords:', err);
+      return null;
     }
   };
 
@@ -527,7 +585,7 @@ export default function App() {
     </div>
   );
 
-  if (page === 'login') return <Login setPage={setPage} setUser={setUser} fetchInitialData={fetchInitialData} fetchUserSettings={fetchUserSettings} />;
+  if (page === 'login') return <Login setPage={setPage} setUser={setUser} fetchInitialData={fetchInitialData} fetchUserSettings={fetchUserSettings} checkAndAddDailyWords={checkAndAddDailyWords} setDailyNewWords={setDailyNewWords} />;
   const shouldShowTopBar = page !== 'fc-play';
 
   return (
@@ -563,6 +621,39 @@ export default function App() {
           </header>
           <MenuOverlay />
         </>
+      )}
+
+      {/* Daily new-words popup — mandatory, cannot be dismissed without confirming */}
+      {dailyNewWords && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/80 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="bg-orange-500 px-6 pt-6 pb-4 text-center">
+              <div className="text-5xl mb-2">🎉</div>
+              <h2 className="text-xl font-black text-white uppercase italic tracking-tight">คำศัพท์ใหม่วันนี้!</h2>
+              <p className="text-orange-100 text-sm font-bold mt-1">เพิ่ม {dailyNewWords.length} คำใหม่ใน Level 1 ให้แล้ว</p>
+            </div>
+            <div className="px-5 py-4 space-y-2">
+              {dailyNewWords.map((word, i) => (
+                <div key={word.id1} className="flex items-center gap-3 bg-orange-50 border border-orange-100 rounded-2xl px-4 py-3">
+                  <span className="text-orange-400 font-black text-xs w-4 shrink-0">{i + 1}.</span>
+                  <span className="text-2xl font-black text-slate-800 shrink-0">{word.cn}</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-xs font-bold text-orange-500 truncate">{word.pinyin}</span>
+                    <span className="text-xs text-slate-500 truncate">{word.th}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 pb-5">
+              <button
+                onClick={() => { setDailyNewWords(null); if (user?.id) fetchInitialData(user.id); }}
+                className="w-full bg-orange-600 text-white py-4 rounded-2xl font-black text-lg uppercase italic shadow-lg active:scale-95 transition-all"
+              >
+                ยืนยันเข้าเกม!
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toast: ได้เพิ่มคำผิดไว้ใน list ให้แล้ว */}
