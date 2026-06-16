@@ -12,7 +12,6 @@ import MiniGames_vol from './components/MiniGames_vol';
 import MiniGames_type from './components/MiniGames_type';
 import Score from './components/Score';
 import Statistics from './components/Statistics';
-import Comics from './components/Comics';
 import { saveWrongWord } from './utils/wrongWordsStorage';
 import { createFlashcardSessionTracker } from './utils/flashcardStatsStorage';
 
@@ -696,7 +695,6 @@ export default function App() {
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}
         {page === 'score' && <Score user={user} selectedIds={selectedIds} levelCounts={levelCounts} setPage={setPage} />}
         {page === 'statistics' && <Statistics user={user} setPage={setPage} />}
-        {page === 'comics' && <Comics setPage={setPage} />}
         
         {(page === 'settings' || page === 'set-schedule') && (
           <Settings 

@@ -70,9 +70,6 @@ export default function Dashboard({ setPage, user }) {
       <button onClick={() => setPage('minigames')} className="h-36 bg-emerald-500 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
         <span className="text-3xl">🎮</span> Mini Games
       </button>
-      <button onClick={() => setPage('comics')} className="h-36 bg-pink-500 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
-        <span className="text-3xl">📖</span> Comics
-      </button>
       <button onClick={() => setPage('library')} className="h-36 bg-purple-500 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
         <span className="text-3xl">📚</span> Library
       </button>
