@@ -37,6 +37,7 @@ export default function FlashcardGame({
     : 'ช่วงที่ 2: เลือกคำแปลไทย';
 
   const stageLabel = stage === 'pinyin' ? 'Pinyin ที่ถูกต้อง' : 'คำแปลไทยที่ถูกต้อง';
+  const hideSpeaker = typeof activeLevel === 'number' && activeLevel >= 3 && activeLevel <= 7;
   const canShowStageFeedback = isStageAnswered;
   const shouldShowManualNext = isStageAnswered && (!isStageCorrect || isTimedOut);
   const pastelCardBackground = stage === 'pinyin' ? '#FEF3C7' : '#E0F2FE';
@@ -80,20 +81,22 @@ export default function FlashcardGame({
         >
           <div className="text-center mb-3">
             <p className="text-xs font-black uppercase italic text-orange-600">{stageTitle}</p>
-            <div className="relative mt-2 pr-12 sm:pr-14">
+            <div className={`relative mt-2 ${hideSpeaker ? '' : 'pr-12 sm:pr-14'}`}>
               <h2
                 className="leading-none font-black text-slate-900 break-words text-center"
                 style={{ fontSize: 'clamp(4rem, 18vw, 6.3rem)' }}
               >
                 {currentCard.cn || '-'}
               </h2>
-              <div className="absolute right-0 top-1/2 -translate-y-1/2">
-                <SpeakerButton
-                  text={currentCard.cn}
-                  label="ฟังเสียงตัวอักษรจีน"
-                  className="w-10 h-10 sm:w-11 sm:h-11"
-                />
-              </div>
+              {!hideSpeaker && (
+                <div className="absolute right-0 top-1/2 -translate-y-1/2">
+                  <SpeakerButton
+                    text={currentCard.cn}
+                    label="ฟังเสียงตัวอักษรจีน"
+                    className="w-10 h-10 sm:w-11 sm:h-11"
+                  />
+                </div>
+              )}
             </div>
             {stage === 'meaning' && currentCard.pinyin && (
               <p
@@ -106,20 +109,22 @@ export default function FlashcardGame({
             {(currentCard.vocabulary || currentCard.pinyin_vocab) && (
               <div className="mt-3 rounded-2xl bg-white/70 px-4 py-3 text-center">
                 <div className="text-xs font-black uppercase text-slate-500">Vocabulary</div>
-                <div className="relative mt-1 pr-11 sm:pr-12">
+                <div className={`relative mt-1 ${hideSpeaker ? '' : 'pr-11 sm:pr-12'}`}>
                   <div
                     className="font-black text-slate-900 leading-snug break-words text-center"
                     style={{ fontSize: 'clamp(1.45rem, 6.2vw, 1.85rem)' }}
                   >
                     {currentCard.vocabulary || '-'}
                   </div>
-                  <div className="absolute right-0 top-1/2 -translate-y-1/2">
-                    <SpeakerButton
-                      text={currentCard.vocabulary}
-                      label="ฟังเสียงคำศัพท์จีน"
-                      className="w-9 h-9 sm:w-10 sm:h-10"
-                    />
-                  </div>
+                  {!hideSpeaker && (
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2">
+                      <SpeakerButton
+                        text={currentCard.vocabulary}
+                        label="ฟังเสียงคำศัพท์จีน"
+                        className="w-9 h-9 sm:w-10 sm:h-10"
+                      />
+                    </div>
+                  )}
                 </div>
                 {stage === 'meaning' && (
                   <div
