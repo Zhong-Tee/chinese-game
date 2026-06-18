@@ -6,18 +6,32 @@ import Flashcards from './components/Flashcards';
 import Settings from './components/Settings';
 import FlashcardGame from './components/FlashcardGame';
 import Library from './components/Library';
-import MiniGames_th from './components/MiniGames_th';
-import MiniGames_pinyin from './components/MiniGames_pinyin';
-import MiniGames_vol from './components/MiniGames_vol';
-import MiniGames_type from './components/MiniGames_type';
 import Score from './components/Score';
 import Statistics from './components/Statistics';
+import GamesHub from './components/GamesHub';
+import BattleGame from './components/BattleGame';
+import Shop from './components/Shop';
+import AdminPanel from './components/AdminPanel';
 import { saveWrongWord } from './utils/wrongWordsStorage';
 import { createFlashcardSessionTracker } from './utils/flashcardStatsStorage';
+import { getGameState, addCurrency, getExpForLevel } from './utils/gameStorage';
 
 export default function App() {
   const [page, setPage] = useState('login');
   const [user, setUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Game economy
+  const [gameState, setGameState] = useState({ exp: 0, coin: 0 });
+  const [activeStage, setActiveStage] = useState(null); // ด่านที่กำลังเล่นใน GAMES
+  const [lastExpToast, setLastExpToast] = useState(null);
+
+  const refreshGameState = useCallback(async (userId) => {
+    const id = userId || user?.id;
+    if (!id) return;
+    const state = await getGameState(id);
+    setGameState(state);
+  }, [user?.id]);
   
   // Settings & Data
   const [timerSetting, setTimerSetting] = useState(5); // สำหรับ Flashcard
@@ -134,6 +148,12 @@ export default function App() {
 
   const fetchInitialData = async (userId) => {
     try {
+      // โหลด EXP/Coin + สถานะ admin (ไม่บล็อกการโหลดคำศัพท์)
+      getGameState(userId).then(setGameState).catch(() => {});
+      supabase.from('profiles').select('is_admin').eq('user_id', userId).maybeSingle()
+        .then(({ data }) => setIsAdmin(!!data?.is_admin))
+        .catch(() => {});
+
       const { data: master, error: masterError } = await supabase.from('flashcards').select('*').order('id1', { ascending: true });
       if (masterError) {
         console.error('Error fetching flashcards:', masterError);
@@ -419,6 +439,18 @@ export default function App() {
       .eq('user_id', user.id)
       .eq('flashcard_id', cardId);
 
+    // ตอบถูกครบ → ได้รับ EXP ตาม LV ของคำนั้น (ข้อ 2.8)
+    if (isCardPassed) {
+      const expLevel = activeLevel === 'mistakes' ? 1 : activeLevel;
+      const gained = await getExpForLevel(expLevel);
+      if (gained > 0) {
+        const updated = await addCurrency({ exp: gained });
+        if (updated) setGameState(updated);
+        setLastExpToast(`+${gained} EXP`);
+        setTimeout(() => setLastExpToast(null), 1500);
+      }
+    }
+
     await flashcardSessionRef.current?.recordWord();
     setGameQueue(prev => prev.slice(1));
     setCurrentCard(null);
@@ -655,6 +687,13 @@ export default function App() {
         </div>
       )}
 
+      {/* Toast: ได้รับ EXP */}
+      {lastExpToast && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[80] bg-emerald-500 text-white px-5 py-2 rounded-full shadow-xl font-black text-sm italic animate-bounce">
+          {lastExpToast}
+        </div>
+      )}
+
       {/* Toast: ได้เพิ่มคำผิดไว้ใน list ให้แล้ว */}
       {wrongWordToast && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] bg-amber-500 text-white px-6 py-3 rounded-2xl shadow-xl font-black text-sm italic text-center max-w-[90%]">
@@ -662,8 +701,8 @@ export default function App() {
         </div>
       )}
 
-      <main className="max-w-md mx-auto p-4" style={{ touchAction: 'pan-y' }}>
-        {page === 'dashboard' && <Dashboard setPage={setPage} user={user} />}
+      <main className={`${page === 'admin' ? 'max-w-5xl' : 'max-w-md'} mx-auto p-4`} style={{ touchAction: 'pan-y' }}>
+        {page === 'dashboard' && <Dashboard setPage={setPage} user={user} gameState={gameState} isAdmin={isAdmin} />}
         {page === 'fc-chars' && <Flashcards setPage={setPage} levelCounts={levelCounts} schedules={schedules} checkLevelAvailable={checkLevelAvailable} startLevelGame={startLevelGame} />}
         {page === 'fc-play' && currentCard && (
           <FlashcardGame
@@ -714,78 +753,42 @@ export default function App() {
           />
         )}
 
-        {/* --- 4. หน้าเมนูเลือก 4 เกม (Mini Games Hub) --- */}
-        {page === 'minigames' && (
-          <div 
-            className="grid grid-cols-1 gap-4 pt-4 select-none"
-            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
-            onDragStart={(e) => e.preventDefault()}
-          >
-            <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline text-left mb-2">← Back</button>
-            <button onClick={() => setPage('minigame-th')} className="h-28 bg-emerald-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 transform active:scale-95 transition-all text-xl italic">
-              <svg width="48" height="32" viewBox="0 0 48 32" className="rounded" style={{filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'}}>
-                <rect y="0" width="48" height="6.4" fill="#ED1C24"/>
-                <rect y="6.4" width="48" height="6.4" fill="#FFFFFF"/>
-                <rect y="12.8" width="48" height="6.4" fill="#241D4F"/>
-                <rect y="19.2" width="48" height="6.4" fill="#FFFFFF"/>
-                <rect y="25.6" width="48" height="6.4" fill="#ED1C24"/>
-              </svg>
-              เกมแปลไทย
-            </button>
-            <button onClick={() => setPage('minigame-pinyin')} className="h-28 bg-blue-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 transform active:scale-95 transition-all text-xl italic">
-              <span className="text-4xl">🔤</span> Pinyin
-            </button>
-            <button onClick={() => setPage('minigame-vol')} className="h-28 bg-purple-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 transform active:scale-95 transition-all text-xl italic">
-              <span className="text-4xl">📝</span> เติมคำ
-            </button>
-            <button onClick={() => setPage('minigame-type')} className="h-28 bg-indigo-500 text-white rounded-[2rem] shadow-xl font-black flex items-center justify-center gap-4 transform active:scale-95 transition-all text-xl italic">
-              <span className="text-4xl">⌨️</span> ฝึกพิมพ์
-            </button>
-          </div>
-        )}
-
-        {/* --- เรียกใช้ Mini Game 1 (แปลไทย) --- */}
-        {page === 'minigame-th' && (
-          <MiniGames_th 
-            user={user}
-            allMasterCards={allMasterCards}
-            selectedIds={selectedIds}
-            timerSetting={gameTimerSetting}
+        {/* --- GAMES Hub: เลือกด่าน --- */}
+        {page === 'games' && (
+          <GamesHub
             setPage={setPage}
+            user={user}
+            gameState={gameState}
+            onSelectStage={(stageNo) => { setActiveStage(stageNo); setPage('battle'); }}
           />
         )}
 
-        {/* --- เรียกใช้ Mini Game 2 (Pinyin) --- */}
-        {page === 'minigame-pinyin' && (
-          <MiniGames_pinyin 
+        {/* --- หน้าต่อสู้ --- */}
+        {page === 'battle' && activeStage != null && (
+          <BattleGame
             user={user}
+            stageNo={activeStage}
             allMasterCards={allMasterCards}
-            selectedIds={selectedIds}
-            timerSetting={gameTimerSetting}
-            setPage={setPage}
+            onExit={() => { setPage('games'); refreshGameState(); }}
+            onReward={(reward) => {
+              if (reward) setGameState(reward);
+            }}
           />
         )}
 
-        {/* --- เรียกใช้ Mini Game 3 (เติมคำ) --- */}
-        {page === 'minigame-vol' && (
-          <MiniGames_vol 
-            user={user}
-            allMasterCards={allMasterCards}
-            selectedIds={selectedIds}
-            timerSetting={gameTimerSetting}
+        {/* --- Shop --- */}
+        {page === 'shop' && (
+          <Shop
             setPage={setPage}
+            user={user}
+            gameState={gameState}
+            onStateChange={setGameState}
           />
         )}
 
-        {/* --- เรียกใช้ Mini Game 4 (ฝึกพิมพ์) --- */}
-        {page === 'minigame-type' && (
-          <MiniGames_type 
-            user={user}
-            allMasterCards={allMasterCards}
-            selectedIds={selectedIds}
-            timerSetting={typeTimerSetting}
-            setPage={setPage}
-          />
+        {/* --- Admin Panel (เฉพาะ admin) --- */}
+        {page === 'admin' && (
+          <AdminPanel setPage={setPage} user={user} isAdmin={isAdmin} />
         )}
         
         {page === 'select-words' && (() => {

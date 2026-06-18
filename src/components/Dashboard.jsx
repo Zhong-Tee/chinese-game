@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import CoinIcon from './CoinIcon';
 
-export default function Dashboard({ setPage, user }) {
+export default function Dashboard({ setPage, user, gameState = { exp: 0, coin: 0 }, isAdmin = false }) {
   const [username, setUsername] = useState('');
 
   useEffect(() => {
@@ -60,6 +61,24 @@ export default function Dashboard({ setPage, user }) {
         </div>
       </div>
 
+      {/* แถบ EXP / Coin */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white rounded-2xl p-3 border-2 border-emerald-200 shadow-sm flex items-center justify-center gap-2">
+          <span className="text-2xl">⭐</span>
+          <div className="text-left">
+            <div className="text-[10px] font-black text-emerald-500 uppercase">EXP</div>
+            <div className="text-xl font-black text-emerald-600 leading-none">{gameState.exp ?? 0}</div>
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl p-3 border-2 border-yellow-200 shadow-sm flex items-center justify-center gap-2">
+          <CoinIcon className="w-7 h-7" />
+          <div className="text-left">
+            <div className="text-[10px] font-black text-yellow-500 uppercase">Coin</div>
+            <div className="text-xl font-black text-yellow-600 leading-none">{gameState.coin ?? 0}</div>
+          </div>
+        </div>
+      </div>
+
       <div 
         className="grid grid-cols-2 gap-4 pt-2 pb-10 select-none"
         style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}
@@ -67,8 +86,8 @@ export default function Dashboard({ setPage, user }) {
       <button onClick={() => setPage('fc-chars')} className="h-36 bg-orange-500 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
         <span className="text-3xl">🎴</span> Flashcards
       </button>
-      <button onClick={() => setPage('minigames')} className="h-36 bg-emerald-500 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
-        <span className="text-3xl">🎮</span> Mini Games
+      <button onClick={() => setPage('games')} className="h-36 bg-emerald-500 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
+        <span className="text-3xl">⚔️</span> Games
       </button>
       <button onClick={() => setPage('library')} className="h-36 bg-purple-500 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
         <span className="text-3xl">📚</span> Library
@@ -79,9 +98,17 @@ export default function Dashboard({ setPage, user }) {
       <button onClick={() => setPage('statistics')} className="h-36 bg-amber-500 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
         <span className="text-3xl">📈</span> Statistics
       </button>
+      <button onClick={() => setPage('shop')} className="h-36 bg-pink-500 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
+        <span className="text-3xl">🛒</span> Shop
+      </button>
       <button onClick={() => setPage('settings')} className="h-36 bg-slate-700 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
         <span className="text-3xl">⚙️</span> Settings
       </button>
+      {isAdmin && (
+        <button onClick={() => setPage('admin')} className="h-36 bg-red-600 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all col-span-2">
+          <span className="text-3xl">🛠️</span> Admin Panel
+        </button>
+      )}
       </div>
     </div>
   );
