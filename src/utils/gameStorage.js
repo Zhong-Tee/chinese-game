@@ -8,21 +8,54 @@ export const BASE_ATTACK = 1;
 // EXP / Coin ต่อผู้ใช้
 // ---------------------------------------------------------------------
 export async function getGameState(userId) {
-  if (!userId) return { exp: 0, coin: 0 };
+  if (!userId) return { exp: 0, coin: 0, level: 1, selectedCharacterId: null, equippedItemIds: [] };
   const { data, error } = await supabase
     .from('user_game_state')
-    .select('exp, coin')
+    .select('exp, coin, level, selected_character_id, equipped_item_ids')
     .eq('user_id', userId)
     .maybeSingle();
   if (error) {
     console.error('getGameState error:', error);
-    return { exp: 0, coin: 0 };
+    return { exp: 0, coin: 0, level: 1, selectedCharacterId: null, equippedItemIds: [] };
   }
   if (!data) {
     await supabase.from('user_game_state').insert([{ user_id: userId, exp: 0, coin: 0 }]);
-    return { exp: 0, coin: 0 };
+    return { exp: 0, coin: 0, level: 1, selectedCharacterId: null, equippedItemIds: [] };
   }
-  return { exp: data.exp || 0, coin: data.coin || 0 };
+  return {
+    exp: data.exp || 0,
+    coin: data.coin || 0,
+    level: data.level || 1,
+    selectedCharacterId: data.selected_character_id ?? null,
+    equippedItemIds: Array.isArray(data.equipped_item_ids) ? data.equipped_item_ids : [],
+  };
+}
+
+// บันทึกอาวุธที่เลือกนำไปต่อสู้ (เก็บใน user_game_state.equipped_item_ids)
+export async function setEquippedItems(userId, itemIds) {
+  if (!userId) return false;
+  const ids = (itemIds || []).filter(v => v != null).slice(0, 3);
+  const { error } = await supabase
+    .from('user_game_state')
+    .upsert({ user_id: userId, equipped_item_ids: ids }, { onConflict: 'user_id' });
+  if (error) {
+    console.error('setEquippedItems error:', error);
+    return false;
+  }
+  return true;
+}
+
+// เพิ่มเลเวลผู้เล่นแบบ atomic (Level UP เมื่อฆ่า Boss) คืน state ใหม่
+export async function levelUp(amount = 1) {
+  const { data, error } = await supabase.rpc('level_up_game', { p_amount: amount });
+  if (error) {
+    console.error('levelUp error:', error);
+    return null;
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  return row
+    ? { exp: row.exp || 0, coin: row.coin || 0, level: row.level || 1, selectedCharacterId: row.selected_character_id ?? null }
+    : null;
 }
 
 // เพิ่ม EXP/Coin แบบ atomic ผ่าน RPC
@@ -113,6 +146,33 @@ export async function getSfxMap() {
   const map = {};
   (data || []).forEach(r => { map[r.key] = r.audio_url; });
   return map;
+}
+
+// ---------------------------------------------------------------------
+// Characters : ตัวละครที่ผู้เล่นเลือกได้ (cosmetic avatar)
+// ---------------------------------------------------------------------
+export async function getCharacters(includeInactive = false) {
+  let query = supabase.from('game_characters').select('*').order('sort_order', { ascending: true });
+  if (!includeInactive) query = query.eq('active', true);
+  const { data, error } = await query;
+  if (error) {
+    console.error('getCharacters error:', error);
+    return [];
+  }
+  return data || [];
+}
+
+// เลือกตัวละครให้ผู้ใช้ (เก็บใน user_game_state.selected_character_id)
+export async function setSelectedCharacter(userId, characterId) {
+  if (!userId) return false;
+  const { error } = await supabase
+    .from('user_game_state')
+    .upsert({ user_id: userId, selected_character_id: characterId }, { onConflict: 'user_id' });
+  if (error) {
+    console.error('setSelectedCharacter error:', error);
+    return false;
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------

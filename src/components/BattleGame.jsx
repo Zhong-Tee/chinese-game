@@ -9,6 +9,7 @@ import {
   getUserItems,
   consumeItem,
   addCurrency,
+  levelUp,
   pickRandom,
 } from '../utils/gameStorage';
 import { playBgm, stopBgm, playSfx } from '../utils/gameAudio';
@@ -16,12 +17,13 @@ import { playBgm, stopBgm, playSfx } from '../utils/gameAudio';
 const COIN_PER_MONSTER = 5;
 const COIN_PER_BOSS = 25;
 const FEEDBACK_MS = 1200;
-const REARRANGE_CHANCE = 0.3;
+// ทุกๆ 6 โจทย์ (pinyin/แปลไทย) จะแทรกโจทย์เรียงคำ 1 โจทย์
+const REARRANGE_EVERY = 6;
 
 const norm = (v) => String(v || '').trim();
 const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
 
-export default function BattleGame({ user, stageNo, allMasterCards = [], onExit, onReward }) {
+export default function BattleGame({ user, stageNo, selectedCharacterId = null, equippedItemIds = [], allMasterCards = [], onExit, onReward, onLevelUp }) {
   const [phase, setPhase] = useState('loading'); // loading | empty | playing | won | lost
   const [errorMsg, setErrorMsg] = useState('');
   const [loadKey, setLoadKey] = useState(0); // bump เพื่อเริ่มด่านใหม่
@@ -46,6 +48,7 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
   // words
   const wordsRef = useRef([]);
   const wordIdxRef = useRef(0);
+  const qSinceRearrangeRef = useRef(0); // นับโจทย์ pinyin/แปลไทย ตั้งแต่เรียงคำครั้งล่าสุด
 
   // round
   const [round, setRound] = useState(null); // {type, card, subStage, choices, correctAnswer}
@@ -64,6 +67,7 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
   const [enemyHurt, setEnemyHurt] = useState(false);
   const [playerHurt, setPlayerHurt] = useState(false);
   const [coinsEarned, setCoinsEarned] = useState(0);
+  const [leveledUpTo, setLeveledUpTo] = useState(null); // เลเวลใหม่หลังฆ่า Boss
   const [screenFx, setScreenFx] = useState(null); // 'good' | 'bad' | 'block'
   const [fxKey, setFxKey] = useState(0);
 
@@ -74,6 +78,7 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
 
   const currentEnemy = enemyQueue[enemyIdx] || null;
   const answerTime = stage?.answer_time_sec || 8;
+  const rearrangeTime = stage?.answer_time_rearrange_sec || 12;
   const showSpeaker = (stage?.source_level ?? 3) <= 2;
 
   // -------------------------------------------------------------------
@@ -93,22 +98,18 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
   const stripPunct = (s) => String(s || '').replace(/[,.，。、；;：:!?！？""''「」『』（）()\[\]【】~～·\-—_]/g, '');
 
   // แบ่งประโยคเป็น token: ถ้ามีช่องว่าง → แบ่งตามช่องว่าง
-  // ถ้าไม่มี → เก็บ "คำศัพท์" (vocabulary) เป็นก้อนเดียว ส่วนที่เหลือเป็นตัวเดี่ยว
+  // ถ้าไม่มี (ภาษาจีน) → จับเป็นกลุ่มละ 2 ตัวอักษร จนเหลือเศษ 1 ตัวท้าย
   const sentenceTokens = (card) => {
     let raw = stripPunct(norm(card?.sentence_test)).replace(/\s+/g, ' ').trim();
     if (!raw) return [];
     if (raw.includes(' ')) return raw.split(/\s+/).filter(Boolean);
 
-    const vocab = stripPunct(norm(card?.vocabulary));
-    if (vocab && vocab.length >= 2 && raw.includes(vocab)) {
-      const idx = raw.indexOf(vocab);
-      return [
-        ...Array.from(raw.slice(0, idx)),
-        vocab,
-        ...Array.from(raw.slice(idx + vocab.length)),
-      ].filter(Boolean);
+    const chars = Array.from(raw);
+    const groups = [];
+    for (let i = 0; i < chars.length; i += 2) {
+      groups.push(chars.slice(i, i + 2).join(''));
     }
-    return Array.from(raw).filter(Boolean);
+    return groups;
   };
 
   // -------------------------------------------------------------------
@@ -117,33 +118,45 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
   const nextRound = useCallback(() => {
     const words = wordsRef.current;
     if (!words.length) return;
-    if (wordIdxRef.current >= words.length) {
-      wordsRef.current = shuffle(words);
-      wordIdxRef.current = 0;
-    }
-    const card = wordsRef.current[wordIdxRef.current];
-    wordIdxRef.current += 1;
-
-    const toks = sentenceTokens(card);
-    const canRearrange = toks.length >= 2;
 
     setAnswered(false);
     setSelected('');
     setRevealAnswer('');
     setLastCorrect(false);
     setTimedOut(false);
-    setTimer(answerTime);
 
-    if (canRearrange && Math.random() < REARRANGE_CHANCE) {
-      const withIds = toks.map((t, i) => ({ id: `${i}-${t}`, text: t }));
-      setTokens(shuffle(withIds));
-      setAssembled([]);
-      setRound({ type: 'rearrange', card, correct: toks.join(''), tokensOrder: toks });
-    } else {
-      const c = buildChoices('pinyin', card);
-      setRound({ type: 'word', card, subStage: 'pinyin', choices: c.choices, correctAnswer: c.correctAnswer });
+    // ครบ 6 โจทย์ (pinyin/แปลไทย) แล้ว → แทรกโจทย์เรียงคำ 1 โจทย์
+    if (qSinceRearrangeRef.current >= REARRANGE_EVERY) {
+      // หา card ที่เรียงประโยคได้ (มี token ตั้งแต่ 2 ขึ้นไป)
+      for (let k = 0; k < words.length; k++) {
+        const idx = (wordIdxRef.current + k) % words.length;
+        const toks = sentenceTokens(words[idx]);
+        if (toks.length >= 2) {
+          wordIdxRef.current = idx + 1;
+          qSinceRearrangeRef.current = 0;
+          setTimer(rearrangeTime);
+          const withIds = toks.map((t, i) => ({ id: `${i}-${t}`, text: t }));
+          setTokens(shuffle(withIds));
+          setAssembled([]);
+          setRound({ type: 'rearrange', card: words[idx], correct: toks.join(''), tokensOrder: toks });
+          return;
+        }
+      }
+      // ไม่พบ card ที่เรียงประโยคได้ → เล่นแบบเลือกตอบต่อไป (คงตัวนับไว้)
     }
-  }, [answerTime, buildChoices]);
+
+    // โจทย์แบบเลือกตอบ — เริ่มที่ pinyin
+    if (wordIdxRef.current >= words.length) {
+      wordsRef.current = shuffle(words);
+      wordIdxRef.current = 0;
+    }
+    const card = wordsRef.current[wordIdxRef.current];
+    wordIdxRef.current += 1;
+    qSinceRearrangeRef.current += 1; // นับโจทย์ pinyin
+    setTimer(answerTime);
+    const c = buildChoices('pinyin', card);
+    setRound({ type: 'word', card, subStage: 'pinyin', choices: c.choices, correctAnswer: c.correctAnswer });
+  }, [answerTime, rearrangeTime, buildChoices]);
 
   // -------------------------------------------------------------------
   // initial load
@@ -168,7 +181,7 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
         const music = pickRandom(cfg.music)?.music_url;
         if (music) playBgm(music);
 
-        // ตัวละครผู้เล่น
+        // ตัวละครผู้เล่น (ค่าพลัง — ไม่แสดงรูปในสนามรบ)
         setMaxHp(stats.maxHp);
         setPlayerHp(stats.maxHp);
         setAttack(stats.attack);
@@ -176,14 +189,21 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
         // inventory (3 ช่อง)
         const inv = await getUserItems(user?.id);
         if (!alive) return;
-        setItems(inv.map(r => ({
+        const invMapped = inv.map(r => ({
           item_id: r.item_id,
           quantity: r.quantity,
           name: r.shop_items?.name,
           icon_url: r.shop_items?.icon_url,
           effect_type: r.shop_items?.effect_type,
           effect_value: r.shop_items?.effect_value,
-        })).slice(0, 3));
+        }));
+        // ใช้อาวุธที่ผู้เล่นเลือกไว้ (equippedItemIds) ตามลำดับช่อง
+        // ถ้ายังไม่ได้เลือกเลย → ใช้ 3 ชิ้นแรกที่มี (เข้ากันได้กับของเดิม)
+        const eqIds = (equippedItemIds || []).filter(v => v != null);
+        const chosen = eqIds.length > 0
+          ? eqIds.map(id => invMapped.find(it => it.item_id === id)).filter(Boolean).slice(0, 3)
+          : invMapped.slice(0, 3);
+        setItems(chosen);
 
         // สร้างคิวศัตรู: มอนสเตอร์ตาม monster_count แล้วตามด้วยบอส
         const monsters = cfg.enemies.filter(e => e.type === 'monster');
@@ -223,6 +243,7 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
         }
         wordsRef.current = shuffle(cards);
         wordIdxRef.current = 0;
+        qSinceRearrangeRef.current = 0;
         setPhase('playing');
       } catch (e) {
         console.error('BattleGame load error:', e);
@@ -231,7 +252,7 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
     })();
     return () => { alive = false; stopBgm(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stageNo, user?.id, loadKey]);
+  }, [stageNo, user?.id, loadKey, selectedCharacterId]);
 
   // เริ่ม round แรกเมื่อพร้อมเล่น
   useEffect(() => {
@@ -262,15 +283,28 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
       if (newHp <= 0) {
         const enemy = enemyQueue[enemyIdx];
         awardCoin(enemy?.isBoss ? COIN_PER_BOSS : COIN_PER_MONSTER);
+        // ฆ่า Boss สำเร็จ → Level UP
+        if (enemy?.isBoss) {
+          levelUp(1).then((updated) => {
+            if (updated) {
+              setLeveledUpTo(updated.level);
+              if (onLevelUp) onLevelUp(updated);
+            }
+          });
+        }
         if (enemyIdx + 1 >= enemyQueue.length) {
           playSfx(sfxRef.current.win);
           stopBgm();
           setEnemyHp(0);
           setPhase('won');
         } else {
+          // ให้หลอด HP ของศัตรูลดลงจนหมดก่อน แล้วค่อยสลับเป็นตัวถัดไป
           const ni = enemyIdx + 1;
-          setEnemyIdx(ni);
-          setEnemyHp(enemyQueue[ni].hp);
+          setEnemyHp(0);
+          setTimeout(() => {
+            setEnemyIdx(ni);
+            setEnemyHp(enemyQueue[ni].hp);
+          }, 450);
         }
       } else {
         setEnemyHp(newHp);
@@ -295,7 +329,7 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
         setPlayerHp(np);
       }
     }
-  }, [answered, phase, attack, enemyHp, playerHp, enemyQueue, enemyIdx, shield, currentEnemy, awardCoin, triggerFx]);
+  }, [answered, phase, attack, enemyHp, playerHp, enemyQueue, enemyIdx, shield, currentEnemy, awardCoin, triggerFx, onLevelUp]);
 
   // จัดการเลือกคำตอบ (pinyin/meaning)
   const handleChoice = (choice) => {
@@ -355,6 +389,7 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
         setLastCorrect(false);
         setTimedOut(false);
         setTimer(answerTime);
+        qSinceRearrangeRef.current += 1; // นับโจทย์แปลไทย
         setRound(r => ({ ...r, subStage: 'meaning', choices: c.choices, correctAnswer: c.correctAnswer }));
       } else {
         setRound(null); // trigger nextRound
@@ -436,6 +471,12 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
           <h2 className={`text-4xl font-black uppercase italic drop-shadow ${won ? 'text-emerald-400' : 'text-red-400'}`}>
             {won ? 'ชนะแล้ว!' : 'Game Over'}
           </h2>
+          {won && leveledUpTo != null && (
+            <div className="bg-gradient-to-r from-orange-400 to-orange-600 border-2 border-orange-200 rounded-2xl px-6 py-3 shadow-lg">
+              <div className="text-xs font-black text-orange-100 uppercase">Level Up!</div>
+              <div className="text-2xl font-black text-white italic">⭐ LV.{leveledUpTo}</div>
+            </div>
+          )}
           <div className="bg-yellow-50/95 border-2 border-yellow-200 rounded-2xl px-6 py-4">
             <div className="text-xs font-black text-yellow-500 uppercase">Coin ที่ได้รับ</div>
             <div className="text-3xl font-black text-yellow-600 inline-flex items-center gap-2"><CoinIcon className="w-8 h-8" /> {coinsEarned}</div>
@@ -443,7 +484,7 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
           <div className="flex flex-col gap-3 w-64 pt-1">
             {!won && (
               <button
-                onClick={() => { setRound(null); setShield(false); setCoinsEarned(0); setPhase('loading'); setLoadKey(k => k + 1); }}
+                onClick={() => { setRound(null); setShield(false); setCoinsEarned(0); setLeveledUpTo(null); setPhase('loading'); setLoadKey(k => k + 1); }}
                 className="bg-orange-500 text-white px-8 py-3 rounded-2xl font-black uppercase italic shadow-lg active:scale-95"
               >
                 เริ่มด่านใหม่
@@ -459,7 +500,6 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
   }
 
   // playing
-  const hearts = Array.from({ length: maxHp });
   const enemyHpPct = currentEnemy ? Math.max(0, (enemyHp / currentEnemy.maxHp) * 100) : 0;
   const isMeaning = round?.type === 'word' && round?.subStage === 'meaning';
   const showVocab = isMeaning && (round?.card?.vocabulary || round?.card?.pinyin_vocab);
@@ -478,6 +518,7 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
         @keyframes battleFlash {0%{opacity:.5}100%{opacity:0}}
         @keyframes battlePop {0%{transform:translate(-50%,10px) scale(.5);opacity:0}25%{opacity:1}100%{transform:translate(-50%,-70px) scale(1.25);opacity:0}}
         @keyframes battleSlash {0%{transform:translate(-50%,-50%) scale(.3) rotate(-35deg);opacity:0}30%{opacity:1}100%{transform:translate(-50%,-50%) scale(1.6) rotate(-35deg);opacity:0}}
+        @keyframes enemyFloat {0%,100%{transform:translateY(0) rotate(0deg)}25%{transform:translateY(-7px) rotate(-1.2deg)}50%{transform:translateY(-12px) rotate(0deg)}75%{transform:translateY(-7px) rotate(1.2deg)}}
       `}</style>
 
       {/* ฟิล์มมืดให้อ่านตัวหนังสือง่ายขึ้น */}
@@ -497,32 +538,40 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
         className="relative h-full flex flex-col max-w-md mx-auto px-3 pt-3 pb-4"
         style={{ animation: screenFx === 'bad' ? 'battleShake .42s ease-in-out' : undefined }}
       >
-        {/* แถบบน: ออก / หัวใจ / เวลา */}
+        {/* แถบบน: ออก / เวลา */}
         <div className="flex items-center justify-between mb-2 shrink-0">
           <button onClick={() => { stopBgm(); onExit(); }} className="text-white bg-slate-900/70 backdrop-blur px-3 py-1.5 rounded-full font-black text-[11px] uppercase italic shadow active:scale-95">ออก</button>
-          <div className={`flex gap-0.5 ${playerHurt ? 'animate-pulse' : ''}`}>
-            {hearts.map((_, i) => (
-              <span key={i} className="text-2xl drop-shadow">{i < playerHp ? '❤️' : '🖤'}</span>
-            ))}
-            {shield && <span className="text-2xl drop-shadow">🛡️</span>}
-          </div>
           <div className={`text-2xl font-black italic drop-shadow ${timer <= 3 ? 'text-red-400 animate-pulse' : 'text-white'}`}>{timer}s</div>
         </div>
 
-        {/* แถบ HP ศัตรู */}
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="bg-black/55 backdrop-blur text-white text-[10px] font-black px-2 py-0.5 rounded-full whitespace-nowrap">
-            {currentEnemy?.isBoss ? '👑 BOSS' : 'ศัตรู'} {enemyIdx + 1}/{enemyQueue.length}
-          </span>
-          <div className="flex-1 h-3.5 bg-black/45 rounded-full overflow-hidden border border-white/20">
-            <div className="h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-300" style={{ width: `${enemyHpPct}%` }} />
+        {/* หลอด HP ผู้เล่น (เขียว) + ไอเทมที่ใช้อยู่ (ไอคอนใหญ่หน้าหลอด) */}
+        <div className="flex items-center gap-2 mb-1.5 shrink-0">
+          <span className="w-9 h-9 flex items-center justify-center text-3xl leading-none drop-shadow shrink-0">{shield ? '🛡️' : ''}</span>
+          <div className={`relative flex-1 h-4 bg-black/45 rounded-full overflow-hidden border border-white/20 ${playerHurt ? 'animate-pulse' : ''}`}>
+            <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-300" style={{ width: `${maxHp ? (Math.max(0, playerHp) / maxHp) * 100 : 0}%` }} />
           </div>
-          <span className="bg-black/55 backdrop-blur text-white text-[10px] font-black px-2 py-0.5 rounded-full whitespace-nowrap">{Math.max(0, enemyHp)}/{currentEnemy?.maxHp}</span>
         </div>
 
-        {/* มอนสเตอร์: ลอยกลางฉาก ไม่มีกล่องพื้นหลัง + เงาที่พื้น */}
-        <div className="flex-1 min-h-0 flex flex-col items-center justify-center relative">
-          <div className="relative flex flex-col items-center">
+        {/* หลอด HP ศัตรู (แดง) */}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="w-9 h-9 flex items-center justify-center text-2xl leading-none drop-shadow shrink-0">{currentEnemy?.isBoss ? '👑' : '👾'}</span>
+          <div className="relative flex-1 h-4 bg-black/45 rounded-full overflow-hidden border border-white/20">
+            <div className="h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-300" style={{ width: `${enemyHpPct}%` }} />
+          </div>
+        </div>
+
+        {/* จำนวนศัตรูคงเหลือ — ตัวใหญ่ ใต้หลอด HP ศัตรู */}
+        <div className="text-center shrink-0 mt-0.5">
+          {currentEnemy?.isBoss ? (
+            <span className="text-lg font-black text-amber-300 italic drop-shadow">👑 BOSS</span>
+          ) : (
+            <span className="text-2xl font-black text-red-300 drop-shadow">{Math.max(0, enemyQueue.length - enemyIdx)}</span>
+          )}
+        </div>
+
+        {/* มอนสเตอร์: ตรึงตำแหน่งไว้ด้านบน (ไม่ขยับตามชนิดโจทย์) + เงาที่พื้น */}
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-start relative pt-[5vh]">
+          <div className="relative flex flex-col items-center" style={{ animation: 'enemyFloat 3.2s ease-in-out infinite' }}>
             {currentEnemy?.image_url ? (
               <img
                 src={currentEnemy.image_url}
@@ -550,17 +599,22 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
         </div>
 
         {/* ส่วนล่าง: คำถาม (ไม่มีการ์ดพื้นหลัง) + ไอเทม */}
-        <div className="flex gap-2 items-end shrink-0">
+        <div className="relative z-10 flex gap-2 items-end shrink-0">
           {/* คำถาม — ลอยบนฉาก ชิดด้านล่าง */}
           <div className="flex-1 min-w-0">
 
             {round?.type === 'rearrange' ? (
               <>
-                <div className="text-center mb-2">
-                  <p className="text-base text-white font-black drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">{round.card?.translate || '—'}</p>
+                <div className="text-center mb-2 rounded-2xl bg-black/35 backdrop-blur-[2px] border border-white/25 px-3 py-2.5 -mt-[39vh] -mr-16">
+                  <p
+                    className="text-white font-black leading-tight drop-shadow-[0_2px_5px_rgba(0,0,0,0.95)]"
+                    style={{ fontSize: 'clamp(1.6rem, 7vw, 2.75rem)' }}
+                  >
+                    {round.card?.translate || '—'}
+                  </p>
                 </div>
                 {/* ช่องประโยคที่ประกอบ (แตะคำเพื่อถอนออก) */}
-                <div className={`min-h-[3.25rem] rounded-2xl border-2 p-2 mb-2 flex flex-wrap gap-1.5 items-center justify-center transition-colors ${answered ? (lastCorrect ? 'bg-emerald-500/20 border-emerald-400' : 'bg-red-500/20 border-red-400') : 'bg-black/30 backdrop-blur-[2px] border-dashed border-white/40'}`}>
+                <div className={`min-h-[3.25rem] rounded-2xl border-2 p-2 mb-2 -mr-16 flex flex-wrap gap-1.5 items-center justify-center transition-colors ${answered ? (lastCorrect ? 'bg-emerald-500/20 border-emerald-400' : 'bg-red-500/20 border-red-400') : 'bg-black/30 backdrop-blur-[2px] border-dashed border-white/40'}`}>
                   {assembled.length === 0 ? (
                     <span className="text-white/50 text-sm italic">แตะคำด้านล่างเพื่อเรียงประโยค</span>
                   ) : assembled.map((id, i) => (
@@ -622,20 +676,14 @@ export default function BattleGame({ user, stageNo, allMasterCards = [], onExit,
               </>
             ) : (
               <>
-                {/* คำจีน (+ คำศัพท์) จัดซ้าย-ขวา กึ่งกลางจอ ตัวใหญ่ๆ */}
-                <div className="flex items-stretch justify-center gap-3 mb-3">
-                  <div className={`${wordFrame} ${showVocab ? 'flex-1' : ''}`}>
+                {/* คำจีน (+ คำศัพท์) จัดซ้าย-ขวา ตัวใหญ่ๆ — กล่องขวายืดสุดขอบขวาของจอ */}
+                <div className={`flex items-stretch justify-center gap-3 mb-3 ${showVocab ? '-mr-16' : ''}`}>
+                  <div className={`${wordFrame} ${showVocab ? 'shrink-0' : ''}`}>
                     <span className="font-black text-white leading-none drop-shadow-[0_3px_6px_rgba(0,0,0,0.9)]" style={{ fontSize: showVocab ? 'clamp(2.5rem, 14vw, 4rem)' : 'clamp(3.5rem, 22vw, 6rem)' }}>{round?.card?.cn || '-'}</span>
-                    {isMeaning && round?.card?.pinyin && (
-                      <span className="text-slate-100 font-bold mt-1 text-base drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">{round.card.pinyin}</span>
-                    )}
                   </div>
                   {showVocab && (
-                    <div className={`${wordFrame} flex-1`}>
-                      <span className="font-black text-white leading-none drop-shadow-[0_3px_6px_rgba(0,0,0,0.9)]" style={{ fontSize: 'clamp(2.5rem, 14vw, 4rem)' }}>{round.card.vocabulary || '-'}</span>
-                      {round.card.pinyin_vocab && (
-                        <span className="text-slate-100 font-bold mt-1 text-base drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">{round.card.pinyin_vocab}</span>
-                      )}
+                    <div className={`${wordFrame} flex-1 min-w-0`}>
+                      <span className="font-black text-white leading-none drop-shadow-[0_3px_6px_rgba(0,0,0,0.9)] whitespace-nowrap" style={{ fontSize: 'clamp(2.5rem, 14vw, 4rem)' }}>{round.card.vocabulary || '-'}</span>
                     </div>
                   )}
                 </div>

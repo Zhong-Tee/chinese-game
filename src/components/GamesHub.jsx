@@ -57,20 +57,22 @@ export default function GamesHub({ setPage, gameState = { exp: 0, coin: 0 }, onS
               <button
                 key={s.stage_no}
                 onClick={() => onSelectStage(s.stage_no)}
-                className={`relative z-10 w-40 h-32 rounded-[1.8rem] shadow-xl bg-gradient-to-br ${color} text-white flex flex-col items-center justify-center gap-1 transform active:scale-95 transition-all border-4 border-white ${alignClass}`}
+                className={`relative z-10 w-40 h-32 rounded-[1.8rem] shadow-xl overflow-hidden text-white flex flex-col items-center justify-center gap-1 transform active:scale-95 transition-all border-4 border-white ${s.map_image_url ? '' : `bg-gradient-to-br ${color}`} ${alignClass}`}
               >
-                <span className="text-4xl font-black italic leading-none drop-shadow">{s.stage_no}</span>
-                <span className="text-sm font-black uppercase italic">{s.title || `ด่าน ${s.stage_no}`}</span>
-                <span className="text-[11px] font-bold bg-black/25 px-2 py-0.5 rounded-full">คำจาก LV{s.source_level}</span>
+                {s.map_image_url && (
+                  <>
+                    <img src={s.map_image_url} alt={s.title || `ด่าน ${s.stage_no}`} className="absolute inset-0 w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/30" />
+                  </>
+                )}
+                <span className="relative text-4xl font-black italic leading-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{s.stage_no}</span>
+                <span className="relative text-sm font-black uppercase italic drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{s.title || `ด่าน ${s.stage_no}`}</span>
+                <span className="relative text-[11px] font-bold bg-black/35 px-2 py-0.5 rounded-full">คำจาก LV{s.source_level}</span>
               </button>
             );
           })}
         </div>
       )}
-
-      <p className="text-center text-[11px] text-slate-400 italic px-6">
-        ตอบถูกเพื่อโจมตีศัตรู ฆ่ามอนสเตอร์และบอสให้หมดเพื่อรับ Coin · ระวัง HP หมดจะ Game Over
-      </p>
     </div>
   );
 }

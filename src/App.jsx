@@ -644,9 +644,6 @@ export default function App() {
           <header className="p-4 bg-white shadow-sm border-b-4 border-orange-500 flex justify-between items-center sticky top-0 z-40">
             <div className="flex flex-col">
               <h1 className="font-black text-orange-600 text-xl uppercase italic tracking-tighter">Nihao Game</h1>
-              {user?.email && (
-                <p className="text-xs text-slate-600 font-bold mt-1">{user.email.replace('@nihao.com', '')}</p>
-              )}
             </div>
             <button onClick={() => setIsMenuOpen(true)} className="w-12 h-10 bg-slate-800 text-white rounded-xl flex items-center justify-center text-2xl shadow-lg">☰</button>
           </header>
@@ -702,7 +699,7 @@ export default function App() {
       )}
 
       <main className={`${page === 'admin' ? 'max-w-5xl' : 'max-w-md'} mx-auto p-4`} style={{ touchAction: 'pan-y' }}>
-        {page === 'dashboard' && <Dashboard setPage={setPage} user={user} gameState={gameState} isAdmin={isAdmin} />}
+        {page === 'dashboard' && <Dashboard setPage={setPage} user={user} gameState={gameState} isAdmin={isAdmin} refreshGameState={() => refreshGameState()} />}
         {page === 'fc-chars' && <Flashcards setPage={setPage} levelCounts={levelCounts} schedules={schedules} checkLevelAvailable={checkLevelAvailable} startLevelGame={startLevelGame} />}
         {page === 'fc-play' && currentCard && (
           <FlashcardGame
@@ -768,10 +765,15 @@ export default function App() {
           <BattleGame
             user={user}
             stageNo={activeStage}
+            selectedCharacterId={gameState.selectedCharacterId}
+            equippedItemIds={gameState.equippedItemIds}
             allMasterCards={allMasterCards}
             onExit={() => { setPage('games'); refreshGameState(); }}
             onReward={(reward) => {
-              if (reward) setGameState(reward);
+              if (reward) setGameState(prev => ({ ...prev, ...reward }));
+            }}
+            onLevelUp={(updated) => {
+              if (updated) setGameState(prev => ({ ...prev, ...updated }));
             }}
           />
         )}

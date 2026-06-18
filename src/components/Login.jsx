@@ -35,12 +35,11 @@ export default function Login({ setPage, setUser, fetchInitialData, fetchUserSet
       fetchInitialData(data.user.id);
       fetchUserSettings(data.user.id);
       
-      // บันทึกการ login + stickers
+      // บันทึกการ login
       try {
         await supabase.from('user_logins').insert({ user_id: data.user.id });
-        await supabase.rpc('check_and_unlock_stickers', { p_user_id: data.user.id });
       } catch (err) {
-        console.error('Error logging login or checking stickers:', err);
+        console.error('Error logging login:', err);
       }
 
       // เช็คและเพิ่มคำศัพท์ประจำวัน

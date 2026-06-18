@@ -57,6 +57,7 @@ const FileButton = ({ accept, onSelect, children, disabled, className = '' }) =>
 function StagesTab({ notify }) {
   const [stages, setStages] = useState([]);
   const [exp, setExp] = useState({});
+  const [uploadingStage, setUploadingStage] = useState(null);
 
   const load = useCallback(async () => {
     const [s, e] = await Promise.all([
@@ -72,9 +73,29 @@ function StagesTab({ notify }) {
   const saveStage = async (st) => {
     const { error } = await supabase.from('game_stages').update({
       source_level: st.source_level, answer_time_sec: st.answer_time_sec,
+      answer_time_rearrange_sec: st.answer_time_rearrange_sec,
       monster_count: st.monster_count, title: st.title,
     }).eq('stage_no', st.stage_no);
     notify(error ? 'บันทึกล้มเหลว' : 'บันทึกด่านแล้ว');
+  };
+
+  const uploadStageImage = async (stageNo, file) => {
+    if (!file) return;
+    setUploadingStage(stageNo);
+    try {
+      const url = await uploadFile(file, 'stage-maps');
+      const { error } = await supabase.from('game_stages').update({ map_image_url: url }).eq('stage_no', stageNo);
+      if (error) throw error;
+      setStages(s => s.map(x => x.stage_no === stageNo ? { ...x, map_image_url: url } : x));
+      notify('เปลี่ยนรูปด่านแล้ว');
+    } catch (e) { notify('อัปโหลดล้มเหลว: ' + e.message); }
+    setUploadingStage(null);
+  };
+
+  const removeStageImage = async (stageNo) => {
+    const { error } = await supabase.from('game_stages').update({ map_image_url: null }).eq('stage_no', stageNo);
+    if (!error) setStages(s => s.map(x => x.stage_no === stageNo ? { ...x, map_image_url: null } : x));
+    notify(error ? 'ลบล้มเหลว' : 'ลบรูปด่านแล้ว');
   };
 
   const saveExp = async (lv, val) => {
@@ -85,25 +106,47 @@ function StagesTab({ notify }) {
 
   return (
     <div className="space-y-4">
-      <Section title="ตั้งค่าด่าน (เวลาตอบ / LV / จำนวนมอนสเตอร์)">
+      <Section title="ตั้งค่าด่าน (รูป / เวลาตอบ / LV / มอนสเตอร์)">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {stages.map((st, idx) => (
             <div key={st.stage_no} className="border-2 border-slate-100 rounded-xl p-4 space-y-3">
               <div className="font-black text-orange-600 text-sm">ด่าน {st.stage_no}</div>
+
+              {/* รูปด่าน (map icon) */}
+              <div className="flex items-center gap-3">
+                <div className="w-16 h-16 rounded-xl bg-slate-100 border-2 border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+                  {st.map_image_url
+                    ? <img src={st.map_image_url} alt="stage" className="w-full h-full object-cover" />
+                    : <span className="text-2xl text-slate-300">🗺️</span>}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <FileButton accept="image/*" onSelect={file => uploadStageImage(st.stage_no, file)} disabled={uploadingStage === st.stage_no} className="px-3 py-1.5 text-xs">
+                    {uploadingStage === st.stage_no ? '...' : 'เปลี่ยนรูปด่าน'}
+                  </FileButton>
+                  {st.map_image_url && (
+                    <button onClick={() => removeStageImage(st.stage_no)} className="text-xs text-red-500 font-black underline">ลบรูป</button>
+                  )}
+                </div>
+              </div>
+
               <input className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="ชื่อด่าน"
                 value={st.title || ''} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, title: e.target.value } : x))} />
-              <div className="grid grid-cols-3 gap-2 text-xs font-bold text-slate-500">
+              <div className="grid grid-cols-2 gap-2 text-xs font-bold text-slate-500">
                 <label className="flex flex-col gap-1">ใช้คำ LV
                   <input type="number" min="1" max="7" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
                     value={st.source_level} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, source_level: +e.target.value } : x))} />
                 </label>
-                <label className="flex flex-col gap-1">เวลาตอบ (วิ)
-                  <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
-                    value={st.answer_time_sec} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, answer_time_sec: +e.target.value } : x))} />
-                </label>
                 <label className="flex flex-col gap-1">มอนสเตอร์
                   <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
                     value={st.monster_count} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, monster_count: +e.target.value } : x))} />
+                </label>
+                <label className="flex flex-col gap-1">เวลาเลือกตอบ (วิ)
+                  <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+                    value={st.answer_time_sec} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, answer_time_sec: +e.target.value } : x))} />
+                </label>
+                <label className="flex flex-col gap-1">เวลาเรียงประโยค (วิ)
+                  <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+                    value={st.answer_time_rearrange_sec ?? 12} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, answer_time_rearrange_sec: +e.target.value } : x))} />
                 </label>
               </div>
               <button onClick={() => saveStage(st)} className="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl font-black text-sm uppercase w-full transition-colors active:scale-95">บันทึก</button>
@@ -486,9 +529,94 @@ function ShopTab({ notify }) {
   );
 }
 
+// ============ TAB: ตัวละคร ============
+function CharactersTab({ notify }) {
+  const [chars, setChars] = useState([]);
+  const [form, setForm] = useState({ name: '', file: null });
+  const [uploading, setUploading] = useState(false);
+
+  const load = useCallback(async () => {
+    const { data } = await supabase.from('game_characters').select('*').order('sort_order');
+    setChars(data || []);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const add = async () => {
+    if (!form.file) { notify('เลือกรูปก่อน'); return; }
+    if (!form.name.trim()) { notify('ใส่ชื่อตัวละครก่อน'); return; }
+    setUploading(true);
+    try {
+      const url = await uploadFile(form.file, 'characters');
+      await supabase.from('game_characters').insert({ name: form.name.trim(), image_url: url, sort_order: chars.length + 1 });
+      setForm({ name: '', file: null });
+      await load(); notify('เพิ่มตัวละครแล้ว');
+    } catch (e) { notify('ล้มเหลว: ' + e.message); }
+    setUploading(false);
+  };
+  const editLocal = (id, patch) => setChars(list => list.map(x => x.id === id ? { ...x, ...patch } : x));
+  const saveChar = async (c) => {
+    try {
+      const patch = { name: c.name, sort_order: c.sort_order, active: c.active };
+      if (c._file) patch.image_url = await uploadFile(c._file, 'characters');
+      const { error } = await supabase.from('game_characters').update(patch).eq('id', c.id);
+      if (error) throw error;
+      await load(); notify('บันทึกตัวละครแล้ว');
+    } catch (e) { notify('บันทึกล้มเหลว: ' + e.message); }
+  };
+  const del = async (id) => { await supabase.from('game_characters').delete().eq('id', id); await load(); };
+
+  return (
+    <div className="space-y-4">
+      <Section title="เพิ่มตัวละคร">
+        <input className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="ชื่อตัวละคร"
+          value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+        <div className="flex items-center gap-3 flex-wrap">
+          <FileButton accept="image/*" onSelect={file => setForm(f => ({ ...f, file }))} disabled={uploading}>เลือกรูปตัวละคร</FileButton>
+          {form.file && <span className="text-sm text-slate-500 font-bold truncate max-w-[200px]">{form.file.name}</span>}
+        </div>
+        <button onClick={add} disabled={uploading} className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-3 rounded-xl font-black text-sm uppercase w-full transition-colors active:scale-95 disabled:opacity-50">{uploading ? 'กำลังอัปโหลด...' : '+ เพิ่มตัวละคร'}</button>
+      </Section>
+
+      <Section title="ตัวละครทั้งหมด">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {chars.map(c => (
+            <div key={c.id} className={`flex flex-col gap-3 rounded-xl p-3 border-2 ${c.active ? 'bg-slate-50 border-slate-100' : 'bg-slate-200/60 border-slate-300'}`}>
+              <div className="flex items-start gap-3">
+                <img src={c.image_url} alt={c.name} className="w-16 h-16 object-contain shrink-0 bg-white rounded-lg" />
+                <div className="flex-1 grid grid-cols-2 gap-2 text-xs font-bold text-slate-500">
+                  <label className="flex flex-col gap-1 col-span-2">ชื่อ
+                    <input className="border-2 border-slate-200 rounded-lg px-2 py-1.5 text-sm font-normal"
+                      value={c.name || ''} onChange={e => editLocal(c.id, { name: e.target.value })} />
+                  </label>
+                  <label className="flex flex-col gap-1">ลำดับ
+                    <input type="number" className="border-2 border-slate-200 rounded-lg px-2 py-1.5 text-sm font-normal"
+                      value={c.sort_order} onChange={e => editLocal(c.id, { sort_order: +e.target.value })} />
+                  </label>
+                  <div className="flex flex-col gap-1">รูปใหม่
+                    <FileButton accept="image/*" onSelect={file => editLocal(c.id, { _file: file })} className="px-3 py-1.5 text-xs">
+                      {c._file ? 'เปลี่ยนแล้ว' : 'เลือกรูป'}
+                    </FileButton>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => saveChar(c)} className="flex-1 bg-slate-700 hover:bg-slate-800 text-white px-3 py-2 rounded-lg text-sm font-black transition-colors active:scale-95">บันทึก</button>
+                <button onClick={() => editLocal(c.id, { active: !c.active })} className="bg-slate-600 hover:bg-slate-700 text-white px-3 py-2 rounded-lg text-sm font-black transition-colors active:scale-95">{c.active ? 'ปิด' : 'เปิด'}</button>
+                <button onClick={() => del(c.id)} className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-black transition-colors active:scale-95">ลบ</button>
+              </div>
+            </div>
+          ))}
+          {chars.length === 0 && <p className="text-slate-400 text-sm">ยังไม่มีตัวละคร</p>}
+        </div>
+      </Section>
+    </div>
+  );
+}
+
 const TABS = [
   { id: 'stages', label: 'ด่าน/EXP' },
   { id: 'assets', label: 'พื้นหลัง/เพลง' },
+  { id: 'characters', label: 'ตัวละคร' },
   { id: 'enemies', label: 'ศัตรู' },
   { id: 'sfx', label: 'เสียง' },
   { id: 'shop', label: 'ไอเทม' },
@@ -529,6 +657,7 @@ export default function AdminPanel({ setPage, isAdmin }) {
 
       {tab === 'stages' && <StagesTab notify={notify} />}
       {tab === 'assets' && <StageAssetsTab notify={notify} />}
+      {tab === 'characters' && <CharactersTab notify={notify} />}
       {tab === 'enemies' && <EnemiesTab notify={notify} />}
       {tab === 'sfx' && <SfxTab notify={notify} />}
       {tab === 'shop' && <ShopTab notify={notify} />}

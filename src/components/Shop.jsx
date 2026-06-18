@@ -18,6 +18,15 @@ export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, o
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [toast, setToast] = useState(null);
+  const [qtySel, setQtySel] = useState({}); // item_id -> จำนวนที่จะซื้อ
+
+  const getQty = (id) => qtySel[id] || 1;
+  const changeQty = (id, delta) => {
+    setQtySel(prev => {
+      const next = Math.min(99, Math.max(1, (prev[id] || 1) + delta));
+      return { ...prev, [id]: next };
+    });
+  };
 
   const refresh = async () => {
     const [shop, ups, inv] = await Promise.all([
@@ -37,18 +46,29 @@ export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, o
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 1800); };
 
-  const handleBuy = async (item) => {
+  const handleBuy = async (item, count = 1) => {
     if (busyId) return;
     setBusyId(item.id);
-    const res = await purchaseItem(user.id, item);
-    if (res.ok) {
+    let bought = 0;
+    let failReason = null;
+    for (let i = 0; i < count; i++) {
+      const res = await purchaseItem(user.id, item);
+      if (res.ok) { bought++; }
+      else { failReason = res.reason; break; }
+    }
+    if (bought > 0) {
       const state = await getGameState(user.id);
       onStateChange?.(state);
       await refresh();
-      showToast('ซื้อสำเร็จ!');
+      setQtySel(prev => ({ ...prev, [item.id]: 1 }));
+    }
+    if (bought === count) {
+      showToast(count > 1 ? `ซื้อสำเร็จ! x${bought}` : 'ซื้อสำเร็จ!');
+    } else if (bought > 0) {
+      showToast(`ซื้อได้ ${bought}/${count} (เงินไม่พอ)`);
     } else {
-      const msg = res.reason === 'insufficient' ? 'เงินไม่พอ'
-        : res.reason === 'owned' ? 'มีอยู่แล้ว'
+      const msg = failReason === 'insufficient' ? 'เงินไม่พอ'
+        : failReason === 'owned' ? 'มีอยู่แล้ว'
         : 'ซื้อไม่สำเร็จ';
       showToast(msg);
     }
@@ -62,6 +82,8 @@ export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, o
     const owned = item.kind === 'upgrade' && ownedUpgrades.includes(item.id);
     const qty = inventory[item.id] || 0;
     const curIcon = item.currency === 'exp' ? '⭐' : <CoinIcon className="w-4 h-4" />;
+    const buyCount = getQty(item.id);
+    const isConsumable = item.kind === 'item';
     return (
       <div key={item.id} className="bg-white rounded-2xl border-2 border-slate-100 shadow-sm p-3 flex items-center gap-3">
         <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center text-2xl shrink-0">
@@ -70,15 +92,40 @@ export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, o
         <div className="flex-1 min-w-0">
           <div className="font-black text-slate-800 text-sm">{item.name}</div>
           <div className="text-[11px] text-slate-500">{item.description}</div>
-          {item.kind === 'item' && qty > 0 && <div className="text-[10px] font-black text-emerald-500">มีอยู่ x{qty}</div>}
+          {isConsumable && qty > 0 && <div className="text-[10px] font-black text-emerald-500">มีอยู่ x{qty}</div>}
         </div>
-        <button
-          onClick={() => handleBuy(item)}
-          disabled={owned || busyId === item.id}
-          className={`shrink-0 px-3 py-2 rounded-xl font-black text-xs uppercase ${owned ? 'bg-slate-200 text-slate-400' : 'bg-orange-500 text-white active:scale-95 shadow'}`}
-        >
-          {owned ? 'มีแล้ว' : <>{curIcon} {item.cost}</>}
-        </button>
+        {isConsumable ? (
+          <div className="shrink-0 flex flex-col items-end gap-1.5">
+            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+              <button
+                onClick={() => changeQty(item.id, -1)}
+                disabled={busyId === item.id || buyCount <= 1}
+                className="w-6 h-6 rounded-md bg-white text-slate-700 font-black flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-40"
+              >−</button>
+              <span className="w-7 text-center font-black text-slate-800 text-sm">{buyCount}</span>
+              <button
+                onClick={() => changeQty(item.id, 1)}
+                disabled={busyId === item.id || buyCount >= 99}
+                className="w-6 h-6 rounded-md bg-white text-slate-700 font-black flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-40"
+              >+</button>
+            </div>
+            <button
+              onClick={() => handleBuy(item, buyCount)}
+              disabled={busyId === item.id}
+              className="px-3 py-1.5 rounded-xl font-black text-xs uppercase bg-orange-500 text-white active:scale-95 shadow inline-flex items-center gap-1 disabled:opacity-60"
+            >
+              {curIcon} {item.cost * buyCount}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => handleBuy(item)}
+            disabled={owned || busyId === item.id}
+            className={`shrink-0 px-3 py-2 rounded-xl font-black text-xs uppercase inline-flex items-center gap-1 ${owned ? 'bg-slate-200 text-slate-400' : 'bg-orange-500 text-white active:scale-95 shadow'}`}
+          >
+            {owned ? 'มีแล้ว' : <>{curIcon} {item.cost}</>}
+          </button>
+        )}
       </div>
     );
   };
@@ -114,7 +161,6 @@ export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, o
               {consumables.length ? consumables.map(renderItem) : <p className="text-slate-400 text-sm italic">ยังไม่มีรายการ</p>}
             </div>
           </div>
-          <p className="text-center text-[11px] text-slate-400 italic px-4">ไอเทมที่ซื้อจะไปอยู่ในช่องด้านขวาตอนต่อสู้ (สูงสุด 3 ช่อง) ใช้แล้วหมดไป</p>
         </>
       )}
     </div>
