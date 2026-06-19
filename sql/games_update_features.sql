@@ -77,3 +77,24 @@ begin
   return result;
 end;
 $$;
+
+-- ---------------------------------------------------------------------
+-- 6. user_upgrades : ซื้ออัปเกรดตัวละครซ้ำได้ (สะสมจำนวน)
+--    เดิมซื้อได้ครั้งเดียวต่อรายการ ตอนนี้เก็บ quantity เพื่อสะสมผล
+--    เช่น "หัวใจเพิ่ม +1" ซื้อ 3 ครั้ง = +3 HP
+-- ---------------------------------------------------------------------
+alter table public.user_upgrades
+  add column if not exists quantity integer not null default 1;
+
+-- ---------------------------------------------------------------------
+-- 7. game_stages : ปรับระบบด่านใหม่
+--    - เพิ่มด่านได้ไม่จำกัด (เดิมจำกัด 1-5)
+--    - ไม่ผูกคำกับ flashcard level อีกต่อไป (เดิม source_level 3-7)
+--      คำในแต่ละด่านจะแบ่งจาก "Select Study Words" ตามลำดับ
+--      ด่านละ (monster_count + 1) คำ = มอนสเตอร์ + บอส
+--    - ตั้งค่ามอนสเตอร์เริ่มต้นเป็น 30 ตัว
+-- ---------------------------------------------------------------------
+alter table public.game_stages drop constraint if exists game_stages_stage_no_check;
+alter table public.game_stages drop constraint if exists game_stages_source_level_check;
+alter table public.game_stages alter column source_level drop not null;
+alter table public.game_stages alter column monster_count set default 30;

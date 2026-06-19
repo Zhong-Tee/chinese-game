@@ -4,6 +4,7 @@ import SpeakerButton from './SpeakerButton';
 import CoinIcon from './CoinIcon';
 import {
   getStageConfig,
+  getStages,
   getSfxMap,
   getCharacterStats,
   getUserItems,
@@ -19,6 +20,8 @@ const COIN_PER_BOSS = 25;
 const FEEDBACK_MS = 1200;
 // ทุกๆ 6 โจทย์ (pinyin/แปลไทย) จะแทรกโจทย์เรียงคำ 1 โจทย์
 const REARRANGE_EVERY = 6;
+// ทุกๆ 4 โจทย์ (pinyin/แปลไทย) จะแทรกโจทย์ฝึกพิมพ์ 1 โจทย์
+const TYPING_EVERY = 4;
 
 const norm = (v) => String(v || '').trim();
 const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
@@ -49,6 +52,7 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
   const wordsRef = useRef([]);
   const wordIdxRef = useRef(0);
   const qSinceRearrangeRef = useRef(0); // นับโจทย์ pinyin/แปลไทย ตั้งแต่เรียงคำครั้งล่าสุด
+  const qSinceTypingRef = useRef(0); // นับโจทย์ pinyin/แปลไทย ตั้งแต่ฝึกพิมพ์ครั้งล่าสุด
 
   // round
   const [round, setRound] = useState(null); // {type, card, subStage, choices, correctAnswer}
@@ -62,6 +66,10 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
   // rearrange
   const [tokens, setTokens] = useState([]); // {id, text}
   const [assembled, setAssembled] = useState([]); // token ids in order
+
+  // typing (ฝึกพิมพ์)
+  const [typed, setTyped] = useState('');
+  const typingInputRef = useRef(null);
 
   // fx
   const [enemyHurt, setEnemyHurt] = useState(false);
@@ -124,6 +132,24 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
     setRevealAnswer('');
     setLastCorrect(false);
     setTimedOut(false);
+    setTyped('');
+
+    // ครบ 4 โจทย์ (pinyin/แปลไทย) แล้ว → แทรกโจทย์ฝึกพิมพ์ 1 โจทย์
+    if (qSinceTypingRef.current >= TYPING_EVERY) {
+      // หา card ที่มีคำศัพท์ (vocabulary) — ฝึกพิมพ์เฉพาะคำศัพท์ ไม่ใช่ตัวอักษรเดี่ยว
+      for (let k = 0; k < words.length; k++) {
+        const idx = (wordIdxRef.current + k) % words.length;
+        const vocab = norm(words[idx]?.vocabulary);
+        if (vocab) {
+          wordIdxRef.current = idx + 1;
+          qSinceTypingRef.current = 0;
+          setTimer(rearrangeTime);
+          setRound({ type: 'typing', card: words[idx], correct: vocab, correctAnswer: vocab });
+          return;
+        }
+      }
+      // ไม่พบ card ที่มีคำศัพท์ → เล่นแบบเลือกตอบต่อไป (คงตัวนับไว้)
+    }
 
     // ครบ 6 โจทย์ (pinyin/แปลไทย) แล้ว → แทรกโจทย์เรียงคำ 1 โจทย์
     if (qSinceRearrangeRef.current >= REARRANGE_EVERY) {
@@ -153,6 +179,7 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
     const card = wordsRef.current[wordIdxRef.current];
     wordIdxRef.current += 1;
     qSinceRearrangeRef.current += 1; // นับโจทย์ pinyin
+    qSinceTypingRef.current += 1;
     setTimer(answerTime);
     const c = buildChoices('pinyin', card);
     setRound({ type: 'word', card, subStage: 'pinyin', choices: c.choices, correctAnswer: c.correctAnswer });
@@ -226,24 +253,40 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
         setEnemyIdx(0);
         setEnemyHp(queue[0].hp);
 
-        // โหลดคำจาก user_progress ที่ level = source_level
-        const { data: progress } = await supabase
-          .from('user_progress')
-          .select('flashcard_id')
-          .eq('user_id', user.id)
-          .eq('level', cfg.stage.source_level)
-          .lt('wrong_count', 3);
-        const ids = (progress || []).map(p => Number(p.flashcard_id)).filter(n => !isNaN(n));
-        let cards = allMasterCards.filter(c => ids.includes(Number(c.id1 || c.id)));
+        // โหลดคำที่เลือกไว้ทั้งหมดจาก Select Study Words (ไม่กรองตาม level/wrong_count)
+        // แล้วแบ่งให้แต่ละด่านตามลำดับการ์ด: ด่านละ (monster_count + 1) คำ
+        const [{ data: progress }, allStages] = await Promise.all([
+          supabase
+            .from('user_progress')
+            .select('flashcard_id')
+            .eq('user_id', user.id),
+          getStages(),
+        ]);
         if (!alive) return;
+        const selIds = new Set((progress || []).map(p => Number(p.flashcard_id)).filter(n => !isNaN(n)));
+        // เรียงการ์ดที่เลือกตามลำดับ id (เหมือนหน้า Select Study Words)
+        const orderedCards = allMasterCards
+          .filter(c => selIds.has(Number(c.id1 || c.id)))
+          .sort((a, b) => Number(a.id1 || a.id) - Number(b.id1 || b.id));
+
+        // จำนวนคำต่อด่าน = มอนสเตอร์ + บอส 1 ตัว
+        const wordsInStage = (s) => (s.monster_count || 0) + 1;
+        // offset = ผลรวมคำของด่านก่อนหน้า (เรียงตาม stage_no)
+        let offset = 0;
+        for (const s of allStages) {
+          if (s.stage_no < stageNo) offset += wordsInStage(s);
+        }
+        const thisCount = wordsInStage(cfg.stage);
+        const cards = orderedCards.slice(offset, offset + thisCount);
         if (cards.length === 0) {
-          setErrorMsg(`ยังไม่มีคำศัพท์ใน LV${cfg.stage.source_level} ของคุณ — ไปเล่น Flashcards เพื่อปลดล็อกก่อน`);
+          setErrorMsg('ยังไม่มีคำศัพท์สำหรับด่านนี้ — ไปเลือกคำเพิ่มที่ Select Study Words');
           setPhase('empty');
           return;
         }
         wordsRef.current = shuffle(cards);
         wordIdxRef.current = 0;
         qSinceRearrangeRef.current = 0;
+        qSinceTypingRef.current = 0;
         setPhase('playing');
       } catch (e) {
         console.error('BattleGame load error:', e);
@@ -348,6 +391,15 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
     resolveAnswer(isCorrect, text);
   };
 
+  // ส่งคำตอบฝึกพิมพ์ (พิมพ์คำศัพท์จีนให้ตรง)
+  const submitTyping = () => {
+    if (answered || !typed.trim()) return;
+    const clean = (s) => stripPunct(norm(s)).replace(/\s+/g, '');
+    const isCorrect = clean(typed) === clean(round?.correct);
+    setRevealAnswer(round?.correctAnswer || '');
+    resolveAnswer(isCorrect, typed.trim());
+  };
+
   // แตะ token ในคลัง → เพิ่มเข้าไปต่อท้าย
   const tapToken = (tk) => {
     if (answered || assembled.includes(tk.id)) return;
@@ -367,6 +419,14 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
   };
 
   const resetAssembled = () => { if (!answered) setAssembled([]); };
+
+  // โฟกัสกล่องพิมพ์เมื่อเข้าโจทย์ฝึกพิมพ์ (เรียกแป้นพิมพ์มือถือขึ้นมา)
+  useEffect(() => {
+    if (round?.type === 'typing' && !answered) {
+      const t = setTimeout(() => typingInputRef.current?.focus(), 120);
+      return () => clearTimeout(t);
+    }
+  }, [round, answered]);
 
   // เคลียร์เอฟเฟกต์อัตโนมัติ
   useEffect(() => {
@@ -390,6 +450,7 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
         setTimedOut(false);
         setTimer(answerTime);
         qSinceRearrangeRef.current += 1; // นับโจทย์แปลไทย
+        qSinceTypingRef.current += 1;
         setRound(r => ({ ...r, subStage: 'meaning', choices: c.choices, correctAnswer: c.correctAnswer }));
       } else {
         setRound(null); // trigger nextRound
@@ -570,7 +631,7 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
         </div>
 
         {/* มอนสเตอร์: ตรึงตำแหน่งไว้ด้านบน (ไม่ขยับตามชนิดโจทย์) + เงาที่พื้น */}
-        <div className="flex-1 min-h-0 flex flex-col items-center justify-start relative pt-[5vh]">
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-start relative pt-[1vh]">
           <div className="relative flex flex-col items-center" style={{ animation: 'enemyFloat 3.2s ease-in-out infinite' }}>
             {currentEnemy?.image_url ? (
               <img
@@ -674,6 +735,53 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
                   })}
                 </div>
               </>
+            ) : round?.type === 'typing' ? (
+              <>
+                {/* คำศัพท์จีน — จัดกึ่งกลาง ขนาดเท่าโจทย์คำแปล ไม่มี pinyin */}
+                <div className="flex items-center justify-center mb-3 -mr-16 -mt-[30vh]">
+                  <div className={`${wordFrame} flex-1 min-w-0`}>
+                    <span className="font-black text-white leading-none drop-shadow-[0_3px_6px_rgba(0,0,0,0.9)] whitespace-nowrap" style={{ fontSize: 'clamp(2.5rem, 14vw, 4rem)' }}>{round?.card?.vocabulary || '-'}</span>
+                  </div>
+                </div>
+                {showSpeaker && (
+                  <div className="flex justify-center mb-2 -mt-1">
+                    <SpeakerButton text={round?.card?.vocabulary} label="ฟังเสียง" className="w-9 h-9" />
+                  </div>
+                )}
+                {/* กล่องพิมพ์ + แป้นพิมพ์มือถือภาษาจีน */}
+                <input
+                  ref={typingInputRef}
+                  type="text"
+                  lang="zh-CN"
+                  inputMode="text"
+                  enterKeyHint="done"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  value={typed}
+                  disabled={answered}
+                  onChange={(e) => setTyped(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitTyping(); } }}
+                  placeholder="พิมพ์คำศัพท์ภาษาจีน"
+                  className={`w-full rounded-2xl border-2 border-b-4 px-4 py-3 text-3xl font-black text-center outline-none mb-2 transition-colors ${answered ? (lastCorrect ? 'bg-emerald-500/25 border-emerald-400 text-white' : 'bg-red-500/25 border-red-400 text-white') : 'bg-white/95 border-slate-400 text-slate-800 placeholder:text-base placeholder:font-bold placeholder:text-slate-400'}`}
+                />
+                {answered && !lastCorrect && (
+                  <div className="text-center text-emerald-200 font-black text-2xl mb-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+                    เฉลย: {round?.correctAnswer}
+                  </div>
+                )}
+                {!answered && (
+                  <button
+                    onClick={submitTyping}
+                    disabled={!typed.trim()}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-gradient-to-b from-emerald-400 to-emerald-600 border-2 border-b-4 border-emerald-800 text-white font-black text-lg active:translate-y-0.5 disabled:opacity-40"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    ส่งคำตอบ
+                  </button>
+                )}
+              </>
             ) : (
               <>
                 {/* คำจีน (+ คำศัพท์) จัดซ้าย-ขวา ตัวใหญ่ๆ — กล่องขวายืดสุดขอบขวาของจอ */}
@@ -693,7 +801,7 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
                   </div>
                 )}
                 {/* ปุ่มคำตอบสไตล์เกม (ไม่มีเลข 1-4) */}
-                <div className="grid grid-cols-1 gap-2.5">
+                <div className="grid grid-cols-1 gap-2">
                   {(round?.choices || []).map((choice, i) => {
                     const isCorrectChoice = norm(round.correctAnswer) === norm(choice);
                     const isSel = selected === norm(choice);
@@ -709,7 +817,7 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
                         key={`${i}-${choice}`}
                         onClick={() => handleChoice(choice)}
                         disabled={answered}
-                        className={`relative w-full rounded-2xl border-2 border-b-[6px] px-4 py-3 font-black text-xl text-center shadow-[0_4px_10px_rgba(0,0,0,0.45)] ring-1 ring-inset transition-all active:translate-y-1 active:border-b-2 disabled:active:translate-y-0 ${colorCls}`}
+                        className={`relative w-full rounded-2xl border-2 border-b-4 px-4 py-2.5 font-black text-lg text-center shadow-[0_4px_10px_rgba(0,0,0,0.45)] ring-1 ring-inset transition-all active:translate-y-1 active:border-b-2 disabled:active:translate-y-0 ${colorCls}`}
                       >
                         {choice}
                       </button>

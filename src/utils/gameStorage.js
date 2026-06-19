@@ -122,6 +122,46 @@ export async function getStages() {
   return data || [];
 }
 
+// สร้างด่านใหม่ (stage_no = ตัวที่มากที่สุด + 1) คืน row ที่สร้าง หรือ null
+export async function createStage() {
+  const { data: existing, error: readErr } = await supabase
+    .from('game_stages')
+    .select('stage_no')
+    .order('stage_no', { ascending: false })
+    .limit(1);
+  if (readErr) {
+    console.error('createStage read error:', readErr);
+    return null;
+  }
+  const nextNo = (existing?.[0]?.stage_no || 0) + 1;
+  const { data, error } = await supabase
+    .from('game_stages')
+    .insert({
+      stage_no: nextNo,
+      monster_count: 30,
+      answer_time_sec: 10,
+      answer_time_rearrange_sec: 12,
+      title: `ด่าน ${nextNo}`,
+    })
+    .select()
+    .maybeSingle();
+  if (error) {
+    console.error('createStage error:', error);
+    return null;
+  }
+  return data;
+}
+
+// ลบด่าน (cascade ลบ enemies/backgrounds/music ของด่านนั้นด้วย) คืน true ถ้าสำเร็จ
+export async function deleteStage(stageNo) {
+  const { error } = await supabase.from('game_stages').delete().eq('stage_no', stageNo);
+  if (error) {
+    console.error('deleteStage error:', error);
+    return false;
+  }
+  return true;
+}
+
 export async function getStageConfig(stageNo) {
   const [stageRes, bgRes, enemyRes, musicRes] = await Promise.all([
     supabase.from('game_stages').select('*').eq('stage_no', stageNo).maybeSingle(),
@@ -195,7 +235,7 @@ export async function getUserUpgrades(userId) {
   if (!userId) return [];
   const { data, error } = await supabase
     .from('user_upgrades')
-    .select('item_id, shop_items(*)')
+    .select('item_id, quantity, shop_items(*)')
     .eq('user_id', userId);
   if (error) {
     console.error('getUserUpgrades error:', error);
@@ -226,8 +266,9 @@ export async function getCharacterStats(userId) {
   upgrades.forEach(u => {
     const item = u.shop_items;
     if (!item) return;
-    if (item.effect_type === 'add_hp') maxHp += item.effect_value;
-    if (item.effect_type === 'add_attack') attack += item.effect_value;
+    const qty = u.quantity || 1;
+    if (item.effect_type === 'add_hp') maxHp += item.effect_value * qty;
+    if (item.effect_type === 'add_attack') attack += item.effect_value * qty;
   });
   return { maxHp, attack };
 }
@@ -236,27 +277,24 @@ export async function getCharacterStats(userId) {
 export async function purchaseItem(userId, item) {
   if (!userId || !item) return { ok: false, reason: 'invalid' };
 
-  // upgrade ถาวร: ห้ามซื้อซ้ำ
-  if (item.kind === 'upgrade') {
-    const { data: existing } = await supabase
-      .from('user_upgrades')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('item_id', item.id)
-      .maybeSingle();
-    if (existing) return { ok: false, reason: 'owned' };
-  }
-
   const paid = await spendCurrency(item.currency, item.cost);
   if (!paid) return { ok: false, reason: 'insufficient' };
 
   if (item.kind === 'upgrade') {
+    // upgrade ถาวร: ซื้อซ้ำได้ สะสมจำนวน (quantity + 1)
+    const { data: existing } = await supabase
+      .from('user_upgrades')
+      .select('quantity')
+      .eq('user_id', userId)
+      .eq('item_id', item.id)
+      .maybeSingle();
+    const newQty = (existing?.quantity || 0) + 1;
     const { error } = await supabase
       .from('user_upgrades')
-      .insert([{ user_id: userId, item_id: item.id }]);
+      .upsert({ user_id: userId, item_id: item.id, quantity: newQty }, { onConflict: 'user_id,item_id' });
     if (error) {
       console.error('purchaseItem upgrade error:', error);
-      // คืนเงินถ้า insert ล้มเหลว
+      // คืนเงินถ้า upsert ล้มเหลว
       await addCurrency({ [item.currency]: item.cost });
       return { ok: false, reason: 'error' };
     }

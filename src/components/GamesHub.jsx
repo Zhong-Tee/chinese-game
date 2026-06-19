@@ -53,6 +53,8 @@ export default function GamesHub({ setPage, gameState = { exp: 0, coin: 0 }, onS
           {stages.map((s, idx) => {
             const color = STAGE_COLORS[idx % STAGE_COLORS.length];
             const alignClass = idx % 2 === 0 ? 'self-start ml-6' : 'self-end mr-6';
+            const wStart = stages.slice(0, idx).reduce((sum, x) => sum + (x.monster_count || 0) + 1, 0) + 1;
+            const wEnd = wStart + (s.monster_count || 0);
             return (
               <button
                 key={s.stage_no}
@@ -67,7 +69,7 @@ export default function GamesHub({ setPage, gameState = { exp: 0, coin: 0 }, onS
                 )}
                 <span className="relative text-4xl font-black italic leading-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{s.stage_no}</span>
                 <span className="relative text-sm font-black uppercase italic drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{s.title || `ด่าน ${s.stage_no}`}</span>
-                <span className="relative text-[11px] font-bold bg-black/35 px-2 py-0.5 rounded-full">คำจาก LV{s.source_level}</span>
+                <span className="relative text-[11px] font-bold bg-black/35 px-2 py-0.5 rounded-full">คำที่ {wStart}–{wEnd}</span>
               </button>
             );
           })}

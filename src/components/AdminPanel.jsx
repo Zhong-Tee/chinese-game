@@ -1,10 +1,9 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
-import { clearExpRewardsCache } from '../utils/gameStorage';
+import { clearExpRewardsCache, createStage, deleteStage } from '../utils/gameStorage';
 
 const BUCKET = 'game-assets';
-const STAGE_NOS = [1, 2, 3, 4, 5];
 // อีโมจิ fallback ตาม effect ให้ตรงกับที่แสดงในร้าน/ตอนต่อสู้จริง
 const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️' };
 const SFX_KEYS = [
@@ -32,16 +31,24 @@ const Section = ({ title, children }) => (
   </div>
 );
 
-const StagePicker = ({ value, onChange }) => (
-  <div className="flex gap-2">
-    {STAGE_NOS.map(n => (
-      <button key={n} onClick={() => onChange(n)}
-        className={`flex-1 py-2.5 rounded-xl font-black text-sm transition-colors ${value === n ? 'bg-orange-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
-        ด่าน {n}
-      </button>
-    ))}
-  </div>
-);
+const StagePicker = ({ value, onChange }) => {
+  const [stageNos, setStageNos] = useState([]);
+  useEffect(() => {
+    supabase.from('game_stages').select('stage_no').order('stage_no').then(({ data }) => {
+      setStageNos((data || []).map(r => r.stage_no));
+    });
+  }, []);
+  return (
+    <div className="flex gap-2 flex-wrap">
+      {stageNos.map(n => (
+        <button key={n} onClick={() => onChange(n)}
+          className={`py-2.5 px-4 rounded-xl font-black text-sm transition-colors ${value === n ? 'bg-orange-500 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+          ด่าน {n}
+        </button>
+      ))}
+    </div>
+  );
+};
 
 // ปุ่มเลือกไฟล์ (ซ่อน input file ไว้ข้างใน label ที่ทำเป็นปุ่มกด)
 const FileButton = ({ accept, onSelect, children, disabled, className = '' }) => (
@@ -72,12 +79,28 @@ function StagesTab({ notify }) {
 
   const saveStage = async (st) => {
     const { error } = await supabase.from('game_stages').update({
-      source_level: st.source_level, answer_time_sec: st.answer_time_sec,
+      answer_time_sec: st.answer_time_sec,
       answer_time_rearrange_sec: st.answer_time_rearrange_sec,
       monster_count: st.monster_count, title: st.title,
     }).eq('stage_no', st.stage_no);
     notify(error ? 'บันทึกล้มเหลว' : 'บันทึกด่านแล้ว');
   };
+
+  const addStage = async () => {
+    const created = await createStage();
+    if (created) { await load(); notify(`เพิ่มด่าน ${created.stage_no} แล้ว`); }
+    else notify('เพิ่มด่านล้มเหลว');
+  };
+
+  const removeStage = async (stageNo) => {
+    if (!window.confirm(`ลบด่าน ${stageNo}? (รูป/เพลง/ศัตรูของด่านนี้จะถูกลบด้วย)`)) return;
+    const ok = await deleteStage(stageNo);
+    if (ok) { await load(); notify(`ลบด่าน ${stageNo} แล้ว`); }
+    else notify('ลบด่านล้มเหลว');
+  };
+
+  // จำนวนคำสะสมก่อนหน้าแต่ละด่าน เพื่อแสดงช่วงคำ (ด่านละ monster_count + 1 คำ)
+  const wordStart = (idx) => stages.slice(0, idx).reduce((sum, s) => sum + (s.monster_count || 0) + 1, 0) + 1;
 
   const uploadStageImage = async (stageNo, file) => {
     if (!file) return;
@@ -106,11 +129,28 @@ function StagesTab({ notify }) {
 
   return (
     <div className="space-y-4">
-      <Section title="ตั้งค่าด่าน (รูป / เวลาตอบ / LV / มอนสเตอร์)">
+      <Section title="ตั้งค่าด่าน (รูป / เวลาตอบ / จำนวนมอนสเตอร์)">
+        <div className="bg-sky-50 border-2 border-sky-100 rounded-xl p-3 text-xs text-slate-600 font-bold leading-relaxed">
+          คำศัพท์ในเกมต่อสู้จะถูกแบ่งจาก <span className="text-sky-600">Select Study Words</span> ตามลำดับ
+          ด่านละ (จำนวนมอนสเตอร์ + บอส 1 ตัว) คำ เช่น 30 มอนสเตอร์ = 31 คำต่อด่าน
+          ด่านถัดไปจะรับคำที่เหลือต่อไปเรื่อยๆ
+        </div>
+        <div className="flex justify-end">
+          <button onClick={addStage} className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl font-black text-sm uppercase transition-colors active:scale-95">+ เพิ่มด่าน</button>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {stages.map((st, idx) => (
+          {stages.map((st, idx) => {
+            const start = wordStart(idx);
+            const end = start + (st.monster_count || 0); // (monster_count + 1) คำ → start..start+count
+            return (
             <div key={st.stage_no} className="border-2 border-slate-100 rounded-xl p-4 space-y-3">
-              <div className="font-black text-orange-600 text-sm">ด่าน {st.stage_no}</div>
+              <div className="flex items-center justify-between">
+                <div className="font-black text-orange-600 text-sm">ด่าน {st.stage_no}</div>
+                <button onClick={() => removeStage(st.stage_no)} className="text-xs text-red-500 font-black underline">ลบด่าน</button>
+              </div>
+              <div className="text-[11px] font-bold text-emerald-600 bg-emerald-50 rounded-lg px-2 py-1">
+                คำที่ {start}–{end} ({(st.monster_count || 0) + 1} คำ)
+              </div>
 
               {/* รูปด่าน (map icon) */}
               <div className="flex items-center gap-3">
@@ -132,10 +172,6 @@ function StagesTab({ notify }) {
               <input className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="ชื่อด่าน"
                 value={st.title || ''} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, title: e.target.value } : x))} />
               <div className="grid grid-cols-2 gap-2 text-xs font-bold text-slate-500">
-                <label className="flex flex-col gap-1">ใช้คำ LV
-                  <input type="number" min="1" max="7" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
-                    value={st.source_level} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, source_level: +e.target.value } : x))} />
-                </label>
                 <label className="flex flex-col gap-1">มอนสเตอร์
                   <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
                     value={st.monster_count} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, monster_count: +e.target.value } : x))} />
@@ -151,7 +187,8 @@ function StagesTab({ notify }) {
               </div>
               <button onClick={() => saveStage(st)} className="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl font-black text-sm uppercase w-full transition-colors active:scale-95">บันทึก</button>
             </div>
-          ))}
+            );
+          })}
         </div>
       </Section>
 

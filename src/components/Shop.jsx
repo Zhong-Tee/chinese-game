@@ -13,7 +13,7 @@ const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shie
 
 export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, onStateChange }) {
   const [items, setItems] = useState([]);
-  const [ownedUpgrades, setOwnedUpgrades] = useState([]); // item_id[]
+  const [ownedUpgrades, setOwnedUpgrades] = useState({}); // item_id -> qty ที่สะสมไว้
   const [inventory, setInventory] = useState({}); // item_id -> qty
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
@@ -35,7 +35,9 @@ export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, o
       getUserItems(user?.id),
     ]);
     setItems(shop);
-    setOwnedUpgrades(ups.map(u => u.item_id));
+    const upMap = {};
+    ups.forEach(u => { upMap[u.item_id] = u.quantity || 1; });
+    setOwnedUpgrades(upMap);
     const invMap = {};
     inv.forEach(r => { invMap[r.item_id] = r.quantity; });
     setInventory(invMap);
@@ -79,11 +81,11 @@ export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, o
   const consumables = items.filter(i => i.kind === 'item');
 
   const renderItem = (item) => {
-    const owned = item.kind === 'upgrade' && ownedUpgrades.includes(item.id);
-    const qty = inventory[item.id] || 0;
+    const isUpgrade = item.kind === 'upgrade';
+    const ownedQty = isUpgrade ? (ownedUpgrades[item.id] || 0) : (inventory[item.id] || 0);
     const curIcon = item.currency === 'exp' ? '⭐' : <CoinIcon className="w-4 h-4" />;
     const buyCount = getQty(item.id);
-    const isConsumable = item.kind === 'item';
+    const ownedLabel = isUpgrade ? `ติดตั้งแล้ว x${ownedQty}` : `มีอยู่ x${ownedQty}`;
     return (
       <div key={item.id} className="bg-white rounded-2xl border-2 border-slate-100 shadow-sm p-3 flex items-center gap-3">
         <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center text-2xl shrink-0">
@@ -92,40 +94,30 @@ export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, o
         <div className="flex-1 min-w-0">
           <div className="font-black text-slate-800 text-sm">{item.name}</div>
           <div className="text-[11px] text-slate-500">{item.description}</div>
-          {isConsumable && qty > 0 && <div className="text-[10px] font-black text-emerald-500">มีอยู่ x{qty}</div>}
+          {ownedQty > 0 && <div className="text-[10px] font-black text-emerald-500">{ownedLabel}</div>}
         </div>
-        {isConsumable ? (
-          <div className="shrink-0 flex flex-col items-end gap-1.5">
-            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
-              <button
-                onClick={() => changeQty(item.id, -1)}
-                disabled={busyId === item.id || buyCount <= 1}
-                className="w-6 h-6 rounded-md bg-white text-slate-700 font-black flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-40"
-              >−</button>
-              <span className="w-7 text-center font-black text-slate-800 text-sm">{buyCount}</span>
-              <button
-                onClick={() => changeQty(item.id, 1)}
-                disabled={busyId === item.id || buyCount >= 99}
-                className="w-6 h-6 rounded-md bg-white text-slate-700 font-black flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-40"
-              >+</button>
-            </div>
+        <div className="shrink-0 flex flex-col items-end gap-1.5">
+          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
             <button
-              onClick={() => handleBuy(item, buyCount)}
-              disabled={busyId === item.id}
-              className="px-3 py-1.5 rounded-xl font-black text-xs uppercase bg-orange-500 text-white active:scale-95 shadow inline-flex items-center gap-1 disabled:opacity-60"
-            >
-              {curIcon} {item.cost * buyCount}
-            </button>
+              onClick={() => changeQty(item.id, -1)}
+              disabled={busyId === item.id || buyCount <= 1}
+              className="w-6 h-6 rounded-md bg-white text-slate-700 font-black flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-40"
+            >−</button>
+            <span className="w-7 text-center font-black text-slate-800 text-sm">{buyCount}</span>
+            <button
+              onClick={() => changeQty(item.id, 1)}
+              disabled={busyId === item.id || buyCount >= 99}
+              className="w-6 h-6 rounded-md bg-white text-slate-700 font-black flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-40"
+            >+</button>
           </div>
-        ) : (
           <button
-            onClick={() => handleBuy(item)}
-            disabled={owned || busyId === item.id}
-            className={`shrink-0 px-3 py-2 rounded-xl font-black text-xs uppercase inline-flex items-center gap-1 ${owned ? 'bg-slate-200 text-slate-400' : 'bg-orange-500 text-white active:scale-95 shadow'}`}
+            onClick={() => handleBuy(item, buyCount)}
+            disabled={busyId === item.id}
+            className="px-3 py-1.5 rounded-xl font-black text-xs uppercase bg-orange-500 text-white active:scale-95 shadow inline-flex items-center gap-1 disabled:opacity-60"
           >
-            {owned ? 'มีแล้ว' : <>{curIcon} {item.cost}</>}
+            {curIcon} {item.cost * buyCount}
           </button>
-        )}
+        </div>
       </div>
     );
   };
