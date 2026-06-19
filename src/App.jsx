@@ -433,11 +433,24 @@ export default function App() {
       nextWrongCount = currentWrong + 1;
     }
 
-    await supabase
+    const { data: updatedRows, error: updateError } = await supabase
       .from('user_progress')
       .update({ level: nextLevel, wrong_count: nextWrongCount })
       .eq('user_id', user.id)
-      .eq('flashcard_id', cardId);
+      .eq('flashcard_id', cardId)
+      .select('flashcard_id, level, wrong_count');
+
+    if (updateError) {
+      console.error('[moveToNextCard] UPDATE error:', updateError, { userId: user.id, cardId, nextLevel, nextWrongCount });
+      setWrongWordToast?.(`บันทึกผลไม่สำเร็จ: ${updateError.message || updateError.code || 'unknown'}`);
+      setTimeout(() => setWrongWordToast?.(null), 4000);
+    } else if (!updatedRows || updatedRows.length === 0) {
+      console.warn('[moveToNextCard] UPDATE matched 0 rows', { userId: user.id, cardId, cardIdType: typeof cardId, nextLevel, nextWrongCount });
+      setWrongWordToast?.(`อัปเดต 0 แถว (cardId=${cardId})`);
+      setTimeout(() => setWrongWordToast?.(null), 4000);
+    } else {
+      console.log('[moveToNextCard] UPDATE ok:', updatedRows);
+    }
 
     // ตอบถูกครบ → ได้รับ EXP ตาม LV ของคำนั้น (ข้อ 2.8)
     if (isCardPassed) {
