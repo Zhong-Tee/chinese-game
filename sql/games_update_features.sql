@@ -43,6 +43,10 @@ alter table public.user_game_state
 alter table public.game_stages
   add column if not exists answer_time_rearrange_sec integer not null default 12;
 
+-- เวลาตอบโจทย์ฝึกพิมพ์ (พิมพ์คำศัพท์จีน)
+alter table public.game_stages
+  add column if not exists answer_time_typing_sec integer not null default 15;
+
 alter table public.game_stages
   add column if not exists map_image_url text;
 

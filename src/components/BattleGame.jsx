@@ -87,6 +87,7 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
   const currentEnemy = enemyQueue[enemyIdx] || null;
   const answerTime = stage?.answer_time_sec || 8;
   const rearrangeTime = stage?.answer_time_rearrange_sec || 12;
+  const typingTime = stage?.answer_time_typing_sec || 15;
   const showSpeaker = (stage?.source_level ?? 3) <= 2;
 
   // -------------------------------------------------------------------
@@ -143,7 +144,7 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
         if (vocab) {
           wordIdxRef.current = idx + 1;
           qSinceTypingRef.current = 0;
-          setTimer(rearrangeTime);
+          setTimer(typingTime);
           setRound({ type: 'typing', card: words[idx], correct: vocab, correctAnswer: vocab });
           return;
         }
@@ -183,7 +184,7 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
     setTimer(answerTime);
     const c = buildChoices('pinyin', card);
     setRound({ type: 'word', card, subStage: 'pinyin', choices: c.choices, correctAnswer: c.correctAnswer });
-  }, [answerTime, rearrangeTime, buildChoices]);
+  }, [answerTime, rearrangeTime, typingTime, buildChoices]);
 
   // -------------------------------------------------------------------
   // initial load

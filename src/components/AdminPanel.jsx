@@ -81,6 +81,7 @@ function StagesTab({ notify }) {
     const { error } = await supabase.from('game_stages').update({
       answer_time_sec: st.answer_time_sec,
       answer_time_rearrange_sec: st.answer_time_rearrange_sec,
+      answer_time_typing_sec: st.answer_time_typing_sec,
       monster_count: st.monster_count, title: st.title,
     }).eq('stage_no', st.stage_no);
     notify(error ? 'บันทึกล้มเหลว' : 'บันทึกด่านแล้ว');
@@ -183,6 +184,10 @@ function StagesTab({ notify }) {
                 <label className="flex flex-col gap-1">เวลาเรียงประโยค (วิ)
                   <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
                     value={st.answer_time_rearrange_sec ?? 12} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, answer_time_rearrange_sec: +e.target.value } : x))} />
+                </label>
+                <label className="flex flex-col gap-1">เวลาพิมพ์ (วิ)
+                  <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+                    value={st.answer_time_typing_sec ?? 15} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, answer_time_typing_sec: +e.target.value } : x))} />
                 </label>
               </div>
               <button onClick={() => saveStage(st)} className="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl font-black text-sm uppercase w-full transition-colors active:scale-95">บันทึก</button>

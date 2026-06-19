@@ -141,6 +141,7 @@ export async function createStage() {
       monster_count: 30,
       answer_time_sec: 10,
       answer_time_rearrange_sec: 12,
+      answer_time_typing_sec: 15,
       title: `ด่าน ${nextNo}`,
     })
     .select()
