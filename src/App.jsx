@@ -426,7 +426,7 @@ export default function App() {
         nextWrongCount = 0;
       } else {
         nextLevel = Math.min(activeLevel + 1, 7);
-        nextWrongCount = currentWrong;
+        nextWrongCount = 0;
       }
     } else {
       nextLevel = 1;
