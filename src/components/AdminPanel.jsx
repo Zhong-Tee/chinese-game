@@ -785,10 +785,17 @@ function CharactersTab({ notify }) {
     try {
       const patch = { name: c.name, sort_order: c.sort_order, active: c.active };
       if (c._file) patch.image_url = await uploadFile(c._file, 'characters');
+      if (c._coverFile) patch.cover_url = await uploadFile(c._coverFile, 'character-covers');
       const { error } = await supabase.from('game_characters').update(patch).eq('id', c.id);
       if (error) throw error;
       await load(); notify('บันทึกตัวละครแล้ว');
     } catch (e) { notify('บันทึกล้มเหลว: ' + e.message); }
+  };
+  const clearCover = async (c) => {
+    if (!window.confirm('ลบรูปปกของตัวละครนี้?')) return;
+    const { error } = await supabase.from('game_characters').update({ cover_url: null }).eq('id', c.id);
+    if (error) notify('ลบรูปปกล้มเหลว');
+    else { await load(); notify('ลบรูปปกแล้ว'); }
   };
   const del = async (id) => { await supabase.from('game_characters').delete().eq('id', id); await load(); };
 
@@ -825,6 +832,24 @@ function CharactersTab({ notify }) {
                       {c._file ? 'เปลี่ยนแล้ว' : 'เลือกรูป'}
                     </FileButton>
                   </div>
+                  <div className="flex flex-col gap-1 col-span-2">รูปปก (พื้นหลัง Home)
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <FileButton accept="image/*" onSelect={file => editLocal(c.id, { _coverFile: file })} className="px-3 py-1.5 text-xs">
+                        {c._coverFile ? 'ปกใหม่แล้ว' : 'เลือกรูปปก'}
+                      </FileButton>
+                      {c.cover_url && !c._coverFile && (
+                        <button type="button" onClick={() => clearCover(c)} className="text-xs font-black text-red-500 underline">ลบปก</button>
+                      )}
+                    </div>
+                    {c._coverFile && (
+                        <span className="text-[10px] font-bold text-emerald-600 truncate">{c._coverFile.name}</span>
+                      )}
+                      {c.cover_url && !c._coverFile && (
+                        <div className="mt-1 rounded-lg overflow-hidden border border-slate-200 aspect-video max-h-20 bg-slate-900">
+                          <img src={c.cover_url} alt="cover" className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                  </div>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -841,6 +866,236 @@ function CharactersTab({ notify }) {
   );
 }
 
+// ============ TAB: Lucky Draw (คลังรางวัล + น้ำหนักการสุ่ม) ============
+const LUCKY_TIERS = [
+  { id: 'common', label: 'ธรรมดา' },
+  { id: 'rare', label: 'หายาก' },
+  { id: 'epic', label: 'หายากมาก' },
+];
+
+function LuckyDrawTab({ notify }) {
+  const [prizes, setPrizes] = useState([]);
+  const [itemOptions, setItemOptions] = useState([]); // shop_items kind='item'
+  const [cfg, setCfg] = useState({ lucky_common_weight: 65, lucky_rare_weight: 28, lucky_epic_weight: 7, lucky_epic_streak_days: 7 });
+  const [savingCfg, setSavingCfg] = useState(false);
+  const [form, setForm] = useState({ tier: 'common', reward_type: 'coin', coin_amount: 10, item_id: '', item_qty: 1, weight: 1, label: '' });
+
+  const load = useCallback(async () => {
+    const [{ data: pz }, { data: items }, { data: settings }] = await Promise.all([
+      supabase.from('lucky_draw_prizes').select('*, shop_items(name, icon_url, effect_type)').order('sort_order').order('id'),
+      supabase.from('shop_items').select('id, name, icon_url, effect_type').eq('kind', 'item').order('sort_order'),
+      supabase.from('game_settings').select('lucky_common_weight, lucky_rare_weight, lucky_epic_weight, lucky_epic_streak_days').eq('id', 1).maybeSingle(),
+    ]);
+    setPrizes(pz || []);
+    setItemOptions(items || []);
+    if (settings) setCfg({
+      lucky_common_weight: settings.lucky_common_weight ?? 65,
+      lucky_rare_weight: settings.lucky_rare_weight ?? 28,
+      lucky_epic_weight: settings.lucky_epic_weight ?? 7,
+      lucky_epic_streak_days: settings.lucky_epic_streak_days ?? 7,
+    });
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const saveCfg = async () => {
+    setSavingCfg(true);
+    const { error } = await supabase.from('game_settings').update({
+      lucky_common_weight: Math.max(0, +cfg.lucky_common_weight || 0),
+      lucky_rare_weight: Math.max(0, +cfg.lucky_rare_weight || 0),
+      lucky_epic_weight: Math.max(0, +cfg.lucky_epic_weight || 0),
+      lucky_epic_streak_days: Math.max(0, +cfg.lucky_epic_streak_days || 0),
+      updated_at: new Date().toISOString(),
+    }).eq('id', 1);
+    setSavingCfg(false);
+    notify(error ? `บันทึกล้มเหลว: ${error.message}` : 'บันทึกน้ำหนักการสุ่มแล้ว');
+  };
+
+  const add = async () => {
+    const payload = {
+      tier: form.tier,
+      reward_type: form.reward_type,
+      coin_amount: form.reward_type === 'coin' ? Math.max(0, +form.coin_amount || 0) : 0,
+      item_id: form.reward_type === 'item' ? (form.item_id ? +form.item_id : null) : null,
+      item_qty: Math.max(1, +form.item_qty || 1),
+      weight: Math.max(0, +form.weight || 0),
+      label: form.label?.trim() || null,
+      sort_order: prizes.length + 1,
+    };
+    if (form.reward_type === 'item' && !payload.item_id) { notify('เลือกไอเทมก่อน'); return; }
+    const { error } = await supabase.from('lucky_draw_prizes').insert(payload);
+    if (error) { notify(`เพิ่มล้มเหลว: ${error.message}`); return; }
+    setForm({ tier: 'common', reward_type: 'coin', coin_amount: 10, item_id: '', item_qty: 1, weight: 1, label: '' });
+    await load(); notify('เพิ่มรางวัลแล้ว');
+  };
+
+  const editLocal = (id, patch) => setPrizes(list => list.map(x => x.id === id ? { ...x, ...patch } : x));
+  const savePrize = async (p) => {
+    const { error } = await supabase.from('lucky_draw_prizes').update({
+      tier: p.tier,
+      reward_type: p.reward_type,
+      coin_amount: p.reward_type === 'coin' ? Math.max(0, +p.coin_amount || 0) : 0,
+      item_id: p.reward_type === 'item' ? (p.item_id ? +p.item_id : null) : null,
+      item_qty: Math.max(1, +p.item_qty || 1),
+      weight: Math.max(0, +p.weight || 0),
+      label: p.label?.trim() || null,
+    }).eq('id', p.id);
+    if (error) { notify(`บันทึกล้มเหลว: ${error.message}`); return; }
+    await load(); notify('บันทึกรางวัลแล้ว');
+  };
+  const toggleActive = async (p) => { await supabase.from('lucky_draw_prizes').update({ active: !p.active }).eq('id', p.id); await load(); };
+  const del = async (id) => { if (!window.confirm('ลบรางวัลนี้?')) return; await supabase.from('lucky_draw_prizes').delete().eq('id', id); await load(); };
+
+  const tierWeightTotal = (+cfg.lucky_common_weight || 0) + (+cfg.lucky_rare_weight || 0) + (+cfg.lucky_epic_weight || 0);
+  const pct = (w) => tierWeightTotal > 0 ? Math.round((w / tierWeightTotal) * 100) : 0;
+
+  return (
+    <div className="space-y-4">
+      <Section title="โอกาสสุ่มแต่ละระดับ + Streak">
+        <p className="text-[11px] font-bold text-slate-400 -mt-1">
+          ระบบจะสุ่มระดับความหายากตามน้ำหนักด้านล่างก่อน แล้วค่อยสุ่มของในระดับนั้น
+        </p>
+        <div className="grid grid-cols-3 gap-3 text-xs font-bold text-slate-500">
+          <label className="flex flex-col gap-1">⚪ ธรรมดา ({pct(+cfg.lucky_common_weight || 0)}%)
+            <input type="number" min="0" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+              value={cfg.lucky_common_weight} onChange={e => setCfg(c => ({ ...c, lucky_common_weight: e.target.value }))} />
+          </label>
+          <label className="flex flex-col gap-1">🔵 หายาก ({pct(+cfg.lucky_rare_weight || 0)}%)
+            <input type="number" min="0" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+              value={cfg.lucky_rare_weight} onChange={e => setCfg(c => ({ ...c, lucky_rare_weight: e.target.value }))} />
+          </label>
+          <label className="flex flex-col gap-1">🟣 หายากมาก ({pct(+cfg.lucky_epic_weight || 0)}%)
+            <input type="number" min="0" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+              value={cfg.lucky_epic_weight} onChange={e => setCfg(c => ({ ...c, lucky_epic_weight: e.target.value }))} />
+          </label>
+        </div>
+        <label className="flex flex-col gap-1 text-xs font-bold text-slate-500">
+          การันตีของหายากมากทุกๆ กี่วันที่รับติดต่อกัน (0 = ปิด)
+          <input type="number" min="0" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal w-32"
+            value={cfg.lucky_epic_streak_days} onChange={e => setCfg(c => ({ ...c, lucky_epic_streak_days: e.target.value }))} />
+        </label>
+        <button onClick={saveCfg} disabled={savingCfg} className="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl font-black text-sm uppercase w-full transition-colors active:scale-95 disabled:opacity-50">
+          {savingCfg ? 'กำลังบันทึก...' : 'บันทึกโอกาสสุ่ม'}
+        </button>
+      </Section>
+
+      <Section title="เพิ่มรางวัลในกล่องสุ่ม">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 text-xs font-bold text-slate-500">
+          <label className="flex flex-col gap-1">ระดับ
+            <select value={form.tier} onChange={e => setForm(f => ({ ...f, tier: e.target.value }))} className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal">
+              {LUCKY_TIERS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">ประเภทรางวัล
+            <select value={form.reward_type} onChange={e => setForm(f => ({ ...f, reward_type: e.target.value }))} className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal">
+              <option value="coin">COIN</option>
+              <option value="item">ไอเทมใช้แล้วหมด</option>
+            </select>
+          </label>
+          {form.reward_type === 'coin' ? (
+            <label className="flex flex-col gap-1">จำนวน COIN
+              <input type="number" min="0" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+                value={form.coin_amount} onChange={e => setForm(f => ({ ...f, coin_amount: e.target.value }))} />
+            </label>
+          ) : (
+            <>
+              <label className="flex flex-col gap-1">ไอเทม
+                <select value={form.item_id} onChange={e => setForm(f => ({ ...f, item_id: e.target.value }))} className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal">
+                  <option value="">— เลือก —</option>
+                  {itemOptions.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">จำนวน
+                <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+                  value={form.item_qty} onChange={e => setForm(f => ({ ...f, item_qty: e.target.value }))} />
+              </label>
+            </>
+          )}
+          <label className="flex flex-col gap-1">น้ำหนัก (ในระดับ)
+            <input type="number" min="0" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+              value={form.weight} onChange={e => setForm(f => ({ ...f, weight: e.target.value }))} />
+          </label>
+          <label className="flex flex-col gap-1 col-span-2 lg:col-span-3">ชื่อที่แสดง (ไม่บังคับ)
+            <input className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal" placeholder="เช่น 100 เหรียญ / ยาฟื้นพลัง x2"
+              value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} />
+          </label>
+        </div>
+        <button onClick={add} className="bg-fuchsia-500 hover:bg-fuchsia-600 text-white px-4 py-3 rounded-xl font-black text-sm uppercase w-full transition-colors active:scale-95">+ เพิ่มรางวัล</button>
+      </Section>
+
+      <Section title="รางวัลทั้งหมดในกล่อง">
+        <div className="space-y-4">
+          {LUCKY_TIERS.map(t => {
+            const list = prizes.filter(p => p.tier === t.id);
+            const wsum = list.filter(p => p.active).reduce((s, p) => s + (p.weight || 0), 0);
+            return (
+              <div key={t.id}>
+                <div className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                  {t.id === 'epic' ? '🟣' : t.id === 'rare' ? '🔵' : '⚪'} {t.label} <span className="text-slate-300">(น้ำหนักรวม {wsum})</span>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {list.map(p => (
+                    <div key={p.id} className={`flex flex-col gap-2 rounded-xl p-3 border-2 ${p.active ? 'bg-slate-50 border-slate-100' : 'bg-slate-200/60 border-slate-300'}`}>
+                      <div className="flex items-center gap-2">
+                        {p.reward_type === 'item'
+                          ? (p.shop_items?.icon_url ? <img src={p.shop_items.icon_url} alt="" className="w-9 h-9 object-contain shrink-0" /> : <span className="w-9 h-9 shrink-0 flex items-center justify-center text-2xl">{EFFECT_ICON[p.shop_items?.effect_type] || '🎁'}</span>)
+                          : <span className="w-9 h-9 shrink-0 flex items-center justify-center text-2xl">🪙</span>}
+                        <input className="flex-1 border-2 border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold" placeholder="ชื่อที่แสดง (ไม่บังคับ)"
+                          value={p.label || ''} onChange={e => editLocal(p.id, { label: e.target.value })} />
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-bold text-slate-500">
+                        <label className="flex flex-col gap-1">ระดับ
+                          <select value={p.tier} onChange={e => editLocal(p.id, { tier: e.target.value })} className="border-2 border-slate-200 rounded-lg px-2 py-1.5 text-sm font-normal">
+                            {LUCKY_TIERS.map(tt => <option key={tt.id} value={tt.id}>{tt.label}</option>)}
+                          </select>
+                        </label>
+                        <label className="flex flex-col gap-1">ประเภท
+                          <select value={p.reward_type} onChange={e => editLocal(p.id, { reward_type: e.target.value })} className="border-2 border-slate-200 rounded-lg px-2 py-1.5 text-sm font-normal">
+                            <option value="coin">COIN</option>
+                            <option value="item">ไอเทม</option>
+                          </select>
+                        </label>
+                        {p.reward_type === 'coin' ? (
+                          <label className="flex flex-col gap-1">COIN
+                            <input type="number" min="0" className="border-2 border-slate-200 rounded-lg px-2 py-1.5 text-sm font-normal"
+                              value={p.coin_amount ?? 0} onChange={e => editLocal(p.id, { coin_amount: +e.target.value })} />
+                          </label>
+                        ) : (
+                          <>
+                            <label className="flex flex-col gap-1">ไอเทม
+                              <select value={p.item_id ?? ''} onChange={e => editLocal(p.id, { item_id: e.target.value ? +e.target.value : null })} className="border-2 border-slate-200 rounded-lg px-2 py-1.5 text-sm font-normal">
+                                <option value="">— เลือก —</option>
+                                {itemOptions.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+                              </select>
+                            </label>
+                            <label className="flex flex-col gap-1">จำนวน
+                              <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-1.5 text-sm font-normal"
+                                value={p.item_qty ?? 1} onChange={e => editLocal(p.id, { item_qty: +e.target.value })} />
+                            </label>
+                          </>
+                        )}
+                        <label className="flex flex-col gap-1">น้ำหนัก
+                          <input type="number" min="0" className="border-2 border-slate-200 rounded-lg px-2 py-1.5 text-sm font-normal"
+                            value={p.weight ?? 0} onChange={e => editLocal(p.id, { weight: +e.target.value })} />
+                        </label>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => savePrize(p)} className="flex-1 bg-slate-700 hover:bg-slate-800 text-white px-3 py-2 rounded-lg text-sm font-black transition-colors active:scale-95">บันทึก</button>
+                        <button onClick={() => toggleActive(p)} className="bg-slate-600 hover:bg-slate-700 text-white px-3 py-2 rounded-lg text-sm font-black transition-colors active:scale-95">{p.active ? 'ปิด' : 'เปิด'}</button>
+                        <button onClick={() => del(p.id)} className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-black transition-colors active:scale-95">ลบ</button>
+                      </div>
+                    </div>
+                  ))}
+                  {list.length === 0 && <p className="text-slate-400 text-sm">ยังไม่มีรางวัลในระดับนี้</p>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Section>
+    </div>
+  );
+}
+
 const TABS = [
   { id: 'stages', label: 'ด่าน' },
   { id: 'exp', label: 'COIN' },
@@ -849,6 +1104,7 @@ const TABS = [
   { id: 'enemies', label: 'ศัตรู' },
   { id: 'sfx', label: 'เสียง' },
   { id: 'shop', label: 'ไอเทม' },
+  { id: 'lucky', label: 'Lucky Draw' },
 ];
 
 export default function AdminPanel({ setPage, isAdmin }) {
@@ -891,6 +1147,7 @@ export default function AdminPanel({ setPage, isAdmin }) {
       {tab === 'enemies' && <EnemiesTab notify={notify} />}
       {tab === 'sfx' && <SfxTab notify={notify} />}
       {tab === 'shop' && <ShopTab notify={notify} />}
+      {tab === 'lucky' && <LuckyDrawTab notify={notify} />}
     </div>
   );
 }

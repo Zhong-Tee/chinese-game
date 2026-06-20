@@ -11,6 +11,7 @@ import Statistics from './components/Statistics';
 import GamesHub from './components/GamesHub';
 import BattleGame from './components/BattleGame';
 import Shop from './components/Shop';
+import LuckyDraw from './components/LuckyDraw';
 import AdminPanel from './components/AdminPanel';
 import { saveWrongWord } from './utils/wrongWordsStorage';
 import { createFlashcardSessionTracker } from './utils/flashcardStatsStorage';
@@ -638,22 +639,27 @@ export default function App() {
     </div>
   );
 
-  if (page === 'login') return <Login setPage={setPage} setUser={setUser} fetchInitialData={fetchInitialData} fetchUserSettings={fetchUserSettings} checkAndAddDailyWords={checkAndAddDailyWords} setDailyNewWords={setDailyNewWords} />;
-  const shouldShowTopBar = page !== 'fc-play';
+  if (page === 'login') {
+    return (
+      <div className="app-shell app-shell--scroll bg-slate-100">
+        <Login setPage={setPage} setUser={setUser} fetchInitialData={fetchInitialData} fetchUserSettings={fetchUserSettings} checkAndAddDailyWords={checkAndAddDailyWords} setDailyNewWords={setDailyNewWords} />
+      </div>
+    );
+  }
+  const shouldShowTopBar = page !== 'fc-play' && page !== 'dashboard' && page !== 'lucky-draw';
+  const isHubPage = page === 'dashboard' || page === 'lucky-draw';
 
   return (
-    <div 
-      className="bg-slate-50 font-sans text-slate-800 pb-10 overflow-x-hidden select-none" 
-      style={{ 
-        minHeight: '100vh',
-        maxHeight: '100vh',
-        overflowY: 'auto',
-        WebkitOverflowScrolling: 'touch',
+    <div
+      className={`app-shell font-sans w-full select-none ${
+        isHubPage ? 'bg-[#0a0e1a] text-white' : 'bg-slate-50 text-slate-800 app-shell--scroll'
+      }`}
+      style={{
         touchAction: 'pan-y',
-        userSelect: 'none', 
-        WebkitUserSelect: 'none', 
-        MozUserSelect: 'none', 
-        msUserSelect: 'none' 
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        MozUserSelect: 'none',
+        msUserSelect: 'none',
       }}
       onDragStart={(e) => {
         if (e.target.tagName === 'IMG') {
@@ -720,7 +726,7 @@ export default function App() {
         </div>
       )}
 
-      <main className={`${page === 'admin' ? 'max-w-5xl' : 'max-w-md'} mx-auto p-4`} style={{ touchAction: 'pan-y' }}>
+      <main className={`app-main ${isHubPage ? 'app-main--hub' : 'overflow-y-auto'} ${page === 'admin' ? 'mx-auto max-w-5xl p-4' : isHubPage ? 'p-0' : 'mx-auto max-w-md p-4 pb-10'}`} style={{ touchAction: 'pan-y' }}>
         {page === 'dashboard' && <Dashboard setPage={setPage} user={user} gameState={gameState} isAdmin={isAdmin} refreshGameState={() => refreshGameState()} />}
         {page === 'fc-chars' && <Flashcards setPage={setPage} levelCounts={levelCounts} schedules={schedules} checkLevelAvailable={checkLevelAvailable} startLevelGame={startLevelGame} />}
         {page === 'fc-play' && currentCard && (
@@ -818,6 +824,16 @@ export default function App() {
             user={user}
             gameState={gameState}
             onStateChange={setGameState}
+          />
+        )}
+
+        {/* --- Lucky Draw: สุ่มรางวัลประจำวัน --- */}
+        {page === 'lucky-draw' && (
+          <LuckyDraw
+            setPage={setPage}
+            user={user}
+            gameState={gameState}
+            refreshGameState={() => refreshGameState()}
           />
         )}
 

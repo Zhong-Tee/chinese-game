@@ -98,16 +98,17 @@ export async function getGameSettings(force = false) {
   if (_gameSettingsCache && !force) return _gameSettingsCache;
   const { data, error } = await supabase
     .from('game_settings')
-    .select('player_max_hp, player_max_attack')
+    .select('player_max_hp, player_max_attack, hub_background_url')
     .eq('id', 1)
     .maybeSingle();
   if (error) {
     console.error('getGameSettings error:', error);
-    return { maxHpCap: DEFAULT_MAX_HP_CAP, maxAttackCap: DEFAULT_MAX_ATTACK_CAP };
+    return { maxHpCap: DEFAULT_MAX_HP_CAP, maxAttackCap: DEFAULT_MAX_ATTACK_CAP, hubBackgroundUrl: null };
   }
   const settings = {
     maxHpCap: data?.player_max_hp ?? DEFAULT_MAX_HP_CAP,
     maxAttackCap: data?.player_max_attack ?? DEFAULT_MAX_ATTACK_CAP,
+    hubBackgroundUrl: data?.hub_background_url ?? null,
   };
   _gameSettingsCache = settings;
   return settings;
@@ -127,6 +128,20 @@ export async function saveGameSettings({ maxHpCap, maxAttackCap }) {
     );
   if (error) {
     console.error('saveGameSettings error:', error);
+    return false;
+  }
+  clearGameSettingsCache();
+  return true;
+}
+
+// บันทึกรูปปกพื้นหลังหน้า Home (hub)
+export async function saveHubBackground(url) {
+  const { error } = await supabase
+    .from('game_settings')
+    .update({ hub_background_url: url || null, updated_at: new Date().toISOString() })
+    .eq('id', 1);
+  if (error) {
+    console.error('saveHubBackground error:', error);
     return false;
   }
   clearGameSettingsCache();
@@ -500,6 +515,70 @@ export async function saveStageProgress(userId, stageNo, { correct, total, medal
     return null;
   }
   return { correct: row.best_correct, total: row.best_total, medal: row.medal };
+}
+
+// ---------------------------------------------------------------------
+// Lucky Draw : สุ่มแจกรางวัลประจำวัน (สุ่มที่ฝั่ง server ผ่าน RPC)
+// ---------------------------------------------------------------------
+
+// เช็คสถานะ: วันนี้รับไปหรือยัง + จำนวนวันต่อเนื่อง (streak)
+export async function getLuckyDrawStatus() {
+  const { data, error } = await supabase.rpc('lucky_draw_status');
+  if (error) {
+    console.error('getLuckyDrawStatus error:', error);
+    return { ok: false, claimedToday: false, streak: 0, epicCycle: 7 };
+  }
+  return {
+    ok: !!data?.ok,
+    claimedToday: !!data?.claimed_today,
+    streak: data?.streak || 0,
+    epicCycle: data?.epic_cycle || 7,
+    serverDate: data?.server_date || null,
+  };
+}
+
+// กดรับรางวัล คืนผลรางวัลที่สุ่มได้ (หรือ already_claimed ถ้ารับไปแล้ว)
+export async function claimLuckyDraw() {
+  const { data, error } = await supabase.rpc('claim_lucky_draw');
+  if (error) {
+    console.error('claimLuckyDraw error:', error);
+    return { ok: false, error: error.message };
+  }
+  if (!data?.ok) {
+    return { ok: false, alreadyClaimed: !!data?.already_claimed, error: data?.error || null };
+  }
+  return {
+    ok: true,
+    tier: data.tier,
+    rewardType: data.reward_type,
+    coinAmount: data.coin_amount || 0,
+    itemId: data.item_id || null,
+    itemQty: data.item_qty || 0,
+    itemName: data.item_name || null,
+    itemIconUrl: data.item_icon_url || null,
+    itemEffectType: data.item_effect_type || null,
+    label: data.label || null,
+    streak: data.streak || 0,
+    guaranteed: !!data.guaranteed,
+    newCoin: data.new_coin ?? null,
+  };
+}
+
+// ดึงคลังรางวัลในกล่องสุ่ม (พร้อมข้อมูลไอเทมที่อ้างถึง)
+//   includeInactive = true ใช้ในหน้า Admin เพื่อเห็นของที่ปิดอยู่ด้วย
+export async function getLuckyPrizes(includeInactive = false) {
+  let query = supabase
+    .from('lucky_draw_prizes')
+    .select('*, shop_items(name, icon_url, effect_type)')
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true });
+  if (!includeInactive) query = query.eq('active', true);
+  const { data, error } = await query;
+  if (error) {
+    console.error('getLuckyPrizes error:', error);
+    return [];
+  }
+  return data || [];
 }
 
 // ---------------------------------------------------------------------

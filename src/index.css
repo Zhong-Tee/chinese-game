@@ -1,5 +1,52 @@
 @import "tailwindcss";
-/* เพิ่มต่อท้ายไฟล์ index.css */
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+/* App shell — เต็มจอทั้งกว้างและสูง */
+.app-shell {
+  width: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-shell--scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-main--hub {
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/* Flashcard 3D flip                                                   */
+/* ------------------------------------------------------------------ */
 .perspective-1000 {
   perspective: 1000px;
 }
@@ -14,4 +61,636 @@
 
 .rotate-y-180 {
   transform: rotateY(180deg);
+}
+
+/* ------------------------------------------------------------------ */
+/* Game Hub — ธีมหน้า Home แบบ mobile RPG                             */
+/* ------------------------------------------------------------------ */
+.hub-screen {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  color: #fff;
+  background: #0a0e1a;
+  overflow: hidden;
+}
+
+.hub-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 120% 80% at 50% 100%, rgba(255, 120, 40, 0.35) 0%, transparent 55%),
+    radial-gradient(ellipse 80% 50% at 20% 20%, rgba(120, 80, 255, 0.2) 0%, transparent 50%),
+    linear-gradient(180deg, #1a1040 0%, #2d1855 35%, #4a2060 55%, #c45a20 85%, #ff8c42 100%);
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.hub-bg-cover {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+.hub-bg-cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(10, 14, 26, 0.15) 0%, transparent 42%, rgba(10, 14, 26, 0.45) 100%),
+    linear-gradient(180deg, rgba(10, 14, 26, 0.3) 0%, transparent 38%, rgba(10, 14, 26, 0.35) 72%, rgba(10, 14, 26, 0.55) 100%);
+}
+
+.hub-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 40px,
+      rgba(255, 255, 255, 0.015) 40px,
+      rgba(255, 255, 255, 0.015) 41px
+    );
+  opacity: 0.6;
+}
+
+.hub-scanlines {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(transparent 50%, rgba(0, 0, 0, 0.03) 50%);
+  background-size: 100% 4px;
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+@keyframes hub-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes hub-glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.4), 0 0 40px rgba(168, 85, 247, 0.15); }
+  50% { box-shadow: 0 0 30px rgba(168, 85, 247, 0.7), 0 0 60px rgba(168, 85, 247, 0.3); }
+}
+
+@keyframes hub-shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.hub-char-float {
+  animation: hub-float 3.5s ease-in-out infinite;
+}
+
+.hub-lucky-glow {
+  animation: hub-glow-pulse 2.5s ease-in-out infinite;
+}
+
+.hub-btn-shine {
+  background-size: 200% auto;
+  animation: hub-shimmer 4s linear infinite;
+}
+
+.hub-glass {
+  background: rgba(15, 20, 40, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.hub-sidebar-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 52px;
+  padding: 6px 4px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 215, 100, 0.15) 0%, rgba(255, 180, 50, 0.05) 100%);
+  border: 1px solid rgba(255, 200, 80, 0.25);
+  transition: transform 0.15s, background 0.15s;
+}
+
+.hub-sidebar-btn:active {
+  transform: scale(0.92);
+}
+
+.hub-mode-btn {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+
+.hub-mode-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.hub-mode-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+/* Main hub layout — ปุ่มขวา, เว้นกลางให้รูปปก */
+.hub-main-stage {
+  pointer-events: none;
+}
+
+.hub-action-rail {
+  position: absolute;
+  top: 34%;
+  right: 0.625rem;
+  bottom: 0.5rem;
+  width: min(46vw, 11rem);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  z-index: 12;
+}
+
+.hub-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(3.2rem, 1fr));
+  gap: 0.5rem;
+  width: 100%;
+  max-height: 100%;
+}
+
+.hub-mode-btn-compact {
+  min-height: 3.2rem;
+  width: 100%;
+  height: 100%;
+}
+
+.hub-mode-icon {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.hub-mode-label {
+  font-size: 0.625rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+}
+
+.hub-lucky-anchor {
+  position: absolute;
+  left: 0.75rem;
+  right: calc(min(46vw, 11rem) + 1.25rem);
+  bottom: 0.5rem;
+  z-index: 11;
+  max-width: 16rem;
+}
+
+@media (min-width: 640px) {
+  .hub-action-rail {
+    top: 32%;
+    right: 1rem;
+    width: min(40vw, 13rem);
+  }
+
+  .hub-mode-grid {
+    gap: 0.5625rem;
+    grid-template-rows: repeat(3, minmax(3.5rem, 1fr));
+  }
+
+  .hub-mode-btn-compact {
+    min-height: 3.5rem;
+  }
+
+  .hub-mode-icon {
+    font-size: 1.55rem;
+  }
+
+  .hub-mode-label {
+    font-size: 0.6875rem;
+  }
+
+  .hub-lucky-anchor {
+    left: 1rem;
+    right: calc(min(40vw, 13rem) + 1.5rem);
+    max-width: 18rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .hub-action-rail {
+    top: 30%;
+    right: 1.25rem;
+    width: min(24vw, 16.5rem);
+  }
+
+  .hub-mode-grid {
+    gap: 0.625rem;
+    grid-template-rows: repeat(3, minmax(3.85rem, 1fr));
+  }
+
+  .hub-mode-btn-compact {
+    min-height: 3.85rem;
+  }
+
+  .hub-mode-icon {
+    font-size: 1.75rem;
+  }
+
+  .hub-mode-label {
+    font-size: 0.75rem;
+  }
+
+  .hub-lucky-anchor {
+    right: calc(min(24vw, 16.5rem) + 2rem);
+    max-width: 22rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .hub-action-rail {
+    width: 17.5rem;
+  }
+
+  .hub-mode-grid {
+    grid-template-rows: repeat(3, minmax(4.1rem, 1fr));
+  }
+
+  .hub-mode-btn-compact {
+    min-height: 4.1rem;
+  }
+
+  .hub-mode-icon {
+    font-size: 1.875rem;
+  }
+
+  .hub-lucky-anchor {
+    right: calc(17.5rem + 2rem);
+    max-width: 24rem;
+  }
+}
+
+.hub-xp-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+
+.hub-xp-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fbbf24, #f97316);
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+}
+
+.hub-resource-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.hub-bottom-nav {
+  background: linear-gradient(180deg, rgba(10, 14, 30, 0.95) 0%, rgba(5, 8, 20, 0.98) 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(16px);
+}
+
+.hub-fight-btn {
+  background: transparent;
+  border: none;
+  box-shadow: 0 0 20px rgba(255, 204, 0, 0.45), 0 8px 16px rgba(0, 0, 0, 0.45);
+}
+
+.hub-fight-btn:active {
+  transform: translateY(2px) scale(0.95);
+  box-shadow: 0 0 14px rgba(255, 204, 0, 0.35), 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.hub-lucky-card {
+  background: linear-gradient(135deg, rgba(88, 28, 135, 0.85) 0%, rgba(49, 16, 80, 0.9) 100%);
+  border: 2px solid rgba(192, 132, 252, 0.5);
+}
+
+/* Lucky Draw banner — premium style */
+.hub-lucky-premium {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 1rem;
+  padding: 0.85rem 1rem;
+  background: linear-gradient(135deg, rgba(55, 15, 95, 0.95) 0%, rgba(25, 8, 50, 0.98) 100%);
+  border: 1px solid rgba(216, 180, 254, 0.35);
+  box-shadow:
+    0 0 24px rgba(168, 85, 247, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.hub-lucky-premium::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, 0.08) 50%, transparent 60%);
+  background-size: 200% 100%;
+  animation: hub-shimmer 4s linear infinite;
+  pointer-events: none;
+}
+
+.hub-lucky-premium-pending {
+  animation: hub-glow-pulse 2.5s ease-in-out infinite;
+}
+
+/* Gift box — กล่องของขวัญ CSS ใช้ร่วมกันทุกหน้า/ทุกอุปกรณ์ */
+.gift-box {
+  position: relative;
+  flex-shrink: 0;
+  width: var(--gift-size);
+  height: var(--gift-size);
+}
+
+.gift-box--float {
+  animation: hub-float 3.5s ease-in-out infinite;
+}
+
+.gift-box--shake {
+  animation: ld-gift-shake 0.5s ease-in-out infinite;
+}
+
+@keyframes ld-gift-shake {
+  0%, 100% { transform: translateX(0) rotate(0); }
+  20% { transform: translateX(-5px) rotate(-4deg); }
+  40% { transform: translateX(5px) rotate(4deg); }
+  60% { transform: translateX(-4px) rotate(-3deg); }
+  80% { transform: translateX(4px) rotate(3deg); }
+}
+
+.gift-box--sm {
+  --gift-size: 52px;
+  --gift-body-w: 40px;
+  --gift-body-h: 28px;
+  --gift-lid-w: 46px;
+  --gift-lid-h: 14px;
+  --gift-lid-top: 14px;
+  --gift-ribbon-w: 6px;
+  --gift-ribbon-h-w: 46px;
+  --gift-ribbon-h-top: 22px;
+  --gift-bow-top: 0px;
+  --gift-bow-loop-w: 13px;
+  --gift-bow-loop-h: 10px;
+  --gift-bow-knot: 8px;
+}
+
+.gift-box--md {
+  --gift-size: 80px;
+  --gift-body-w: 62px;
+  --gift-body-h: 42px;
+  --gift-lid-w: 70px;
+  --gift-lid-h: 20px;
+  --gift-lid-top: 22px;
+  --gift-ribbon-w: 8px;
+  --gift-ribbon-h-w: 70px;
+  --gift-ribbon-h-top: 32px;
+  --gift-bow-top: 2px;
+  --gift-bow-loop-w: 18px;
+  --gift-bow-loop-h: 14px;
+  --gift-bow-knot: 11px;
+}
+
+.gift-box--lg {
+  --gift-size: 120px;
+  --gift-body-w: 92px;
+  --gift-body-h: 64px;
+  --gift-lid-w: 104px;
+  --gift-lid-h: 30px;
+  --gift-lid-top: 32px;
+  --gift-ribbon-w: 12px;
+  --gift-ribbon-h-w: 104px;
+  --gift-ribbon-h-top: 48px;
+  --gift-bow-top: 4px;
+  --gift-bow-loop-w: 26px;
+  --gift-bow-loop-h: 20px;
+  --gift-bow-knot: 16px;
+}
+
+.gift-box__body {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: var(--gift-body-w);
+  height: var(--gift-body-h);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #c084fc 0%, #7e22ce 55%, #6b21a8 100%);
+  box-shadow: 0 6px 16px rgba(126, 34, 206, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: filter 0.25s ease;
+}
+
+.gift-box__lid {
+  position: absolute;
+  top: var(--gift-lid-top);
+  left: 50%;
+  transform: translateX(-50%);
+  width: var(--gift-lid-w);
+  height: var(--gift-lid-h);
+  border-radius: 5px;
+  background: linear-gradient(180deg, #f3e8ff 0%, #c084fc 45%, #9333ea 100%);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  transform-origin: left center;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+  z-index: 2;
+}
+
+.gift-box__ribbon-v {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: var(--gift-ribbon-w);
+  height: var(--gift-body-h);
+  background: linear-gradient(180deg, #fde047 0%, #fbbf24 50%, #f59e0b 100%);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.gift-box__ribbon-h {
+  position: absolute;
+  top: var(--gift-ribbon-h-top);
+  left: 50%;
+  transform: translateX(-50%);
+  width: var(--gift-ribbon-h-w);
+  height: var(--gift-ribbon-w);
+  background: linear-gradient(90deg, #fde047 0%, #fbbf24 50%, #fde047 100%);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  z-index: 3;
+}
+
+.gift-box__bow {
+  position: absolute;
+  top: var(--gift-bow-top);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(var(--gift-bow-loop-w) * 2);
+  height: calc(var(--gift-bow-loop-h) + var(--gift-bow-knot));
+  z-index: 4;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+}
+
+.gift-box__bow-loop {
+  position: absolute;
+  top: 0;
+  width: var(--gift-bow-loop-w);
+  height: var(--gift-bow-loop-h);
+  border-radius: 50% 50% 0 50%;
+  background: linear-gradient(145deg, #fde68a 0%, #fbbf24 55%, #d97706 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.gift-box__bow-loop--left {
+  left: 0;
+  transform: rotate(-28deg);
+}
+
+.gift-box__bow-loop--right {
+  right: 0;
+  transform: rotate(28deg) scaleX(-1);
+}
+
+.gift-box__bow-knot {
+  position: absolute;
+  top: calc(var(--gift-bow-loop-h) - var(--gift-bow-knot) * 0.45);
+  left: 50%;
+  transform: translateX(-50%);
+  width: var(--gift-bow-knot);
+  height: var(--gift-bow-knot);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fde047, #f59e0b 70%, #b45309);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.gift-box--opened .gift-box__lid {
+  transform: translateX(-50%) rotate(-32deg) translateY(-6px);
+  opacity: 0.75;
+}
+
+.gift-box--opened .gift-box__body {
+  filter: brightness(0.88);
+}
+
+.gift-box--opened .gift-box__bow {
+  opacity: 0.85;
+}
+
+.hub-lucky-go {
+  flex-shrink: 0;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  color: #1e1b4b;
+  background: linear-gradient(180deg, #fde68a 0%, #f59e0b 100%);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.5);
+}
+
+.hub-stat-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.hub-stat-row span.highlight {
+  color: rgba(251, 191, 36, 0.9);
+}
+
+.hub-nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 3rem;
+  padding: 0.25rem 0.5rem;
+  transition: transform 0.12s;
+}
+
+.hub-nav-btn:active {
+  transform: scale(0.9);
+}
+
+.hub-nav-btn-label {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.hub-nav-btn-label.active {
+  color: #fbbf24;
+}
+
+.hub-nav-btn-label.inactive {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.hub-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ef4444;
+  border: 2px solid #fff;
+  font-size: 9px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* Lucky Draw page — dark theme */
+.ld-screen {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: #0a0e1a;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+
+.ld-screen .ld-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(168, 85, 247, 0.25) 0%, transparent 60%),
+    linear-gradient(180deg, #12082a 0%, #0a0e1a 100%);
+  pointer-events: none;
 }
