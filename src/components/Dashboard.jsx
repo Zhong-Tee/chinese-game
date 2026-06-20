@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
-import { getCharacters, setSelectedCharacter, getCharacterStats, getUserItems, setEquippedItems } from '../utils/gameStorage';
+import { getCharacters, setSelectedCharacter, getCharacterStats, getUserItems, setEquippedItems, MAX_ITEM_CARRY } from '../utils/gameStorage';
 
-const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️' };
+const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️', add_time: '⏳', bomb: '💣' };
 
 export default function Dashboard({ setPage, user, gameState = { exp: 0, coin: 0 }, isAdmin = false, refreshGameState }) {
   const [username, setUsername] = useState('');
@@ -96,7 +96,23 @@ export default function Dashboard({ setPage, user, gameState = { exp: 0, coin: 0
     if (ok && refreshGameState) await refreshGameState();
   };
 
-  const equippedIds = Array.isArray(gameState.equippedItemIds) ? gameState.equippedItemIds : [];
+  // id ที่บันทึกไว้ใน DB (อาจมี id ของไอเทมที่ใช้หมดแล้วค้างอยู่)
+  const rawEquippedIds = Array.isArray(gameState.equippedItemIds) ? gameState.equippedItemIds : [];
+  // กรองเหลือเฉพาะไอเทมที่ยังมีอยู่จริง (quantity > 0) เพื่อไม่ให้ช่องว่างจาก id ค้าง
+  // ไปดันไอเทมจริงไปอยู่ช่องหลัง และไม่ให้ระบบเข้าใจผิดว่าเต็ม 3 ช่อง
+  const ownedIdSet = new Set(ownedItems.map(o => o.item_id));
+  const equippedIds = rawEquippedIds.filter(id => ownedIdSet.has(id));
+
+  // self-heal: ถ้าพบ id ค้าง (ไม่มีของแล้ว) ให้เขียนค่าที่สะอาดกลับ DB อัตโนมัติ
+  useEffect(() => {
+    if (!charLoaded || !user?.id || savingEquip) return;
+    if (equippedIds.length !== rawEquippedIds.length) {
+      setEquippedItems(user.id, equippedIds).then(ok => {
+        if (ok && refreshGameState) refreshGameState();
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [charLoaded, ownedItems, gameState.equippedItemIds]);
 
   const toggleEquip = async (itemId) => {
     if (!user?.id || savingEquip) return;
@@ -157,9 +173,6 @@ export default function Dashboard({ setPage, user, gameState = { exp: 0, coin: 0
       <button onClick={() => setPage('library')} className="h-36 bg-purple-500 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
         <span className="text-3xl">📚</span> Library
       </button>
-      <button onClick={() => setPage('score')} className="h-36 bg-yellow-500 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
-        <span className="text-3xl">📊</span> Score
-      </button>
       <button onClick={() => setPage('statistics')} className="h-36 bg-amber-500 text-white rounded-[2rem] shadow-xl font-black flex flex-col items-center justify-center gap-1 italic tracking-tighter uppercase text-sm transform active:scale-95 transition-all">
         <span className="text-3xl">📈</span> Statistics
       </button>
@@ -212,11 +225,12 @@ export default function Dashboard({ setPage, user, gameState = { exp: 0, coin: 0
             <div className="overflow-y-auto">
             {/* ช่องอาวุธ 3 ช่อง — เลือกอาวุธที่จะนำไปต่อสู้ */}
             <div className="px-5 py-4 border-b border-slate-100">
-              <div className="text-xs font-black text-slate-500 uppercase mb-2">อาวุธที่จะนำไปต่อสู้ (สูงสุด 3 ช่อง)</div>
+              <div className="text-xs font-black text-slate-500 uppercase mb-2">อาวุธที่จะนำไปต่อสู้ (สูงสุด 3 ช่อง • พกได้ชนิดละ {MAX_ITEM_CARRY} ชิ้น)</div>
               <div className="grid grid-cols-3 gap-3 mb-3">
                 {[0, 1, 2].map(i => {
                   const id = equippedIds[i];
                   const it = ownedItems.find(o => o.item_id === id);
+                  const carry = it ? Math.min(it.quantity, MAX_ITEM_CARRY) : 0;
                   return (
                     <button
                       key={i}
@@ -230,6 +244,7 @@ export default function Dashboard({ setPage, user, gameState = { exp: 0, coin: 0
                             ? <img src={it.icon_url} alt={it.name} className="w-10 h-10 object-contain" />
                             : <span className="text-3xl">{EFFECT_ICON[it.effect_type] || '🎁'}</span>}
                           <span className="text-[9px] font-black text-slate-600 truncate w-full text-center px-1">{it.name}</span>
+                          <span className="absolute -bottom-1.5 -left-1.5 bg-orange-500 text-white min-w-[1.25rem] h-5 px-1 rounded-full text-[10px] font-black flex items-center justify-center shadow">x{carry}</span>
                           <span className="absolute -top-2 -right-2 bg-red-500 text-white w-5 h-5 rounded-full text-[11px] font-black flex items-center justify-center shadow">×</span>
                         </>
                       ) : (

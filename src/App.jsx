@@ -14,7 +14,7 @@ import Shop from './components/Shop';
 import AdminPanel from './components/AdminPanel';
 import { saveWrongWord } from './utils/wrongWordsStorage';
 import { createFlashcardSessionTracker } from './utils/flashcardStatsStorage';
-import { getGameState, addCurrency, getExpForLevel } from './utils/gameStorage';
+import { getGameState, addCurrency, getExpForLevel, getStageProgress, saveStageProgress } from './utils/gameStorage';
 
 export default function App() {
   const [page, setPage] = useState('login');
@@ -24,13 +24,21 @@ export default function App() {
   // Game economy
   const [gameState, setGameState] = useState({ exp: 0, coin: 0 });
   const [activeStage, setActiveStage] = useState(null); // ด่านที่กำลังเล่นใน GAMES
-  const [lastExpToast, setLastExpToast] = useState(null);
+  const [stageProgress, setStageProgress] = useState({}); // ความคืบหน้าด่าน (ปลดล็อก + เหรียญ)
+  const [lastCoinToast, setLastCoinToast] = useState(null);
 
   const refreshGameState = useCallback(async (userId) => {
     const id = userId || user?.id;
     if (!id) return;
     const state = await getGameState(id);
     setGameState(state);
+  }, [user?.id]);
+
+  const refreshStageProgress = useCallback(async (userId) => {
+    const id = userId || user?.id;
+    if (!id) return;
+    const prog = await getStageProgress(id);
+    setStageProgress(prog);
   }, [user?.id]);
   
   // Settings & Data
@@ -150,6 +158,7 @@ export default function App() {
     try {
       // โหลด EXP/Coin + สถานะ admin (ไม่บล็อกการโหลดคำศัพท์)
       getGameState(userId).then(setGameState).catch(() => {});
+      getStageProgress(userId).then(setStageProgress).catch(() => {});
       supabase.from('profiles').select('is_admin').eq('user_id', userId).maybeSingle()
         .then(({ data }) => setIsAdmin(!!data?.is_admin))
         .catch(() => {});
@@ -452,15 +461,15 @@ export default function App() {
       console.log('[moveToNextCard] UPDATE ok:', updatedRows);
     }
 
-    // ตอบถูกครบ → ได้รับ EXP ตาม LV ของคำนั้น (ข้อ 2.8)
+    // ตอบถูกครบ → ได้รับ Coin ตาม LV ของคำนั้น (ค่ามาจากตาราง exp_rewards)
     if (isCardPassed) {
-      const expLevel = activeLevel === 'mistakes' ? 1 : activeLevel;
-      const gained = await getExpForLevel(expLevel);
+      const rewardLevel = activeLevel === 'mistakes' ? 1 : activeLevel;
+      const gained = await getExpForLevel(rewardLevel);
       if (gained > 0) {
-        const updated = await addCurrency({ exp: gained });
+        const updated = await addCurrency({ coin: gained });
         if (updated) setGameState(updated);
-        setLastExpToast(`+${gained} EXP`);
-        setTimeout(() => setLastExpToast(null), 1500);
+        setLastCoinToast(`+${gained} Coin`);
+        setTimeout(() => setLastCoinToast(null), 1500);
       }
     }
 
@@ -697,10 +706,10 @@ export default function App() {
         </div>
       )}
 
-      {/* Toast: ได้รับ EXP */}
-      {lastExpToast && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[80] bg-emerald-500 text-white px-5 py-2 rounded-full shadow-xl font-black text-sm italic animate-bounce">
-          {lastExpToast}
+      {/* Toast: ได้รับ Coin */}
+      {lastCoinToast && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[80] bg-yellow-500 text-white px-5 py-2 rounded-full shadow-xl font-black text-sm italic animate-bounce">
+          {lastCoinToast}
         </div>
       )}
 
@@ -769,6 +778,7 @@ export default function App() {
             setPage={setPage}
             user={user}
             gameState={gameState}
+            stageProgress={stageProgress}
             onSelectStage={(stageNo) => { setActiveStage(stageNo); setPage('battle'); }}
           />
         )}
@@ -778,15 +788,25 @@ export default function App() {
           <BattleGame
             user={user}
             stageNo={activeStage}
+            alreadyWon={!!stageProgress[activeStage]?.medal}
             selectedCharacterId={gameState.selectedCharacterId}
             equippedItemIds={gameState.equippedItemIds}
             allMasterCards={allMasterCards}
-            onExit={() => { setPage('games'); refreshGameState(); }}
+            onExit={() => { setPage('games'); refreshGameState(); refreshStageProgress(); }}
             onReward={(reward) => {
               if (reward) setGameState(prev => ({ ...prev, ...reward }));
             }}
             onLevelUp={(updated) => {
               if (updated) setGameState(prev => ({ ...prev, ...updated }));
+            }}
+            onStageComplete={(stageNo, stats) => {
+              if (user?.id) {
+                saveStageProgress(user.id, stageNo, stats).then((saved) => {
+                  setStageProgress(prev => ({ ...prev, [stageNo]: saved || stats }));
+                });
+              } else {
+                setStageProgress(prev => ({ ...prev, [stageNo]: stats }));
+              }
             }}
           />
         )}

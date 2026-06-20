@@ -6,10 +6,14 @@ import {
   getUserItems,
   purchaseItem,
   getGameState,
+  getGameSettings,
+  getStepCost,
+  BASE_MAX_HP,
+  BASE_ATTACK,
 } from '../utils/gameStorage';
 import CoinIcon from './CoinIcon';
 
-const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️' };
+const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️', add_time: '⏳', bomb: '💣' };
 
 export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, onStateChange }) {
   const [items, setItems] = useState([]);
@@ -19,6 +23,7 @@ export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, o
   const [busyId, setBusyId] = useState(null);
   const [toast, setToast] = useState(null);
   const [qtySel, setQtySel] = useState({}); // item_id -> จำนวนที่จะซื้อ
+  const [caps, setCaps] = useState({ maxHpCap: Infinity, maxAttackCap: Infinity });
 
   const getQty = (id) => qtySel[id] || 1;
   const changeQty = (id, delta) => {
@@ -29,12 +34,14 @@ export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, o
   };
 
   const refresh = async () => {
-    const [shop, ups, inv] = await Promise.all([
+    const [shop, ups, inv, settings] = await Promise.all([
       getShopItems(),
       getUserUpgrades(user?.id),
       getUserItems(user?.id),
+      getGameSettings(true),
     ]);
     setItems(shop);
+    setCaps(settings);
     const upMap = {};
     ups.forEach(u => { upMap[u.item_id] = u.quantity || 1; });
     setOwnedUpgrades(upMap);
@@ -67,10 +74,12 @@ export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, o
     if (bought === count) {
       showToast(count > 1 ? `ซื้อสำเร็จ! x${bought}` : 'ซื้อสำเร็จ!');
     } else if (bought > 0) {
-      showToast(`ซื้อได้ ${bought}/${count} (เงินไม่พอ)`);
+      const why = failReason === 'maxed' ? 'ถึงเพดานแล้ว' : 'เงินไม่พอ';
+      showToast(`ซื้อได้ ${bought}/${count} (${why})`);
     } else {
       const msg = failReason === 'insufficient' ? 'เงินไม่พอ'
         : failReason === 'owned' ? 'มีอยู่แล้ว'
+        : failReason === 'maxed' ? 'อัปเกรดถึงเพดานแล้ว ไม่สามารถอัปเกรดเพิ่มได้'
         : 'ซื้อไม่สำเร็จ';
       showToast(msg);
     }
@@ -80,43 +89,77 @@ export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, o
   const upgrades = items.filter(i => i.kind === 'upgrade');
   const consumables = items.filter(i => i.kind === 'item');
 
+  // ค่าพลังรวมปัจจุบันจากอัปเกรดถาวรที่มี (ฐาน + ผลรวม) เพื่อเช็คว่าถึงเพดานหรือยัง
+  const curMaxHp = BASE_MAX_HP + upgrades.reduce(
+    (sum, it) => sum + (it.effect_type === 'add_hp' ? (it.effect_value || 0) * (ownedUpgrades[it.id] || 0) : 0), 0);
+  const curAttack = BASE_ATTACK + upgrades.reduce(
+    (sum, it) => sum + (it.effect_type === 'add_attack' ? (it.effect_value || 0) * (ownedUpgrades[it.id] || 0) : 0), 0);
+
+  // ราคารวมเมื่อซื้อ count ชิ้น (อัปเกรดคิดราคาขั้นบันไดต่อชิ้น)
+  const totalCost = (item, count) => {
+    if (item.kind === 'upgrade') {
+      const owned = ownedUpgrades[item.id] || 0;
+      let sum = 0;
+      for (let i = 0; i < count; i++) sum += getStepCost(item, owned + i);
+      return sum;
+    }
+    return (item.cost || 0) * count;
+  };
+
+  // อัปเกรดชิ้นนี้ถึงเพดานแล้วหรือยัง (ซื้อต่อไม่ได้)
+  const isMaxed = (item) => {
+    if (item.kind !== 'upgrade') return false;
+    if (item.effect_type === 'add_hp') return curMaxHp >= caps.maxHpCap;
+    if (item.effect_type === 'add_attack') return curAttack >= caps.maxAttackCap;
+    return false;
+  };
+
   const renderItem = (item) => {
     const isUpgrade = item.kind === 'upgrade';
     const ownedQty = isUpgrade ? (ownedUpgrades[item.id] || 0) : (inventory[item.id] || 0);
     const curIcon = item.currency === 'exp' ? '⭐' : <CoinIcon className="w-4 h-4" />;
     const buyCount = getQty(item.id);
     const ownedLabel = isUpgrade ? `ติดตั้งแล้ว x${ownedQty}` : `มีอยู่ x${ownedQty}`;
+    const maxed = isMaxed(item);
     return (
-      <div key={item.id} className="bg-white rounded-2xl border-2 border-slate-100 shadow-sm p-3 flex items-center gap-3">
+      <div key={item.id} className={`bg-white rounded-2xl border-2 shadow-sm p-3 flex items-center gap-3 ${maxed ? 'border-amber-200 bg-amber-50/40' : 'border-slate-100'}`}>
         <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center text-2xl shrink-0">
           {item.icon_url ? <img src={item.icon_url} alt={item.name} className="w-9 h-9 object-contain" /> : (EFFECT_ICON[item.effect_type] || '🎁')}
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-black text-slate-800 text-sm">{item.name}</div>
           <div className="text-[11px] text-slate-500">{item.description}</div>
-          {ownedQty > 0 && <div className="text-[10px] font-black text-emerald-500">{ownedLabel}</div>}
+          {maxed
+            ? <div className="text-[10px] font-black text-amber-500">⛔ ถึงเพดานสูงสุดแล้ว</div>
+            : ownedQty > 0 && <div className="text-[10px] font-black text-emerald-500">{ownedLabel}</div>}
         </div>
         <div className="shrink-0 flex flex-col items-end gap-1.5">
-          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
-            <button
-              onClick={() => changeQty(item.id, -1)}
-              disabled={busyId === item.id || buyCount <= 1}
-              className="w-6 h-6 rounded-md bg-white text-slate-700 font-black flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-40"
-            >−</button>
-            <span className="w-7 text-center font-black text-slate-800 text-sm">{buyCount}</span>
-            <button
-              onClick={() => changeQty(item.id, 1)}
-              disabled={busyId === item.id || buyCount >= 99}
-              className="w-6 h-6 rounded-md bg-white text-slate-700 font-black flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-40"
-            >+</button>
-          </div>
-          <button
-            onClick={() => handleBuy(item, buyCount)}
-            disabled={busyId === item.id}
-            className="px-3 py-1.5 rounded-xl font-black text-xs uppercase bg-orange-500 text-white active:scale-95 shadow inline-flex items-center gap-1 disabled:opacity-60"
-          >
-            {curIcon} {item.cost * buyCount}
-          </button>
+          {maxed ? (
+            <span className="px-3 py-1.5 rounded-xl font-black text-xs uppercase bg-amber-100 text-amber-600">เต็มแล้ว</span>
+          ) : (
+            <>
+              <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+                <button
+                  onClick={() => changeQty(item.id, -1)}
+                  disabled={busyId === item.id || buyCount <= 1}
+                  className="w-6 h-6 rounded-md bg-white text-slate-700 font-black flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-40"
+                >−</button>
+                <span className="w-7 text-center font-black text-slate-800 text-sm">{buyCount}</span>
+                <button
+                  onClick={() => changeQty(item.id, 1)}
+                  disabled={busyId === item.id || buyCount >= 99}
+                  className="w-6 h-6 rounded-md bg-white text-slate-700 font-black flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-40"
+                >+</button>
+              </div>
+              <button
+                onClick={() => handleBuy(item, buyCount)}
+                disabled={busyId === item.id}
+                className="px-3 py-1.5 rounded-xl font-black text-xs uppercase bg-orange-500 text-white active:scale-95 shadow inline-flex items-center gap-1 disabled:opacity-60"
+              >
+                {curIcon} {totalCost(item, buyCount)}
+              </button>
+            </>
+          )}
         </div>
       </div>
     );

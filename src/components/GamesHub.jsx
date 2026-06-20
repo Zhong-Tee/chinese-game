@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getStages } from '../utils/gameStorage';
+import { getStages, MEDAL_INFO } from '../utils/gameStorage';
 import CoinIcon from './CoinIcon';
 
 const STAGE_COLORS = [
@@ -10,7 +10,7 @@ const STAGE_COLORS = [
   'from-rose-400 to-rose-600',
 ];
 
-export default function GamesHub({ setPage, gameState = { exp: 0, coin: 0 }, onSelectStage }) {
+export default function GamesHub({ setPage, gameState = { exp: 0, coin: 0 }, onSelectStage, stageProgress = {} }) {
   const [stages, setStages] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -55,21 +55,44 @@ export default function GamesHub({ setPage, gameState = { exp: 0, coin: 0 }, onS
             const alignClass = idx % 2 === 0 ? 'self-start ml-6' : 'self-end mr-6';
             const wStart = stages.slice(0, idx).reduce((sum, x) => sum + (x.monster_count || 0) + 1, 0) + 1;
             const wEnd = wStart + (s.monster_count || 0);
+            const prog = stageProgress[s.stage_no] || null;
+            // ด่านแรกปลดล็อกเสมอ ; ด่านถัดไปปลดล็อกเมื่อเล่นด่านก่อนหน้าผ่านแล้ว
+            const prevStage = stages[idx - 1];
+            const unlocked = idx === 0 || (prevStage && !!stageProgress[prevStage.stage_no]);
+            const medalInfo = prog?.medal ? MEDAL_INFO[prog.medal] : null;
             return (
               <button
                 key={s.stage_no}
-                onClick={() => onSelectStage(s.stage_no)}
-                className={`relative z-10 w-40 h-32 rounded-[1.8rem] shadow-xl overflow-hidden text-white flex flex-col items-center justify-center gap-1 transform active:scale-95 transition-all border-4 border-white ${s.map_image_url ? '' : `bg-gradient-to-br ${color}`} ${alignClass}`}
+                onClick={() => unlocked && onSelectStage(s.stage_no)}
+                disabled={!unlocked}
+                className={`relative z-10 w-40 h-32 rounded-[1.8rem] shadow-xl overflow-hidden text-white flex flex-col items-center justify-center gap-1 transform transition-all border-4 border-white ${unlocked ? 'active:scale-95 cursor-pointer' : 'cursor-not-allowed'} ${s.map_image_url ? '' : `bg-gradient-to-br ${color}`} ${alignClass}`}
               >
                 {s.map_image_url && (
                   <>
-                    <img src={s.map_image_url} alt={s.title || `ด่าน ${s.stage_no}`} className="absolute inset-0 w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/30" />
+                    <img src={s.map_image_url} alt={s.title || `ด่าน ${s.stage_no}`} className={`absolute inset-0 w-full h-full object-cover ${unlocked ? '' : 'grayscale'}`} />
+                    <div className={`absolute inset-0 ${unlocked ? 'bg-black/30' : 'bg-black/65'}`} />
                   </>
                 )}
+                {!s.map_image_url && !unlocked && <div className="absolute inset-0 bg-black/55" />}
+
+                {/* เหรียญรางวัลของด่านที่เล่นผ่านแล้ว */}
+                {medalInfo && (
+                  <span className="absolute top-1.5 right-2 text-2xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]" title={`เหรียญ${medalInfo.label}`}>
+                    {medalInfo.emoji}
+                  </span>
+                )}
+
                 <span className="relative text-4xl font-black italic leading-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{s.stage_no}</span>
                 <span className="relative text-sm font-black uppercase italic drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{s.title || `ด่าน ${s.stage_no}`}</span>
-                <span className="relative text-[11px] font-bold bg-black/35 px-2 py-0.5 rounded-full">คำที่ {wStart}–{wEnd}</span>
+                {unlocked ? (
+                  prog ? (
+                    <span className="relative text-[11px] font-bold bg-emerald-500/80 px-2 py-0.5 rounded-full">ตอบถูก {prog.correct}/{prog.total} คำ</span>
+                  ) : (
+                    <span className="relative text-[11px] font-bold bg-black/35 px-2 py-0.5 rounded-full">คำที่ {wStart}–{wEnd}</span>
+                  )
+                ) : (
+                  <span className="relative text-2xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">🔒</span>
+                )}
               </button>
             );
           })}

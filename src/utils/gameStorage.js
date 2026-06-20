@@ -4,6 +4,13 @@ import { supabase } from '../supabaseClient';
 export const BASE_MAX_HP = 3;
 export const BASE_ATTACK = 1;
 
+// เพดานค่าพลังสูงสุดของผู้เล่น (ค่าตั้งต้น ใช้เมื่อยังไม่มีค่าใน DB)
+export const DEFAULT_MAX_HP_CAP = 15;
+export const DEFAULT_MAX_ATTACK_CAP = 5;
+
+// จำนวนสูงสุดของไอเทมแต่ละชนิดที่พกเข้าสู้ได้ต่อหนึ่งด่าน (แม้จะมีในคลังมากกว่านี้)
+export const MAX_ITEM_CARRY = 10;
+
 // ---------------------------------------------------------------------
 // EXP / Coin ต่อผู้ใช้
 // ---------------------------------------------------------------------
@@ -84,6 +91,49 @@ export async function spendCurrency(currency, amount) {
 }
 
 // ---------------------------------------------------------------------
+// Game settings : ค่าตั้งค่ารวมของเกม (เพดานพลังผู้เล่น ฯลฯ) — แถวเดียว id = 1
+// ---------------------------------------------------------------------
+let _gameSettingsCache = null;
+export async function getGameSettings(force = false) {
+  if (_gameSettingsCache && !force) return _gameSettingsCache;
+  const { data, error } = await supabase
+    .from('game_settings')
+    .select('player_max_hp, player_max_attack')
+    .eq('id', 1)
+    .maybeSingle();
+  if (error) {
+    console.error('getGameSettings error:', error);
+    return { maxHpCap: DEFAULT_MAX_HP_CAP, maxAttackCap: DEFAULT_MAX_ATTACK_CAP };
+  }
+  const settings = {
+    maxHpCap: data?.player_max_hp ?? DEFAULT_MAX_HP_CAP,
+    maxAttackCap: data?.player_max_attack ?? DEFAULT_MAX_ATTACK_CAP,
+  };
+  _gameSettingsCache = settings;
+  return settings;
+}
+
+export function clearGameSettingsCache() { _gameSettingsCache = null; }
+
+// บันทึกเพดานพลังผู้เล่น (จำกัดไม่ให้ต่ำกว่าค่าฐานของตัวละคร)
+export async function saveGameSettings({ maxHpCap, maxAttackCap }) {
+  const hp = Math.max(BASE_MAX_HP, Math.floor(maxHpCap));
+  const atk = Math.max(BASE_ATTACK, Math.floor(maxAttackCap));
+  const { error } = await supabase
+    .from('game_settings')
+    .upsert(
+      { id: 1, player_max_hp: hp, player_max_attack: atk, updated_at: new Date().toISOString() },
+      { onConflict: 'id' },
+    );
+  if (error) {
+    console.error('saveGameSettings error:', error);
+    return false;
+  }
+  clearGameSettingsCache();
+  return true;
+}
+
+// ---------------------------------------------------------------------
 // EXP reward config ต่อ LV
 // ---------------------------------------------------------------------
 let _expRewardsCache = null;
@@ -142,6 +192,9 @@ export async function createStage() {
       answer_time_sec: 10,
       answer_time_rearrange_sec: 12,
       answer_time_typing_sec: 15,
+      q_choice_count: 20,
+      q_typing_count: 5,
+      q_rearrange_count: 5,
       title: `ด่าน ${nextNo}`,
     })
     .select()
@@ -259,9 +312,12 @@ export async function getUserItems(userId) {
   return data || [];
 }
 
-// คำนวณค่าตัวละครจริง = ฐาน + ผลรวมจาก upgrade ที่ซื้อ
+// คำนวณค่าตัวละครจริง = ฐาน + ผลรวมจาก upgrade ที่ซื้อ (จำกัดไม่เกินเพดานที่ admin ตั้งไว้)
 export async function getCharacterStats(userId) {
-  const upgrades = await getUserUpgrades(userId);
+  const [upgrades, settings] = await Promise.all([
+    getUserUpgrades(userId),
+    getGameSettings(),
+  ]);
   let maxHp = BASE_MAX_HP;
   let attack = BASE_ATTACK;
   upgrades.forEach(u => {
@@ -271,35 +327,63 @@ export async function getCharacterStats(userId) {
     if (item.effect_type === 'add_hp') maxHp += item.effect_value * qty;
     if (item.effect_type === 'add_attack') attack += item.effect_value * qty;
   });
+  // จำกัดค่าสูงสุดตามเพดานที่ตั้งใน Admin > ตัวละคร
+  maxHp = Math.min(maxHp, settings.maxHpCap);
+  attack = Math.min(attack, settings.maxAttackCap);
   return { maxHp, attack };
+}
+
+// ราคาขั้นบันได: ราคาฐาน + ขั้น × (จำนวนที่ซื้อไปแล้ว)
+//   cost_step = 0 → ราคาคงที่ (ไอเทมสิ้นเปลืองทั่วไป)
+export function getStepCost(item, ownedQty = 0) {
+  const base = item?.cost || 0;
+  const step = item?.cost_step || 0;
+  return base + step * Math.max(0, ownedQty);
 }
 
 // ซื้อของจาก shop คืน { ok, reason }
 export async function purchaseItem(userId, item) {
   if (!userId || !item) return { ok: false, reason: 'invalid' };
 
-  const paid = await spendCurrency(item.currency, item.cost);
-  if (!paid) return { ok: false, reason: 'insufficient' };
+  // อัปเกรดถาวรที่เพิ่มค่าพลัง: กันไม่ให้ซื้อเกินเพดาน (ไม่ให้เสีย EXP ฟรี)
+  if (item.kind === 'upgrade' && (item.effect_type === 'add_hp' || item.effect_type === 'add_attack')) {
+    const [stats, settings] = await Promise.all([getCharacterStats(userId), getGameSettings()]);
+    if (item.effect_type === 'add_hp' && stats.maxHp >= settings.maxHpCap) {
+      return { ok: false, reason: 'maxed' };
+    }
+    if (item.effect_type === 'add_attack' && stats.attack >= settings.maxAttackCap) {
+      return { ok: false, reason: 'maxed' };
+    }
+  }
 
   if (item.kind === 'upgrade') {
-    // upgrade ถาวร: ซื้อซ้ำได้ สะสมจำนวน (quantity + 1)
+    // upgrade ถาวร: อ่านจำนวนที่ซื้อแล้วก่อน เพื่อคิดราคาขั้นบันได
     const { data: existing } = await supabase
       .from('user_upgrades')
       .select('quantity')
       .eq('user_id', userId)
       .eq('item_id', item.id)
       .maybeSingle();
-    const newQty = (existing?.quantity || 0) + 1;
+    const ownedQty = existing?.quantity || 0;
+    const price = getStepCost(item, ownedQty);
+
+    const paid = await spendCurrency(item.currency, price);
+    if (!paid) return { ok: false, reason: 'insufficient' };
+
+    const newQty = ownedQty + 1;
     const { error } = await supabase
       .from('user_upgrades')
       .upsert({ user_id: userId, item_id: item.id, quantity: newQty }, { onConflict: 'user_id,item_id' });
     if (error) {
       console.error('purchaseItem upgrade error:', error);
       // คืนเงินถ้า upsert ล้มเหลว
-      await addCurrency({ [item.currency]: item.cost });
+      await addCurrency({ [item.currency]: price });
       return { ok: false, reason: 'error' };
     }
   } else {
+    const paid = await spendCurrency(item.currency, item.cost);
+    if (!paid) return { ok: false, reason: 'insufficient' };
+
     // item ใช้แล้วหมด: upsert quantity + 1
     const { data: existing } = await supabase
       .from('user_items')
@@ -341,6 +425,81 @@ export async function consumeItem(userId, itemId) {
     return false;
   }
   return true;
+}
+
+// ---------------------------------------------------------------------
+// Stage progress : ปลดล็อกด่าน + คะแนน + เหรียญรางวัล
+// ---------------------------------------------------------------------
+export const MEDAL_RANK = { bronze: 1, silver: 2, gold: 3 };
+export const MEDAL_INFO = {
+  bronze: { label: 'ทองแดง', emoji: '🥉' },
+  silver: { label: 'เงิน', emoji: '🥈' },
+  gold: { label: 'ทอง', emoji: '🥇' },
+};
+
+// เหรียญตามความแม่นยำในการตอบ (correct/total)
+//   ทอง = ตอบถูกหมดไม่พลาดเลย, เงิน >= 80%, ทองแดง = ชนะแต่ต่ำกว่านั้น
+export function computeMedal(correct, total) {
+  if (!total || correct <= 0) return 'bronze';
+  const acc = correct / total;
+  if (acc >= 1) return 'gold';
+  if (acc >= 0.8) return 'silver';
+  return 'bronze';
+}
+
+// โหลดความคืบหน้าของผู้เล่นทุกด่าน คืน map { [stage_no]: { correct, total, medal } }
+export async function getStageProgress(userId) {
+  if (!userId) return {};
+  const { data, error } = await supabase
+    .from('user_stage_progress')
+    .select('stage_no, best_correct, best_total, medal')
+    .eq('user_id', userId);
+  if (error) {
+    console.error('getStageProgress error:', error);
+    return {};
+  }
+  const map = {};
+  (data || []).forEach(r => {
+    map[r.stage_no] = { correct: r.best_correct || 0, total: r.best_total || 0, medal: r.medal || null };
+  });
+  return map;
+}
+
+// บันทึกผลการเล่นชนะ เก็บเฉพาะผลที่ดีที่สุด (เหรียญสูงกว่า หรือเหรียญเท่ากันแต่ตอบถูกมากกว่า)
+export async function saveStageProgress(userId, stageNo, { correct, total, medal }) {
+  if (!userId) return null;
+  const { data: existing } = await supabase
+    .from('user_stage_progress')
+    .select('best_correct, best_total, medal')
+    .eq('user_id', userId)
+    .eq('stage_no', stageNo)
+    .maybeSingle();
+
+  const prevRank = existing?.medal ? (MEDAL_RANK[existing.medal] || 0) : -1;
+  const newRank = medal ? (MEDAL_RANK[medal] || 0) : 0;
+  const isBetter = !existing
+    || newRank > prevRank
+    || (newRank === prevRank && correct > (existing.best_correct || 0));
+
+  const row = isBetter
+    ? { user_id: userId, stage_no: stageNo, best_correct: correct, best_total: total, medal, updated_at: new Date().toISOString() }
+    : {
+        user_id: userId,
+        stage_no: stageNo,
+        best_correct: existing.best_correct,
+        best_total: existing.best_total,
+        medal: existing.medal,
+        updated_at: new Date().toISOString(),
+      };
+
+  const { error } = await supabase
+    .from('user_stage_progress')
+    .upsert(row, { onConflict: 'user_id,stage_no' });
+  if (error) {
+    console.error('saveStageProgress error:', error);
+    return null;
+  }
+  return { correct: row.best_correct, total: row.best_total, medal: row.medal };
 }
 
 // ---------------------------------------------------------------------

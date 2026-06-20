@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { supabase } from '../supabaseClient';
 import SpeakerButton from './SpeakerButton';
-import CoinIcon from './CoinIcon';
 import {
   getStageConfig,
   getStages,
@@ -12,21 +10,23 @@ import {
   addCurrency,
   levelUp,
   pickRandom,
+  computeMedal,
+  MEDAL_INFO,
+  MAX_ITEM_CARRY,
 } from '../utils/gameStorage';
 import { playBgm, stopBgm, playSfx } from '../utils/gameAudio';
 
-const COIN_PER_MONSTER = 5;
-const COIN_PER_BOSS = 25;
+const EXP_PER_MONSTER = 1;
+const EXP_PER_BOSS = 5;
+// EXP ที่จ่ายระหว่างเล่น (ต่อการฆ่า 1 ตัว) = 20% ของรางวัลเต็ม เพื่อกันการฟาร์มจากการเล่นไม่จบ/เล่นซ้ำ
+// ส่วนที่เหลืออีก 80% จะจ่ายเป็นโบนัสก้อนเดียวเมื่อ "เคลียร์ด่านสำเร็จครั้งแรก" เท่านั้น
+const DURING_RUN_EXP_RATE = 0.2;
 const FEEDBACK_MS = 1200;
-// ทุกๆ 6 โจทย์ (pinyin/แปลไทย) จะแทรกโจทย์เรียงคำ 1 โจทย์
-const REARRANGE_EVERY = 6;
-// ทุกๆ 4 โจทย์ (pinyin/แปลไทย) จะแทรกโจทย์ฝึกพิมพ์ 1 โจทย์
-const TYPING_EVERY = 4;
 
 const norm = (v) => String(v || '').trim();
 const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
 
-export default function BattleGame({ user, stageNo, selectedCharacterId = null, equippedItemIds = [], allMasterCards = [], onExit, onReward, onLevelUp }) {
+export default function BattleGame({ user, stageNo, alreadyWon = false, selectedCharacterId = null, equippedItemIds = [], allMasterCards = [], onExit, onReward, onLevelUp, onStageComplete }) {
   const [phase, setPhase] = useState('loading'); // loading | empty | playing | won | lost
   const [errorMsg, setErrorMsg] = useState('');
   const [loadKey, setLoadKey] = useState(0); // bump เพื่อเริ่มด่านใหม่
@@ -50,9 +50,10 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
 
   // words
   const wordsRef = useRef([]);
-  const wordIdxRef = useRef(0);
-  const qSinceRearrangeRef = useRef(0); // นับโจทย์ pinyin/แปลไทย ตั้งแต่เรียงคำครั้งล่าสุด
-  const qSinceTypingRef = useRef(0); // นับโจทย์ pinyin/แปลไทย ตั้งแต่ฝึกพิมพ์ครั้งล่าสุด
+  // ชุดโจทย์ของด่าน: แต่ละโจทย์ผูกกับ "การ์ด + ชนิดโจทย์" ที่ไม่ซ้ำกันภายในหนึ่งรอบ
+  // (จำนวนแต่ละชนิดเป็นไปตามที่ admin ตั้งไว้) เมื่อเล่นครบรอบจะสับใหม่เพื่อเลี่ยงซ้ำติดกัน
+  const questionDeckRef = useRef([]); // [{ card, type: 'word' | 'typing' | 'rearrange' }]
+  const questionPosRef = useRef(0);
 
   // round
   const [round, setRound] = useState(null); // {type, card, subStage, choices, correctAnswer}
@@ -74,8 +75,15 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
   // fx
   const [enemyHurt, setEnemyHurt] = useState(false);
   const [playerHurt, setPlayerHurt] = useState(false);
-  const [coinsEarned, setCoinsEarned] = useState(0);
+  const [expEarned, setExpEarned] = useState(0);
+  const runExpAccRef = useRef(0);     // ตัวสะสมเศษ EXP (จ่ายแบบลด 20% ระหว่างเล่น)
+  const runExpAwardedRef = useRef(0); // EXP รวมที่จ่ายไปแล้วในรอบนี้ (ไว้คิดโบนัสตอนเคลียร์ครั้งแรก)
   const [leveledUpTo, setLeveledUpTo] = useState(null); // เลเวลใหม่หลังฆ่า Boss
+
+  // คะแนน: นับจำนวนคำที่ตอบถูก/ทั้งหมด เพื่อคำนวณเหรียญรางวัล
+  const correctRef = useRef(0);
+  const wrongRef = useRef(0);
+  const [resultStats, setResultStats] = useState(null); // { correct, total, medal }
   const [screenFx, setScreenFx] = useState(null); // 'good' | 'bad' | 'block'
   const [fxKey, setFxKey] = useState(0);
 
@@ -95,11 +103,11 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
   // -------------------------------------------------------------------
   const buildChoices = useCallback((field, card) => {
     const correct = norm(card?.[field]);
-    if (!correct) return { choices: ['-', '-2', '-3', '-4'], correctAnswer: '' };
+    if (!correct) return { choices: ['-', '-2', '-3'], correctAnswer: '' };
     const pool = allMasterCards.map(c => norm(c?.[field])).filter(Boolean);
     const uniq = [...new Set(pool)].filter(t => t !== correct);
-    let distractors = shuffle(uniq).slice(0, 3);
-    while (distractors.length < 3) distractors.push(`ตัวเลือก ${distractors.length + 1}`);
+    let distractors = shuffle(uniq).slice(0, 2);
+    while (distractors.length < 2) distractors.push(`ตัวเลือก ${distractors.length + 1}`);
     return { choices: shuffle([correct, ...distractors]), correctAnswer: correct };
   }, [allMasterCards]);
 
@@ -135,52 +143,48 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
     setTimedOut(false);
     setTyped('');
 
-    // ครบ 4 โจทย์ (pinyin/แปลไทย) แล้ว → แทรกโจทย์ฝึกพิมพ์ 1 โจทย์
-    if (qSinceTypingRef.current >= TYPING_EVERY) {
-      // หา card ที่มีคำศัพท์ (vocabulary) — ฝึกพิมพ์เฉพาะคำศัพท์ ไม่ใช่ตัวอักษรเดี่ยว
-      for (let k = 0; k < words.length; k++) {
-        const idx = (wordIdxRef.current + k) % words.length;
-        const vocab = norm(words[idx]?.vocabulary);
-        if (vocab) {
-          wordIdxRef.current = idx + 1;
-          qSinceTypingRef.current = 0;
-          setTimer(typingTime);
-          setRound({ type: 'typing', card: words[idx], correct: vocab, correctAnswer: vocab });
-          return;
-        }
-      }
-      // ไม่พบ card ที่มีคำศัพท์ → เล่นแบบเลือกตอบต่อไป (คงตัวนับไว้)
+    // ดึงโจทย์ถัดไปจากชุดโจทย์ (การ์ด + ชนิด ไม่ซ้ำกันภายในหนึ่งรอบ)
+    let deck = questionDeckRef.current;
+    if (!deck.length) {
+      // fallback: ถ้าไม่มีชุดโจทย์ ให้ใช้โจทย์เลือกตอบจากคำแรก
+      const card = words[0];
+      setTimer(answerTime);
+      const c = buildChoices('pinyin', card);
+      setRound({ type: 'word', card, subStage: 'pinyin', choices: c.choices, correctAnswer: c.correctAnswer });
+      return;
+    }
+    // เล่นครบรอบแล้ว → สับลำดับใหม่ เริ่มรอบใหม่ (เลี่ยงโจทย์ซ้ำติดกัน)
+    if (questionPosRef.current >= deck.length) {
+      questionDeckRef.current = shuffle(deck);
+      questionPosRef.current = 0;
+      deck = questionDeckRef.current;
+    }
+    const item = deck[questionPosRef.current];
+    questionPosRef.current += 1;
+    const card = item.card;
+
+    // โจทย์ฝึกพิมพ์
+    if (item.type === 'typing' && norm(card?.vocabulary)) {
+      const vocab = norm(card.vocabulary);
+      setTimer(typingTime);
+      setRound({ type: 'typing', card, correct: vocab, correctAnswer: vocab });
+      return;
     }
 
-    // ครบ 6 โจทย์ (pinyin/แปลไทย) แล้ว → แทรกโจทย์เรียงคำ 1 โจทย์
-    if (qSinceRearrangeRef.current >= REARRANGE_EVERY) {
-      // หา card ที่เรียงประโยคได้ (มี token ตั้งแต่ 2 ขึ้นไป)
-      for (let k = 0; k < words.length; k++) {
-        const idx = (wordIdxRef.current + k) % words.length;
-        const toks = sentenceTokens(words[idx]);
-        if (toks.length >= 2) {
-          wordIdxRef.current = idx + 1;
-          qSinceRearrangeRef.current = 0;
-          setTimer(rearrangeTime);
-          const withIds = toks.map((t, i) => ({ id: `${i}-${t}`, text: t }));
-          setTokens(shuffle(withIds));
-          setAssembled([]);
-          setRound({ type: 'rearrange', card: words[idx], correct: toks.join(''), tokensOrder: toks });
-          return;
-        }
+    // โจทย์เรียงคำ
+    if (item.type === 'rearrange') {
+      const toks = sentenceTokens(card);
+      if (toks.length >= 2) {
+        setTimer(rearrangeTime);
+        const withIds = toks.map((t, i) => ({ id: `${i}-${t}`, text: t }));
+        setTokens(shuffle(withIds));
+        setAssembled([]);
+        setRound({ type: 'rearrange', card, correct: toks.join(''), tokensOrder: toks });
+        return;
       }
-      // ไม่พบ card ที่เรียงประโยคได้ → เล่นแบบเลือกตอบต่อไป (คงตัวนับไว้)
     }
 
-    // โจทย์แบบเลือกตอบ — เริ่มที่ pinyin
-    if (wordIdxRef.current >= words.length) {
-      wordsRef.current = shuffle(words);
-      wordIdxRef.current = 0;
-    }
-    const card = wordsRef.current[wordIdxRef.current];
-    wordIdxRef.current += 1;
-    qSinceRearrangeRef.current += 1; // นับโจทย์ pinyin
-    qSinceTypingRef.current += 1;
+    // โจทย์แบบเลือกตอบ — เริ่มที่ pinyin (เป็นค่าเริ่มต้น + fallback)
     setTimer(answerTime);
     const c = buildChoices('pinyin', card);
     setRound({ type: 'word', card, subStage: 'pinyin', choices: c.choices, correctAnswer: c.correctAnswer });
@@ -219,7 +223,8 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
         if (!alive) return;
         const invMapped = inv.map(r => ({
           item_id: r.item_id,
-          quantity: r.quantity,
+          // จำกัดจำนวนที่พกเข้าสู้ไม่เกิน MAX_ITEM_CARRY ต่อชนิด (แม้คลังจะมีมากกว่า)
+          quantity: Math.min(r.quantity, MAX_ITEM_CARRY),
           name: r.shop_items?.name,
           icon_url: r.shop_items?.icon_url,
           effect_type: r.shop_items?.effect_type,
@@ -254,20 +259,13 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
         setEnemyIdx(0);
         setEnemyHp(queue[0].hp);
 
-        // โหลดคำที่เลือกไว้ทั้งหมดจาก Select Study Words (ไม่กรองตาม level/wrong_count)
-        // แล้วแบ่งให้แต่ละด่านตามลำดับการ์ด: ด่านละ (monster_count + 1) คำ
-        const [{ data: progress }, allStages] = await Promise.all([
-          supabase
-            .from('user_progress')
-            .select('flashcard_id')
-            .eq('user_id', user.id),
-          getStages(),
-        ]);
+        // ใช้คำศัพท์ทั้งหมดจากคลัง (ตามที่ admin ตั้งค่าด่านไว้)
+        // โดยไม่สนใจว่าผู้เล่นเลือกคำใน Select Study Words ไว้หรือไม่
+        // แบ่งให้แต่ละด่านตามลำดับการ์ด: ด่านละ (monster_count + 1) คำ
+        const allStages = await getStages();
         if (!alive) return;
-        const selIds = new Set((progress || []).map(p => Number(p.flashcard_id)).filter(n => !isNaN(n)));
-        // เรียงการ์ดที่เลือกตามลำดับ id (เหมือนหน้า Select Study Words)
-        const orderedCards = allMasterCards
-          .filter(c => selIds.has(Number(c.id1 || c.id)))
+        // เรียงการ์ดทั้งหมดตามลำดับ id (เหมือนหน้า Select Study Words)
+        const orderedCards = [...allMasterCards]
           .sort((a, b) => Number(a.id1 || a.id) - Number(b.id1 || b.id));
 
         // จำนวนคำต่อด่าน = มอนสเตอร์ + บอส 1 ตัว
@@ -280,14 +278,45 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
         const thisCount = wordsInStage(cfg.stage);
         const cards = orderedCards.slice(offset, offset + thisCount);
         if (cards.length === 0) {
-          setErrorMsg('ยังไม่มีคำศัพท์สำหรับด่านนี้ — ไปเลือกคำเพิ่มที่ Select Study Words');
+          setErrorMsg('ยังไม่มีคำศัพท์สำหรับด่านนี้ — คลังคำศัพท์ไม่พอสำหรับด่านนี้');
           setPhase('empty');
           return;
         }
         wordsRef.current = shuffle(cards);
-        wordIdxRef.current = 0;
-        qSinceRearrangeRef.current = 0;
-        qSinceTypingRef.current = 0;
+
+        // สร้างชุดโจทย์ของด่าน: ผูกแต่ละโจทย์กับ "การ์ด" ที่ไม่ซ้ำกัน (เลี่ยงโจทย์ซ้ำ)
+        // จำนวนแต่ละชนิดเป็นไปตามที่ admin ตั้งไว้ และจำกัดด้วยจำนวนการ์ดที่เหมาะกับชนิดนั้น
+        const choiceN = Math.max(0, cfg.stage.q_choice_count ?? 20);
+        const typingN = Math.max(0, cfg.stage.q_typing_count ?? 5);
+        const rearrangeN = Math.max(0, cfg.stage.q_rearrange_count ?? 5);
+        const cardKey = (c) => Number(c.id1 || c.id);
+        const used = new Set();
+        // สุ่มหยิบการ์ด n ใบจาก pool ที่ยังไม่ถูกใช้ (กันการ์ดซ้ำข้ามชนิดโจทย์)
+        const takeCards = (pool, n) => {
+          const out = [];
+          for (const c of shuffle(pool.filter(c => !used.has(cardKey(c))))) {
+            if (out.length >= n) break;
+            out.push(c);
+            used.add(cardKey(c));
+          }
+          return out;
+        };
+        // ชนิดที่มีเงื่อนไข (เรียงคำ/พิมพ์) เลือกก่อน แล้วค่อยเลือกตอบจากที่เหลือ
+        const rearrEligible = cards.filter(c => sentenceTokens(c).length >= 2);
+        const typingEligible = cards.filter(c => norm(c?.vocabulary));
+        const deck = [
+          ...takeCards(rearrEligible, rearrangeN).map(card => ({ card, type: 'rearrange' })),
+          ...takeCards(typingEligible, typingN).map(card => ({ card, type: 'typing' })),
+          ...takeCards(cards, choiceN).map(card => ({ card, type: 'word' })),
+        ];
+        questionDeckRef.current = shuffle(deck);
+        questionPosRef.current = 0;
+
+        correctRef.current = 0;
+        wrongRef.current = 0;
+        runExpAccRef.current = 0;
+        runExpAwardedRef.current = 0;
+        setResultStats(null);
         setPhase('playing');
       } catch (e) {
         console.error('BattleGame load error:', e);
@@ -306,17 +335,39 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
   // -------------------------------------------------------------------
   // combat resolution
   // -------------------------------------------------------------------
-  const awardCoin = useCallback(async (amount) => {
-    setCoinsEarned(c => c + amount);
-    const updated = await addCurrency({ coin: amount });
+  // จ่าย EXP เข้ากระเป๋าจริง + อัปเดต UI (ใช้ร่วมกันทั้งรางวัลต่อตัวและโบนัสเคลียร์)
+  const addExpDirect = useCallback(async (amount) => {
+    if (amount <= 0) return;
+    runExpAwardedRef.current += amount;
+    setExpEarned(c => c + amount);
+    const updated = await addCurrency({ exp: amount });
     if (updated && onReward) onReward(updated);
   }, [onReward]);
+
+  // รางวัลต่อการฆ่า 1 ตัว: จ่ายแบบลดเหลือ 20% เสมอ (กันฟาร์มจากการเล่นไม่จบ/เล่นซ้ำ)
+  const awardExp = useCallback((baseAmount) => {
+    runExpAccRef.current += baseAmount * DURING_RUN_EXP_RATE;
+    const gain = Math.floor(runExpAccRef.current);
+    runExpAccRef.current -= gain;
+    if (gain > 0) addExpDirect(gain);
+  }, [addExpDirect]);
+
+  // โบนัสเคลียร์ครั้งแรก: เติม EXP ให้ครบ "เต็มจำนวนของด่าน" (เฉพาะด่านที่ยังไม่เคยชนะ)
+  const awardClearBonus = useCallback((queue) => {
+    if (alreadyWon) return;
+    const fullStageExp = (queue || []).reduce(
+      (s, e) => s + (e.isBoss ? EXP_PER_BOSS : EXP_PER_MONSTER), 0);
+    addExpDirect(Math.max(0, fullStageExp - runExpAwardedRef.current));
+  }, [alreadyWon, addExpDirect]);
 
   const resolveAnswer = useCallback((isCorrect, answerText = '') => {
     if (answered || phase !== 'playing') return;
     setAnswered(true);
     setLastCorrect(isCorrect);
     setSelected(answerText);
+
+    if (isCorrect) correctRef.current += 1;
+    else wrongRef.current += 1;
 
     if (isCorrect) {
       playSfx(sfxRef.current.player_attack || sfxRef.current.hit);
@@ -326,7 +377,7 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
       const newHp = enemyHp - attack;
       if (newHp <= 0) {
         const enemy = enemyQueue[enemyIdx];
-        awardCoin(enemy?.isBoss ? COIN_PER_BOSS : COIN_PER_MONSTER);
+        awardExp(enemy?.isBoss ? EXP_PER_BOSS : EXP_PER_MONSTER);
         // ฆ่า Boss สำเร็จ → Level UP
         if (enemy?.isBoss) {
           levelUp(1).then((updated) => {
@@ -340,6 +391,12 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
           playSfx(sfxRef.current.win);
           stopBgm();
           setEnemyHp(0);
+          awardClearBonus(enemyQueue); // เคลียร์สำเร็จครั้งแรก → เติม EXP ให้ครบเต็มด่าน
+          const correct = correctRef.current;
+          const total = correct + wrongRef.current;
+          const medal = computeMedal(correct, total);
+          setResultStats({ correct, total, medal });
+          if (onStageComplete) onStageComplete(stageNo, { correct, total, medal });
           setPhase('won');
         } else {
           // ให้หลอด HP ของศัตรูลดลงจนหมดก่อน แล้วค่อยสลับเป็นตัวถัดไป
@@ -373,7 +430,7 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
         setPlayerHp(np);
       }
     }
-  }, [answered, phase, attack, enemyHp, playerHp, enemyQueue, enemyIdx, shield, currentEnemy, awardCoin, triggerFx, onLevelUp]);
+  }, [answered, phase, attack, enemyHp, playerHp, enemyQueue, enemyIdx, shield, currentEnemy, awardExp, awardClearBonus, triggerFx, onLevelUp, onStageComplete, stageNo]);
 
   // จัดการเลือกคำตอบ (pinyin/meaning)
   const handleChoice = (choice) => {
@@ -450,8 +507,6 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
         setLastCorrect(false);
         setTimedOut(false);
         setTimer(answerTime);
-        qSinceRearrangeRef.current += 1; // นับโจทย์แปลไทย
-        qSinceTypingRef.current += 1;
         setRound(r => ({ ...r, subStage: 'meaning', choices: c.choices, correctAnswer: c.correctAnswer }));
       } else {
         setRound(null); // trigger nextRound
@@ -489,6 +544,50 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
     } else if (slot.effect_type === 'add_hp') {
       setMaxHp(m => m + (slot.effect_value || 1));
       setPlayerHp(p => p + (slot.effect_value || 1));
+    } else if (slot.effect_type === 'add_time') {
+      // นาฬิกาทราย: เพิ่มเวลาตอบของข้อปัจจุบัน
+      setTimer(t => t + (slot.effect_value || 5));
+    } else if (slot.effect_type === 'bomb') {
+      // ระเบิดพลัง: สร้างความเสียหายให้ศัตรูทันทีโดยไม่ต้องตอบ
+      const dmg = slot.effect_value || 5;
+      playSfx(sfxRef.current.player_attack || sfxRef.current.hit);
+      triggerFx('good');
+      setEnemyHurt(true);
+      setTimeout(() => setEnemyHurt(false), 350);
+      const newHp = enemyHp - dmg;
+      if (newHp <= 0) {
+        const enemy = enemyQueue[enemyIdx];
+        awardExp(enemy?.isBoss ? EXP_PER_BOSS : EXP_PER_MONSTER);
+        if (enemy?.isBoss) {
+          levelUp(1).then((updated) => {
+            if (updated) {
+              setLeveledUpTo(updated.level);
+              if (onLevelUp) onLevelUp(updated);
+            }
+          });
+        }
+        if (enemyIdx + 1 >= enemyQueue.length) {
+          playSfx(sfxRef.current.win);
+          stopBgm();
+          setEnemyHp(0);
+          awardClearBonus(enemyQueue); // เคลียร์สำเร็จครั้งแรก → เติม EXP ให้ครบเต็มด่าน
+          const correct = correctRef.current;
+          const total = correct + wrongRef.current;
+          const medal = computeMedal(correct, total);
+          setResultStats({ correct, total, medal });
+          if (onStageComplete) onStageComplete(stageNo, { correct, total, medal });
+          setPhase('won');
+        } else {
+          const ni = enemyIdx + 1;
+          setEnemyHp(0);
+          setTimeout(() => {
+            setEnemyIdx(ni);
+            setEnemyHp(enemyQueue[ni].hp);
+          }, 450);
+        }
+      } else {
+        setEnemyHp(newHp);
+      }
     }
     playSfx(sfxRef.current.item);
     await consumeItem(user.id, slot.item_id);
@@ -539,14 +638,27 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
               <div className="text-2xl font-black text-white italic">⭐ LV.{leveledUpTo}</div>
             </div>
           )}
-          <div className="bg-yellow-50/95 border-2 border-yellow-200 rounded-2xl px-6 py-4">
-            <div className="text-xs font-black text-yellow-500 uppercase">Coin ที่ได้รับ</div>
-            <div className="text-3xl font-black text-yellow-600 inline-flex items-center gap-2"><CoinIcon className="w-8 h-8" /> {coinsEarned}</div>
+          {won && resultStats && (
+            <div className="bg-white/95 border-2 border-slate-200 rounded-2xl px-6 py-4 flex flex-col items-center gap-2">
+              {resultStats.medal && (
+                <>
+                  <div className="text-6xl drop-shadow">{MEDAL_INFO[resultStats.medal].emoji}</div>
+                  <div className="text-lg font-black text-slate-700 italic">เหรียญ{MEDAL_INFO[resultStats.medal].label}</div>
+                </>
+              )}
+              <div className="text-sm font-black text-emerald-600">
+                ตอบถูก {resultStats.correct} / {resultStats.total} คำ
+              </div>
+            </div>
+          )}
+          <div className="bg-emerald-50/95 border-2 border-emerald-200 rounded-2xl px-6 py-4">
+            <div className="text-xs font-black text-emerald-500 uppercase">EXP ที่ได้รับ{alreadyWon ? ' (เล่นซ้ำ)' : ''}</div>
+            <div className="text-3xl font-black text-emerald-600 inline-flex items-center gap-2">⭐ {expEarned}</div>
           </div>
           <div className="flex flex-col gap-3 w-64 pt-1">
             {!won && (
               <button
-                onClick={() => { setRound(null); setShield(false); setCoinsEarned(0); setLeveledUpTo(null); setPhase('loading'); setLoadKey(k => k + 1); }}
+                onClick={() => { setRound(null); setShield(false); setExpEarned(0); runExpAccRef.current = 0; runExpAwardedRef.current = 0; setLeveledUpTo(null); setResultStats(null); setPhase('loading'); setLoadKey(k => k + 1); }}
                 className="bg-orange-500 text-white px-8 py-3 rounded-2xl font-black uppercase italic shadow-lg active:scale-95"
               >
                 เริ่มด่านใหม่
@@ -749,38 +861,40 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
                     <SpeakerButton text={round?.card?.vocabulary} label="ฟังเสียง" className="w-9 h-9" />
                   </div>
                 )}
-                {/* กล่องพิมพ์ + แป้นพิมพ์มือถือภาษาจีน */}
-                <input
-                  ref={typingInputRef}
-                  type="text"
-                  lang="zh-CN"
-                  inputMode="text"
-                  enterKeyHint="done"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  value={typed}
-                  disabled={answered}
-                  onChange={(e) => setTyped(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitTyping(); } }}
-                  placeholder="พิมพ์คำศัพท์ภาษาจีน"
-                  className={`w-full rounded-2xl border-2 border-b-4 px-4 py-3 text-3xl font-black text-center outline-none mb-2 transition-colors ${answered ? (lastCorrect ? 'bg-emerald-500/25 border-emerald-400 text-white' : 'bg-red-500/25 border-red-400 text-white') : 'bg-white/95 border-slate-400 text-slate-800 placeholder:text-base placeholder:font-bold placeholder:text-slate-400'}`}
-                />
+                {/* กล่องพิมพ์ + ปุ่มส่งคำตอบด้านขวา (สัดส่วน 4:1) */}
+                <div className="flex items-stretch gap-2 mb-2">
+                  <input
+                    ref={typingInputRef}
+                    type="text"
+                    lang="zh-CN"
+                    inputMode="text"
+                    enterKeyHint="done"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    value={typed}
+                    disabled={answered}
+                    onChange={(e) => setTyped(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitTyping(); } }}
+                    placeholder="พิมพ์คำศัพท์ภาษาจีน"
+                    className={`flex-[4] min-w-0 rounded-2xl border-2 border-b-4 px-4 py-3 text-3xl font-black text-center outline-none transition-colors ${answered ? (lastCorrect ? 'bg-emerald-500/25 border-emerald-400 text-white' : 'bg-red-500/25 border-red-400 text-white') : 'bg-white/95 border-slate-400 text-slate-800 placeholder:text-base placeholder:font-bold placeholder:text-slate-400'}`}
+                  />
+                  {!answered && (
+                    <button
+                      onClick={submitTyping}
+                      disabled={!typed.trim()}
+                      className="flex-1 min-w-0 flex items-center justify-center px-1 rounded-2xl bg-gradient-to-b from-emerald-400 to-emerald-600 border-2 border-b-4 border-emerald-800 text-white font-black active:translate-y-0.5 disabled:opacity-40"
+                      aria-label="ส่งคำตอบ"
+                    >
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    </button>
+                  )}
+                </div>
                 {answered && !lastCorrect && (
                   <div className="text-center text-emerald-200 font-black text-2xl mb-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
                     เฉลย: {round?.correctAnswer}
                   </div>
-                )}
-                {!answered && (
-                  <button
-                    onClick={submitTyping}
-                    disabled={!typed.trim()}
-                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-gradient-to-b from-emerald-400 to-emerald-600 border-2 border-b-4 border-emerald-800 text-white font-black text-lg active:translate-y-0.5 disabled:opacity-40"
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    ส่งคำตอบ
-                  </button>
                 )}
               </>
             ) : (
@@ -846,7 +960,7 @@ export default function BattleGame({ user, stageNo, selectedCharacterId = null, 
                     <>
                       {slot.icon_url
                         ? <img src={slot.icon_url} alt={slot.name} className="w-7 h-7 object-contain" />
-                        : <span className="text-2xl">{slot.effect_type === 'heal' ? '❤️' : slot.effect_type === 'shield' ? '🛡️' : '⚡'}</span>}
+                        : <span className="text-2xl">{slot.effect_type === 'heal' ? '❤️' : slot.effect_type === 'shield' ? '🛡️' : slot.effect_type === 'add_time' ? '⏳' : slot.effect_type === 'bomb' ? '💣' : '⚡'}</span>}
                       <span className="text-[9px] font-black text-slate-500">x{slot.quantity}</span>
                     </>
                   ) : (

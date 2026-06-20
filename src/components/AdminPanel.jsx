@@ -1,11 +1,19 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
-import { clearExpRewardsCache, createStage, deleteStage } from '../utils/gameStorage';
+import {
+  clearExpRewardsCache,
+  createStage,
+  deleteStage,
+  getGameSettings,
+  saveGameSettings,
+  BASE_MAX_HP,
+  BASE_ATTACK,
+} from '../utils/gameStorage';
 
 const BUCKET = 'game-assets';
 // อีโมจิ fallback ตาม effect ให้ตรงกับที่แสดงในร้าน/ตอนต่อสู้จริง
-const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️' };
+const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️', add_time: '⏳', bomb: '💣' };
 const SFX_KEYS = [
   { key: 'player_attack', label: 'ผู้เล่นโจมตี' },
   { key: 'enemy_attack', label: 'ศัตรูโจมตี' },
@@ -50,6 +58,16 @@ const StagePicker = ({ value, onChange }) => {
   );
 };
 
+// ไอคอนถังขยะ (ใช้กับปุ่มลบ)
+const TrashIcon = ({ className = 'w-4 h-4' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    <path d="M10 11v6M14 11v6" />
+    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+  </svg>
+);
+
 // ปุ่มเลือกไฟล์ (ซ่อน input file ไว้ข้างใน label ที่ทำเป็นปุ่มกด)
 const FileButton = ({ accept, onSelect, children, disabled, className = '' }) => (
   <label className={`inline-flex items-center justify-center gap-2 cursor-pointer bg-sky-500 hover:bg-sky-600 text-white px-5 py-2.5 rounded-xl font-black text-sm uppercase shadow-md transition-colors active:scale-95 ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`}>
@@ -60,20 +78,15 @@ const FileButton = ({ accept, onSelect, children, disabled, className = '' }) =>
   </label>
 );
 
-// ============ TAB: ด่าน + EXP ============
+// ============ TAB: ด่าน (รายการ + แก้ไขรายละเอียด) ============
 function StagesTab({ notify }) {
   const [stages, setStages] = useState([]);
-  const [exp, setExp] = useState({});
+  const [selectedNo, setSelectedNo] = useState(null); // ด่านที่กำลังแก้ไข (null = แสดงรายการ)
   const [uploadingStage, setUploadingStage] = useState(null);
 
   const load = useCallback(async () => {
-    const [s, e] = await Promise.all([
-      supabase.from('game_stages').select('*').order('stage_no'),
-      supabase.from('exp_rewards').select('*').order('flashcard_level'),
-    ]);
-    setStages(s.data || []);
-    const map = {}; (e.data || []).forEach(r => { map[r.flashcard_level] = r.exp_amount; });
-    setExp(map);
+    const { data } = await supabase.from('game_stages').select('*').order('stage_no');
+    setStages(data || []);
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -83,20 +96,24 @@ function StagesTab({ notify }) {
       answer_time_rearrange_sec: st.answer_time_rearrange_sec,
       answer_time_typing_sec: st.answer_time_typing_sec,
       monster_count: st.monster_count, title: st.title,
+      q_choice_count: st.q_choice_count ?? 20,
+      q_typing_count: st.q_typing_count ?? 5,
+      q_rearrange_count: st.q_rearrange_count ?? 5,
     }).eq('stage_no', st.stage_no);
-    notify(error ? 'บันทึกล้มเหลว' : 'บันทึกด่านแล้ว');
+    if (error) console.error('saveStage error:', error);
+    notify(error ? `บันทึกล้มเหลว: ${error.message || error.code || 'unknown'}` : 'บันทึกด่านแล้ว');
   };
 
   const addStage = async () => {
     const created = await createStage();
-    if (created) { await load(); notify(`เพิ่มด่าน ${created.stage_no} แล้ว`); }
+    if (created) { await load(); setSelectedNo(created.stage_no); notify(`เพิ่มด่าน ${created.stage_no} แล้ว`); }
     else notify('เพิ่มด่านล้มเหลว');
   };
 
   const removeStage = async (stageNo) => {
     if (!window.confirm(`ลบด่าน ${stageNo}? (รูป/เพลง/ศัตรูของด่านนี้จะถูกลบด้วย)`)) return;
     const ok = await deleteStage(stageNo);
-    if (ok) { await load(); notify(`ลบด่าน ${stageNo} แล้ว`); }
+    if (ok) { await load(); setSelectedNo(null); notify(`ลบด่าน ${stageNo} แล้ว`); }
     else notify('ลบด่านล้มเหลว');
   };
 
@@ -117,99 +134,181 @@ function StagesTab({ notify }) {
   };
 
   const removeStageImage = async (stageNo) => {
+    if (!window.confirm('ลบรูปด่านนี้?')) return;
     const { error } = await supabase.from('game_stages').update({ map_image_url: null }).eq('stage_no', stageNo);
     if (!error) setStages(s => s.map(x => x.stage_no === stageNo ? { ...x, map_image_url: null } : x));
     notify(error ? 'ลบล้มเหลว' : 'ลบรูปด่านแล้ว');
   };
 
+  const selectedIdx = stages.findIndex(s => s.stage_no === selectedNo);
+  const st = selectedIdx >= 0 ? stages[selectedIdx] : null;
+
+  // ---- มุมมองรายการด่าน ----
+  if (selectedNo == null || !st) {
+    return (
+      <div className="space-y-4">
+        <Section title="ตั้งค่าด่าน">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-400">{stages.length} ด่าน</span>
+            <button onClick={addStage} className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl font-black text-sm uppercase transition-colors active:scale-95">+ เพิ่มด่าน</button>
+          </div>
+          <div className="space-y-2">
+            {stages.length === 0 ? (
+              <div className="text-center text-slate-400 py-8 text-sm font-bold">ยังไม่มีด่าน — กด “เพิ่มด่าน” เพื่อสร้าง</div>
+            ) : stages.map((s, idx) => {
+              const start = wordStart(idx);
+              const end = start + (s.monster_count || 0);
+              return (
+                <button
+                  key={s.stage_no}
+                  onClick={() => setSelectedNo(s.stage_no)}
+                  className="group w-full flex items-center gap-3 bg-white border-2 border-b-4 border-slate-200 rounded-2xl p-3 text-left shadow-sm hover:border-orange-400 hover:bg-orange-50/50 hover:shadow-md transition-all active:translate-y-0.5 active:border-b-2"
+                >
+                  <div className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-orange-500 text-white text-lg font-black shadow">{s.stage_no}</div>
+                  <div className="w-14 h-14 rounded-xl bg-slate-100 border-2 border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+                    {s.map_image_url
+                      ? <img src={s.map_image_url} alt="stage" className="w-full h-full object-cover" />
+                      : <span className="text-2xl text-slate-300">🗺️</span>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-black text-slate-700 text-sm truncate group-hover:text-orange-600 transition-colors">{s.title || `ด่าน ${s.stage_no}`}</div>
+                    <div className="text-[11px] font-bold text-emerald-600">คำที่ {start}–{end} ({(s.monster_count || 0) + 1} คำ)</div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-[10px]">
+                      {[
+                        ['มอนสเตอร์', s.monster_count ?? 0],
+                        ['เวลาเลือกตอบ', `${s.answer_time_sec ?? 0} วิ`],
+                        ['เวลาเรียงประโยค', `${s.answer_time_rearrange_sec ?? 12} วิ`],
+                        ['เวลาพิมพ์', `${s.answer_time_typing_sec ?? 15} วิ`],
+                        ['โจทย์ตัวเลือก', s.q_choice_count ?? 20],
+                        ['โจทย์พิมพ์', s.q_typing_count ?? 5],
+                        ['โจทย์เรียงคำ', s.q_rearrange_count ?? 5],
+                      ].map(([label, val]) => (
+                        <span key={label} className="whitespace-nowrap">
+                          <span className="font-bold text-slate-400">{label} </span>
+                          <span className="font-black text-slate-600">{val}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <span className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 text-xl leading-none group-hover:bg-orange-500 group-hover:text-white transition-colors">›</span>
+                </button>
+              );
+            })}
+          </div>
+        </Section>
+      </div>
+    );
+  }
+
+  // ---- มุมมองแก้ไขรายละเอียดด่าน ----
+  const idx = selectedIdx;
+  const start = wordStart(idx);
+  const end = start + (st.monster_count || 0);
+  return (
+    <div className="space-y-4">
+      <Section title={`ตั้งค่าด่าน ${st.stage_no}`}>
+        <div className="flex items-center justify-between">
+          <button onClick={() => setSelectedNo(null)} className="inline-flex items-center gap-1.5 bg-white border-2 border-b-4 border-orange-300 text-orange-600 px-4 py-2 rounded-xl font-black text-xs uppercase shadow-sm hover:bg-orange-50 hover:border-orange-400 transition-all active:translate-y-0.5 active:border-b-2">← รายการด่าน</button>
+          <button onClick={() => removeStage(st.stage_no)} title="ลบด่าน" aria-label="ลบด่าน" className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors active:scale-95">
+            <TrashIcon className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="text-[11px] font-bold text-emerald-600 bg-emerald-50 rounded-lg px-2 py-1">
+          คำที่ {start}–{end} ({(st.monster_count || 0) + 1} คำ)
+        </div>
+
+        {/* รูปด่าน (map icon) */}
+        <div className="flex items-center gap-3">
+          <div className="w-16 h-16 rounded-xl bg-slate-100 border-2 border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+            {st.map_image_url
+              ? <img src={st.map_image_url} alt="stage" className="w-full h-full object-cover" />
+              : <span className="text-2xl text-slate-300">🗺️</span>}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <FileButton accept="image/*" onSelect={file => uploadStageImage(st.stage_no, file)} disabled={uploadingStage === st.stage_no} className="px-3 py-1.5 text-xs">
+              {uploadingStage === st.stage_no ? '...' : 'เปลี่ยนรูปด่าน'}
+            </FileButton>
+            {st.map_image_url && (
+              <button onClick={() => removeStageImage(st.stage_no)} title="ลบรูป" aria-label="ลบรูป" className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors active:scale-95 text-xs font-black">
+                <TrashIcon className="w-4 h-4" /> ลบรูป
+              </button>
+            )}
+          </div>
+        </div>
+
+        <input className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="ชื่อด่าน"
+          value={st.title || ''} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, title: e.target.value } : x))} />
+        <div className="grid grid-cols-2 gap-2 text-xs font-bold text-slate-500">
+          <label className="flex flex-col gap-1">มอนสเตอร์
+            <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+              value={st.monster_count} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, monster_count: +e.target.value } : x))} />
+          </label>
+          <label className="flex flex-col gap-1">เวลาเลือกตอบ (วิ)
+            <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+              value={st.answer_time_sec} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, answer_time_sec: +e.target.value } : x))} />
+          </label>
+          <label className="flex flex-col gap-1">เวลาเรียงประโยค (วิ)
+            <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+              value={st.answer_time_rearrange_sec ?? 12} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, answer_time_rearrange_sec: +e.target.value } : x))} />
+          </label>
+          <label className="flex flex-col gap-1">เวลาพิมพ์ (วิ)
+            <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+              value={st.answer_time_typing_sec ?? 15} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, answer_time_typing_sec: +e.target.value } : x))} />
+          </label>
+        </div>
+
+        {/* จำนวนโจทย์แต่ละประเภท (สัดส่วนที่จะสุ่มออกมาต่อรอบ) */}
+        <div className="text-[11px] font-black text-slate-500 pt-1">จำนวนโจทย์แต่ละประเภท</div>
+        <div className="grid grid-cols-3 gap-2 text-xs font-bold text-slate-500">
+          <label className="flex flex-col gap-1">ตัวเลือก
+            <input type="number" min="0" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+              value={st.q_choice_count ?? 20} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, q_choice_count: +e.target.value } : x))} />
+          </label>
+          <label className="flex flex-col gap-1">พิมพ์
+            <input type="number" min="0" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+              value={st.q_typing_count ?? 5} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, q_typing_count: +e.target.value } : x))} />
+          </label>
+          <label className="flex flex-col gap-1">เรียงคำ
+            <input type="number" min="0" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
+              value={st.q_rearrange_count ?? 5} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, q_rearrange_count: +e.target.value } : x))} />
+          </label>
+        </div>
+        <button onClick={() => saveStage(st)} className="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl font-black text-sm uppercase w-full transition-colors active:scale-95">บันทึก</button>
+      </Section>
+    </div>
+  );
+}
+
+// ============ TAB: COIN ที่ได้ต่อ LV ของ Flashcards ============
+function ExpTab({ notify }) {
+  const [exp, setExp] = useState({});
+
+  useEffect(() => {
+    supabase.from('exp_rewards').select('*').order('flashcard_level').then(({ data }) => {
+      const map = {}; (data || []).forEach(r => { map[r.flashcard_level] = r.exp_amount; });
+      setExp(map);
+    });
+  }, []);
+
   const saveExp = async (lv, val) => {
     const { error } = await supabase.from('exp_rewards').upsert({ flashcard_level: lv, exp_amount: val }, { onConflict: 'flashcard_level' });
     clearExpRewardsCache();
-    notify(error ? 'บันทึกล้มเหลว' : `บันทึก EXP LV${lv} แล้ว`);
+    notify(error ? 'บันทึกล้มเหลว' : `บันทึก Coin LV${lv} แล้ว`);
   };
 
   return (
-    <div className="space-y-4">
-      <Section title="ตั้งค่าด่าน (รูป / เวลาตอบ / จำนวนมอนสเตอร์)">
-        <div className="bg-sky-50 border-2 border-sky-100 rounded-xl p-3 text-xs text-slate-600 font-bold leading-relaxed">
-          คำศัพท์ในเกมต่อสู้จะถูกแบ่งจาก <span className="text-sky-600">Select Study Words</span> ตามลำดับ
-          ด่านละ (จำนวนมอนสเตอร์ + บอส 1 ตัว) คำ เช่น 30 มอนสเตอร์ = 31 คำต่อด่าน
-          ด่านถัดไปจะรับคำที่เหลือต่อไปเรื่อยๆ
-        </div>
-        <div className="flex justify-end">
-          <button onClick={addStage} className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl font-black text-sm uppercase transition-colors active:scale-95">+ เพิ่มด่าน</button>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {stages.map((st, idx) => {
-            const start = wordStart(idx);
-            const end = start + (st.monster_count || 0); // (monster_count + 1) คำ → start..start+count
-            return (
-            <div key={st.stage_no} className="border-2 border-slate-100 rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="font-black text-orange-600 text-sm">ด่าน {st.stage_no}</div>
-                <button onClick={() => removeStage(st.stage_no)} className="text-xs text-red-500 font-black underline">ลบด่าน</button>
-              </div>
-              <div className="text-[11px] font-bold text-emerald-600 bg-emerald-50 rounded-lg px-2 py-1">
-                คำที่ {start}–{end} ({(st.monster_count || 0) + 1} คำ)
-              </div>
-
-              {/* รูปด่าน (map icon) */}
-              <div className="flex items-center gap-3">
-                <div className="w-16 h-16 rounded-xl bg-slate-100 border-2 border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
-                  {st.map_image_url
-                    ? <img src={st.map_image_url} alt="stage" className="w-full h-full object-cover" />
-                    : <span className="text-2xl text-slate-300">🗺️</span>}
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <FileButton accept="image/*" onSelect={file => uploadStageImage(st.stage_no, file)} disabled={uploadingStage === st.stage_no} className="px-3 py-1.5 text-xs">
-                    {uploadingStage === st.stage_no ? '...' : 'เปลี่ยนรูปด่าน'}
-                  </FileButton>
-                  {st.map_image_url && (
-                    <button onClick={() => removeStageImage(st.stage_no)} className="text-xs text-red-500 font-black underline">ลบรูป</button>
-                  )}
-                </div>
-              </div>
-
-              <input className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="ชื่อด่าน"
-                value={st.title || ''} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, title: e.target.value } : x))} />
-              <div className="grid grid-cols-2 gap-2 text-xs font-bold text-slate-500">
-                <label className="flex flex-col gap-1">มอนสเตอร์
-                  <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
-                    value={st.monster_count} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, monster_count: +e.target.value } : x))} />
-                </label>
-                <label className="flex flex-col gap-1">เวลาเลือกตอบ (วิ)
-                  <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
-                    value={st.answer_time_sec} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, answer_time_sec: +e.target.value } : x))} />
-                </label>
-                <label className="flex flex-col gap-1">เวลาเรียงประโยค (วิ)
-                  <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
-                    value={st.answer_time_rearrange_sec ?? 12} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, answer_time_rearrange_sec: +e.target.value } : x))} />
-                </label>
-                <label className="flex flex-col gap-1">เวลาพิมพ์ (วิ)
-                  <input type="number" min="1" className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal"
-                    value={st.answer_time_typing_sec ?? 15} onChange={e => setStages(s => s.map((x, i) => i === idx ? { ...x, answer_time_typing_sec: +e.target.value } : x))} />
-                </label>
-              </div>
-              <button onClick={() => saveStage(st)} className="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl font-black text-sm uppercase w-full transition-colors active:scale-95">บันทึก</button>
-            </div>
-            );
-          })}
-        </div>
-      </Section>
-
-      <Section title="EXP ที่ได้ต่อ LV ของ Flashcards">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {[1, 2, 3, 4, 5, 6, 7].map(lv => (
-            <div key={lv} className="flex items-center gap-2">
-              <span className="text-sm font-black text-slate-500 w-12">LV{lv}</span>
-              <input type="number" min="0" className="flex-1 border-2 border-slate-200 rounded-lg px-3 py-2 text-sm"
-                value={exp[lv] ?? 0} onChange={e => setExp(m => ({ ...m, [lv]: +e.target.value }))} />
-              <button onClick={() => saveExp(lv, exp[lv] ?? 0)} className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl font-black text-xs uppercase transition-colors active:scale-95">ตั้ง</button>
-            </div>
-          ))}
-        </div>
-      </Section>
-    </div>
+    <Section title="Coin ที่ได้ต่อ LV ของ Flashcards">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {[1, 2, 3, 4, 5, 6, 7].map(lv => (
+          <div key={lv} className="flex items-center gap-2">
+            <span className="text-sm font-black text-slate-500 w-12">LV{lv}</span>
+            <input type="number" min="0" className="flex-1 border-2 border-slate-200 rounded-lg px-3 py-2 text-sm"
+              value={exp[lv] ?? 0} onChange={e => setExp(m => ({ ...m, [lv]: +e.target.value }))} />
+            <button onClick={() => saveExp(lv, exp[lv] ?? 0)} className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl font-black text-xs uppercase transition-colors active:scale-95">ตั้ง</button>
+          </div>
+        ))}
+      </div>
+    </Section>
   );
 }
 
@@ -325,7 +424,7 @@ function EnemiesTab({ notify }) {
   return (
     <div className="space-y-4">
       <StagePicker value={stage} onChange={setStage} />
-      <Section title={`เพิ่มศัตรูในด่าน ${stage} (.png โปร่งใส)`}>
+      <Section title={`เพิ่มศัตรูในด่าน ${stage}`}>
         <div className="flex gap-2">
           <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} className="border-2 border-slate-200 rounded-lg px-3 py-2 text-sm">
             <option value="monster">Monster</option>
@@ -431,6 +530,7 @@ function ShopTab({ notify }) {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({ name: '', description: '', kind: 'upgrade', currency: 'exp', cost: 50, effect_type: 'add_hp', effect_value: 1, file: null });
   const [uploading, setUploading] = useState(false);
+  const [savingOrder, setSavingOrder] = useState(false);
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('shop_items').select('*').order('sort_order');
@@ -469,6 +569,27 @@ function ShopTab({ notify }) {
   };
   const del = async (id) => { await supabase.from('shop_items').delete().eq('id', id); await load(); };
 
+  // ย้ายลำดับไอเทมขึ้น/ลง แล้วบันทึก sort_order ใหม่ (ลำดับ = ตำแหน่งในรายการ)
+  const move = async (index, dir) => {
+    const target = index + dir;
+    if (savingOrder || target < 0 || target >= items.length) return;
+    const reordered = [...items];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(target, 0, moved);
+    setItems(reordered); // อัปเดตทันที (optimistic) คงค่าที่กำลังแก้ไว้
+    setSavingOrder(true);
+    try {
+      await Promise.all(reordered.map((it, i) =>
+        supabase.from('shop_items').update({ sort_order: i + 1 }).eq('id', it.id)
+      ));
+      notify('จัดลำดับแล้ว');
+    } catch (e) {
+      notify('จัดลำดับล้มเหลว: ' + e.message);
+      await load();
+    }
+    setSavingOrder(false);
+  };
+
   return (
     <div className="space-y-4">
       <Section title="เพิ่มไอเทม / อัปเกรด">
@@ -492,10 +613,12 @@ function ShopTab({ notify }) {
           </label>
           <label className="flex flex-col gap-1">Effect
             <select value={form.effect_type} onChange={e => setForm(f => ({ ...f, effect_type: e.target.value }))} className="border-2 border-slate-200 rounded-lg px-2 py-2 text-sm font-normal">
-              <option value="add_hp">เพิ่ม HP สูงสุด</option>
+              <option value="add_hp">เพิ่มหัวใจ</option>
               <option value="add_attack">เพิ่มพลังโจมตี</option>
               <option value="heal">ฟื้น HP</option>
               <option value="shield">โล่ป้องกัน</option>
+              <option value="add_time">เพิ่มเวลา</option>
+              <option value="bomb">ระเบิด</option>
             </select>
           </label>
           <label className="flex flex-col gap-1">ค่า Effect
@@ -512,10 +635,18 @@ function ShopTab({ notify }) {
       </Section>
 
       <Section title="รายการในร้าน">
+        <p className="text-[11px] font-bold text-slate-400 -mt-1">ใช้ปุ่ม ▲ / ▼ เพื่อจัดลำดับการแสดงในร้าน</p>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {items.map(it => (
+          {items.map((it, idx) => (
             <div key={it.id} className={`flex flex-col gap-3 rounded-xl p-3 border-2 ${it.active ? 'bg-slate-50 border-slate-100' : 'bg-slate-200/60 border-slate-300'}`}>
               <div className="flex items-start gap-3">
+                <div className="flex flex-col gap-1 shrink-0">
+                  <button onClick={() => move(idx, -1)} disabled={savingOrder || idx === 0} title="เลื่อนขึ้น" aria-label="เลื่อนขึ้น"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border-2 border-slate-200 text-slate-600 font-black hover:bg-slate-100 transition-colors active:scale-95 disabled:opacity-30">▲</button>
+                  <span className="text-[10px] font-black text-slate-400 text-center">{idx + 1}</span>
+                  <button onClick={() => move(idx, 1)} disabled={savingOrder || idx === items.length - 1} title="เลื่อนลง" aria-label="เลื่อนลง"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border-2 border-slate-200 text-slate-600 font-black hover:bg-slate-100 transition-colors active:scale-95 disabled:opacity-30">▼</button>
+                </div>
                 {it.icon_url ? <img src={it.icon_url} alt={it.name} className="w-12 h-12 object-contain shrink-0" /> : <span className="w-12 h-12 shrink-0 flex items-center justify-center text-3xl">{EFFECT_ICON[it.effect_type] || '🎁'}</span>}
                 <div className="flex-1 min-w-0 space-y-2">
                   <input className="w-full border-2 border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold" placeholder="ชื่อ"
@@ -542,10 +673,12 @@ function ShopTab({ notify }) {
                 </label>
                 <label className="flex flex-col gap-1">Effect
                   <select value={it.effect_type} onChange={e => editLocal(it.id, { effect_type: e.target.value })} className="border-2 border-slate-200 rounded-lg px-2 py-1.5 text-sm font-normal">
-                    <option value="add_hp">เพิ่ม HP สูงสุด</option>
+                    <option value="add_hp">เพิ่มหัวใจ</option>
                     <option value="add_attack">เพิ่มพลังโจมตี</option>
                     <option value="heal">ฟื้น HP</option>
                     <option value="shield">โล่ป้องกัน</option>
+                    <option value="add_time">เพิ่มเวลา</option>
+                    <option value="bomb">ระเบิด</option>
                   </select>
                 </label>
                 <label className="flex flex-col gap-1">ค่า Effect
@@ -568,6 +701,58 @@ function ShopTab({ notify }) {
         </div>
       </Section>
     </div>
+  );
+}
+
+// ============ ส่วนตั้งค่า: จำกัดค่าพลังสูงสุดของผู้เล่น ============
+function PlayerStatCaps({ notify }) {
+  const [caps, setCaps] = useState({ maxHpCap: '', maxAttackCap: '' });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    getGameSettings(true).then(s => {
+      setCaps({ maxHpCap: s.maxHpCap, maxAttackCap: s.maxAttackCap });
+      setLoading(false);
+    });
+  }, []);
+
+  const save = async () => {
+    const hp = Math.max(BASE_MAX_HP, +caps.maxHpCap || BASE_MAX_HP);
+    const atk = Math.max(BASE_ATTACK, +caps.maxAttackCap || BASE_ATTACK);
+    setSaving(true);
+    const ok = await saveGameSettings({ maxHpCap: hp, maxAttackCap: atk });
+    if (ok) setCaps({ maxHpCap: hp, maxAttackCap: atk });
+    setSaving(false);
+    notify(ok ? 'บันทึกเพดานพลังแล้ว' : 'บันทึกล้มเหลว');
+  };
+
+  return (
+    <Section title="จำกัดค่าพลังสูงสุดของผู้เล่น">
+      <p className="text-[11px] font-bold text-slate-400 -mt-1">
+        เพดานนี้ใช้กับ HP/พลังโจมตีรวมที่ได้จากอัปเกรดถาวร — ผู้เล่นจะอัปเกรดเกินค่านี้ไม่ได้
+        (ค่าฐานเริ่มต้น: HP {BASE_MAX_HP} / โจมตี {BASE_ATTACK})
+      </p>
+      {loading ? (
+        <div className="text-center text-slate-400 py-4 text-sm font-bold">กำลังโหลด...</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 text-xs font-bold text-slate-500">
+            <label className="flex flex-col gap-1">❤️ HP สูงสุด
+              <input type="number" min={BASE_MAX_HP} className="border-2 border-slate-200 rounded-lg px-3 py-2 text-sm font-normal"
+                value={caps.maxHpCap} onChange={e => setCaps(c => ({ ...c, maxHpCap: e.target.value }))} />
+            </label>
+            <label className="flex flex-col gap-1">⚔️ พลังโจมตีสูงสุด
+              <input type="number" min={BASE_ATTACK} className="border-2 border-slate-200 rounded-lg px-3 py-2 text-sm font-normal"
+                value={caps.maxAttackCap} onChange={e => setCaps(c => ({ ...c, maxAttackCap: e.target.value }))} />
+            </label>
+          </div>
+          <button onClick={save} disabled={saving} className="bg-slate-700 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl font-black text-sm uppercase w-full transition-colors active:scale-95 disabled:opacity-50">
+            {saving ? 'กำลังบันทึก...' : 'บันทึกเพดานพลัง'}
+          </button>
+        </>
+      )}
+    </Section>
   );
 }
 
@@ -609,6 +794,7 @@ function CharactersTab({ notify }) {
 
   return (
     <div className="space-y-4">
+      <PlayerStatCaps notify={notify} />
       <Section title="เพิ่มตัวละคร">
         <input className="w-full border-2 border-slate-200 rounded-lg px-3 py-2 text-sm" placeholder="ชื่อตัวละคร"
           value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
@@ -656,7 +842,8 @@ function CharactersTab({ notify }) {
 }
 
 const TABS = [
-  { id: 'stages', label: 'ด่าน/EXP' },
+  { id: 'stages', label: 'ด่าน' },
+  { id: 'exp', label: 'COIN' },
   { id: 'assets', label: 'พื้นหลัง/เพลง' },
   { id: 'characters', label: 'ตัวละคร' },
   { id: 'enemies', label: 'ศัตรู' },
@@ -698,6 +885,7 @@ export default function AdminPanel({ setPage, isAdmin }) {
       </div>
 
       {tab === 'stages' && <StagesTab notify={notify} />}
+      {tab === 'exp' && <ExpTab notify={notify} />}
       {tab === 'assets' && <StageAssetsTab notify={notify} />}
       {tab === 'characters' && <CharactersTab notify={notify} />}
       {tab === 'enemies' && <EnemiesTab notify={notify} />}
