@@ -7,8 +7,7 @@ import {
 import CoinIcon from './CoinIcon';
 import GiftBox from './GiftBox';
 import { HubNavIcon } from './HubNavIcons';
-
-const FIGHT_BTN_SRC = '/game/icon/fight-btn.png';
+import fightBtnImg from '../../game/icon/fight-btn.png';
 
 const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️', add_time: '⏳', bomb: '💣' };
 
@@ -217,19 +216,26 @@ export default function Dashboard({ setPage, user, gameState = { exp: 0, coin: 0
         <div className="hub-lucky-anchor pointer-events-auto">
           <button
             onClick={() => setPage('lucky-draw')}
-            className={`hub-lucky-premium w-full flex items-center gap-2 sm:gap-3 text-left active:scale-[0.98] transition-transform ${luckyPending ? 'hub-lucky-premium-pending' : 'opacity-90'}`}
+            className={`hub-lucky-premium hub-lucky-banner w-full text-left active:scale-[0.98] transition-transform ${luckyPending ? 'hub-lucky-premium-pending' : 'opacity-90'}`}
           >
-            <GiftBox size="sm" animate={luckyPending} />
-            <div className="flex-1 min-w-0 relative z-10">
-              <div className="text-xs sm:text-sm font-black italic uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-purple-200 via-fuchsia-200 to-pink-200">
-                Lucky Draw
-              </div>
-              <div className="text-[9px] sm:text-[10px] font-bold text-purple-200/70 mt-0.5 truncate">
-                {luckyPending ? '✨ เปิดกล่องวันนี้!' : 'กลับมาพรุ่งนี้'}
+            <GiftBox size="sm" animate={luckyPending} className="hub-lucky-banner__gift" />
+            <div className="hub-lucky-banner__text">
+              <div className="hub-lucky-banner__title">Lucky Draw</div>
+              <div className="hub-lucky-banner__subtitle">
+                {luckyPending ? (
+                  <>
+                    <span className="hub-lucky-banner__line hub-lucky-banner__line--wide">✨ เปิดกล่องวันนี้!</span>
+                    <span className="hub-lucky-banner__line hub-lucky-banner__line--narrow">✨ เปิดวันนี้!</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="hub-lucky-banner__line hub-lucky-banner__line--wide">กลับมาพรุ่งนี้</span>
+                    <span className="hub-lucky-banner__line hub-lucky-banner__line--narrow">พรุ่งนี้</span>
+                  </>
+                )}
               </div>
             </div>
-            <span className="hub-lucky-go relative z-10 shrink-0 text-[10px] sm:text-xs">GO &gt;&gt;</span>
-            {luckyPending && <span className="hub-badge top-1.5 right-1.5 z-20">!</span>}
+            {luckyPending && <span className="hub-badge hub-lucky-banner__badge">!</span>}
           </button>
         </div>
 
@@ -273,7 +279,7 @@ export default function Dashboard({ setPage, user, gameState = { exp: 0, coin: 0
             aria-label="Fight"
           >
             <img
-              src={FIGHT_BTN_SRC}
+              src={fightBtnImg}
               alt="Fight"
               className="w-full h-full object-cover pointer-events-none select-none"
               draggable={false}
