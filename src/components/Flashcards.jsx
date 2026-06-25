@@ -17,7 +17,7 @@ export default function Flashcards({
         <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline">← Back to Menu</button>
       </div>
       
-      <h2 className="text-xl font-black text-black uppercase italic mb-6 tracking-widest">Flashcard Levels</h2>
+      <h2 className="text-xl font-black text-slate-800 uppercase italic mb-6 tracking-widest">Flashcard Levels</h2>
       
       {/* Level 1-7 */}
       {[1, 2, 3, 4, 5, 6, 7].map(lv => {
@@ -29,7 +29,7 @@ export default function Flashcards({
         else if (lv === 6) dateInfo = schedules.lv6.length > 0 ? "วันที่ " + schedules.lv6.sort((a,b)=>a-b).join(",") : "รอตั้งค่า";
 
         return (
-          <div key={lv} className={`bg-white p-5 rounded-[2rem] shadow-sm border-2 flex items-center min-h-[110px] mb-3 transition-all ${available ? 'border-orange-500 shadow-orange-50' : 'opacity-40 grayscale border-slate-200'}`}>
+          <div key={lv} className={`bg-white p-5 rounded-[2rem] shadow-sm border-2 flex items-center min-h-[110px] mb-3 transition-all ${available ? 'border-orange-400' : 'opacity-40 grayscale border-slate-200'}`}>
             {/* ซ้าย: LV และ จำนวนคำ (12pt) */}
             <div className="w-1/4 text-left flex flex-col justify-center">
               <span className="font-black text-lg italic uppercase leading-none text-slate-800">LV {lv}</span>
@@ -41,7 +41,7 @@ export default function Flashcards({
             {/* กลาง: วันที่เล่น (Centered) */}
             <div className="w-2/4 text-center px-2">
               <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 italic text-center w-full">Schedule</div>
-              <div className="text-[12px] font-black text-slate-800 uppercase leading-tight bg-orange-50/50 py-2 px-1 rounded-xl border border-orange-100">
+              <div className="text-[12px] font-black text-slate-700 uppercase leading-tight bg-orange-100 py-2 px-1 rounded-xl border border-orange-200">
                 {dateInfo}
               </div>
             </div>
@@ -56,7 +56,7 @@ export default function Flashcards({
                   Start
                 </button>
               ) : ( 
-                <div className="text-[9px] font-black text-slate-400 italic border border-slate-100 px-2 py-1 rounded-lg uppercase text-center">Locked</div> 
+                <div className="text-[9px] font-black text-slate-400 italic border border-slate-300 px-2 py-1 rounded-lg uppercase text-center">Locked</div>
               )}
             </div>
           </div>
@@ -64,7 +64,7 @@ export default function Flashcards({
       })}
 
       {/* Level คำผิดบ่อย (Mistakes) */}
-      <div className="bg-red-50 p-5 rounded-[2.5rem] shadow-md border-2 border-red-500 flex items-center min-h-[110px] mt-6 mb-10">
+      <div className="bg-red-50 p-5 rounded-[2.5rem] shadow-md border-2 border-red-400 flex items-center min-h-[110px] mt-6 mb-10">
         <div className="w-1/4 text-left flex flex-col justify-center">
           <span className="font-black text-[13px] italic uppercase leading-none text-red-600">คำผิดบ่อย</span>
           <span className="text-[12pt] font-black text-red-600 italic mt-1 whitespace-nowrap">
@@ -72,8 +72,8 @@ export default function Flashcards({
           </span>
         </div>
         <div className="w-2/4 text-center px-2">
-          <div className="text-[10px] font-black text-red-300 uppercase tracking-widest mb-1 italic text-center w-full">Priority</div>
-          <div className="text-[12px] font-black text-red-600 uppercase bg-white py-2 px-1 rounded-xl shadow-sm border border-red-100">ทุกวัน</div>
+          <div className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1 italic text-center w-full">Priority</div>
+          <div className="text-[12px] font-black text-red-700 uppercase bg-red-100 py-2 px-1 rounded-xl shadow-sm border border-red-200">ทุกวัน</div>
         </div>
         <div className="w-1/4 text-right flex justify-end items-center">
           <button 

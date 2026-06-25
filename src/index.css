@@ -42,6 +42,8 @@ body,
 
 .app-main--hub {
   overflow: hidden;
+  /* จัดกรอบ hub ไว้กึ่งกลางบนจอกว้าง (PC/iPad) */
+  align-items: center;
 }
 
 /* ------------------------------------------------------------------ */
@@ -70,11 +72,16 @@ body,
   position: relative;
   flex: 1 1 auto;
   width: 100%;
+  /* จำกัดความกว้าง: เต็มจอมือถือ/iPad แนวตั้ง แต่ไม่บานเต็มจอ PC */
+  max-width: 48rem;
+  margin-inline: auto;
   height: 100%;
   min-height: 0;
   color: #fff;
   background: #0a0e1a;
   overflow: hidden;
+  /* ให้สไตล์ภายในอิงความกว้างของกรอบนี้ แทนความกว้างจอ */
+  container-type: inline-size;
 }
 
 .hub-bg {
@@ -321,7 +328,7 @@ body,
   z-index: 20;
 }
 
-@media (max-width: 420px) {
+@container (max-width: 420px) {
   .hub-lucky-banner {
     gap: 0.35rem 0.45rem;
     padding: 0.55rem 0.55rem;
@@ -342,7 +349,7 @@ body,
   }
 }
 
-@media (min-width: 640px) {
+@container (min-width: 640px) {
   .hub-main-stage {
     --hub-rail-width: min(40vw, 13rem);
     --hub-rail-inset: 1rem;
@@ -364,7 +371,7 @@ body,
   }
 }
 
-@media (min-width: 640px) {
+@container (min-width: 640px) {
   .hub-action-rail {
     top: 32%;
   }
@@ -392,7 +399,7 @@ body,
   }
 }
 
-@media (min-width: 768px) {
+@container (min-width: 768px) {
   .hub-main-stage {
     --hub-rail-width: min(24vw, 16.5rem);
     --hub-rail-inset: 1.25rem;
@@ -425,7 +432,7 @@ body,
   }
 }
 
-@media (min-width: 1024px) {
+@container (min-width: 1024px) {
   .hub-main-stage {
     --hub-rail-width: 17.5rem;
     --hub-rail-gutter: 1.75rem;
@@ -720,7 +727,7 @@ body,
   box-shadow: 0 2px 8px rgba(245, 158, 11, 0.5);
 }
 
-@media (min-width: 640px) {
+@container (min-width: 640px) {
   .hub-lucky-go {
     padding: 0.4rem 0.85rem;
     font-size: 10px;
@@ -793,12 +800,17 @@ body,
 .ld-screen {
   flex: 1 1 auto;
   width: 100%;
+  /* จำกัดความกว้าง: เต็มจอมือถือ/iPad แนวตั้ง แต่ไม่บานเต็มจอ PC */
+  max-width: 48rem;
+  margin-inline: auto;
   height: 100%;
   min-height: 0;
   background: #0a0e1a;
   color: #fff;
   position: relative;
   overflow: hidden;
+  /* ให้สไตล์ภายในอิงความกว้างของกรอบนี้ แทนความกว้างจอ */
+  container-type: inline-size;
 }
 
 .ld-screen .ld-bg {

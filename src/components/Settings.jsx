@@ -42,36 +42,36 @@ export default function Settings({
         style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}
         onDragStart={(e) => e.preventDefault()}
       >
-        <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline">← Back</button>
+        <button onClick={() => setPage('dashboard')} className="text-orange-400 font-black text-sm uppercase italic underline">← Back</button>
         <h2 className="text-2xl font-black text-center uppercase italic">Settings</h2>
         
-        <div className="bg-white p-6 rounded-[2.5rem] border-2 border-slate-100 shadow-sm space-y-8">
+        <div className="bg-white/5 p-6 rounded-[2.5rem] border-2 border-white/10 shadow-sm space-y-8">
           {/* ความเร็วเสียงอ่าน */}
           <div className="text-center">
-            <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase text-sky-500">Speech Speed</label>
+            <label className="block text-[10px] font-black mb-2 uppercase text-sky-400">Speech Speed</label>
 
             <div className="flex items-center justify-center gap-4">
               <button
                 type="button"
                 onClick={() => applySpeechRate(speechRate - SPEECH_RATE_STEP)}
                 disabled={speechRate <= SPEECH_RATE_MIN + 1e-6}
-                className="w-10 h-10 bg-slate-100 rounded-full font-black select-none disabled:opacity-40"
+                className="w-10 h-10 bg-white/10 text-white rounded-full font-black select-none disabled:opacity-40"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >-</button>
 
-              <div className="text-2xl font-black text-sky-600 italic w-16">{speechRate.toFixed(2)}x</div>
+              <div className="text-2xl font-black text-sky-300 italic w-16">{speechRate.toFixed(2)}x</div>
 
               <button
                 type="button"
                 onClick={() => applySpeechRate(speechRate + SPEECH_RATE_STEP)}
                 disabled={speechRate >= SPEECH_RATE_MAX - 1e-6}
-                className="w-10 h-10 bg-slate-100 rounded-full font-black select-none disabled:opacity-40"
+                className="w-10 h-10 bg-white/10 text-white rounded-full font-black select-none disabled:opacity-40"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >+</button>
             </div>
 
             <div className="flex items-center justify-center gap-2 mt-3 px-2">
-              <span className="text-[10px] font-black text-slate-400">ช้า</span>
+              <span className="text-[10px] font-black text-white/40">ช้า</span>
               <input
                 type="range"
                 min={SPEECH_RATE_MIN}
@@ -83,7 +83,7 @@ export default function Settings({
                 onTouchEnd={() => speakChinese('你好')}
                 className="flex-1 accent-sky-500"
               />
-              <span className="text-[10px] font-black text-slate-400">เร็ว</span>
+              <span className="text-[10px] font-black text-white/40">เร็ว</span>
             </div>
 
             <button
@@ -93,12 +93,12 @@ export default function Settings({
             >
               🔊 ทดลองฟัง
             </button>
-            <p className="text-[10px] text-slate-400 mt-2 italic">ปรับเองได้ — ใช้กับปุ่มลำโพงทุกหน้า</p>
+            <p className="text-[10px] text-white/40 mt-2 italic">ปรับเองได้ — ใช้กับปุ่มลำโพงทุกหน้า</p>
           </div>
 
           {/* ตั้งเวลา Flashcard */}
           <div className="text-center">
-            <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase">Flashcard Timer</label>
+            <label className="block text-[10px] font-black text-white/40 mb-2 uppercase">Flashcard Timer</label>
             <div className="flex items-center justify-center gap-4">
               <button 
                 onClick={() => {
@@ -106,11 +106,11 @@ export default function Settings({
                   setTimerSetting(val);
                   saveSettings(val, gameTimerSetting, typeTimerSetting, schedules); // บันทึกลง DB ทันที
                 }} 
-                className="w-10 h-10 bg-slate-100 rounded-full font-black select-none"
+                className="w-10 h-10 bg-white/10 text-white rounded-full font-black select-none"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >-</button>
               
-              <div className="text-2xl font-black text-orange-600 italic w-12">{timerSetting}s</div>
+              <div className="text-2xl font-black text-orange-400 italic w-12">{timerSetting}s</div>
               
               <button 
                 onClick={() => {
@@ -118,7 +118,7 @@ export default function Settings({
                   setTimerSetting(val);
                   saveSettings(val, gameTimerSetting, typeTimerSetting, schedules); // บันทึกลง DB ทันที
                 }} 
-                className="w-10 h-10 bg-slate-100 rounded-full font-black select-none"
+                className="w-10 h-10 bg-white/10 text-white rounded-full font-black select-none"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >+</button>
             </div>
@@ -126,7 +126,7 @@ export default function Settings({
 
           {/* ตั้งเวลา Mini Games */}
           <div className="text-center">
-            <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase text-emerald-500">Mini Game Timer</label>
+            <label className="block text-[10px] font-black mb-2 uppercase text-emerald-400">Mini Game Timer</label>
             <div className="flex items-center justify-center gap-4">
               <button 
                 onClick={() => {
@@ -134,11 +134,11 @@ export default function Settings({
                   setGameTimerSetting(val);
                   saveSettings(timerSetting, val, typeTimerSetting, schedules); // บันทึกลง DB ทันที
                 }} 
-                className="w-10 h-10 bg-slate-100 rounded-full font-black select-none"
+                className="w-10 h-10 bg-white/10 text-white rounded-full font-black select-none"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >-</button>
               
-              <div className="text-2xl font-black text-emerald-600 italic w-12">{gameTimerSetting}s</div>
+              <div className="text-2xl font-black text-emerald-400 italic w-12">{gameTimerSetting}s</div>
               
               <button 
                 onClick={() => {
@@ -146,7 +146,7 @@ export default function Settings({
                   setGameTimerSetting(val);
                   saveSettings(timerSetting, val, typeTimerSetting, schedules); // บันทึกลง DB ทันที
                 }} 
-                className="w-10 h-10 bg-slate-100 rounded-full font-black select-none"
+                className="w-10 h-10 bg-white/10 text-white rounded-full font-black select-none"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >+</button>
             </div>
@@ -154,7 +154,7 @@ export default function Settings({
 
           {/* ตั้งเวลา Type Game */}
           <div className="text-center">
-            <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase text-indigo-500">Type Timer</label>
+            <label className="block text-[10px] font-black mb-2 uppercase text-indigo-400">Type Timer</label>
             <div className="flex items-center justify-center gap-4">
               <button 
                 onClick={() => {
@@ -162,11 +162,11 @@ export default function Settings({
                   setTypeTimerSetting(val);
                   saveSettings(timerSetting, gameTimerSetting, val, schedules); // บันทึกลง DB ทันที
                 }} 
-                className="w-10 h-10 bg-slate-100 rounded-full font-black select-none"
+                className="w-10 h-10 bg-white/10 text-white rounded-full font-black select-none"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >-</button>
               
-              <div className="text-2xl font-black text-indigo-600 italic w-12">{typeTimerSetting}s</div>
+              <div className="text-2xl font-black text-indigo-300 italic w-12">{typeTimerSetting}s</div>
               
               <button 
                 onClick={() => {
@@ -174,20 +174,20 @@ export default function Settings({
                   setTypeTimerSetting(val);
                   saveSettings(timerSetting, gameTimerSetting, val, schedules); // บันทึกลง DB ทันที
                 }} 
-                className="w-10 h-10 bg-slate-100 rounded-full font-black select-none"
+                className="w-10 h-10 bg-white/10 text-white rounded-full font-black select-none"
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >+</button>
             </div>
           </div>
 
           <button onClick={() => setPage('select-words')} className="w-full bg-orange-500 text-white p-4 rounded-3xl font-black uppercase italic shadow-lg shadow-orange-100">📂 Select Study Words</button>
-          <button onClick={() => setPage('set-schedule')} className="w-full bg-slate-800 text-white p-4 rounded-3xl font-black uppercase italic shadow-lg">📅 Set Level Schedule</button>
+          <button onClick={() => setPage('set-schedule')} className="w-full bg-white/10 border-2 border-white/15 text-white p-4 rounded-3xl font-black uppercase italic shadow-lg">📅 Set Level Schedule</button>
 
           {/* รายการคำผิด (จากมินิเกม กด WRONG) */}
-          <div className="pt-4 border-t border-slate-100">
-            <h3 className="text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">คำผิด</h3>
+          <div className="pt-4 border-t border-white/10">
+            <h3 className="text-[10px] font-black text-white/40 mb-2 uppercase tracking-widest">คำผิด</h3>
             {wrongWordsList.length === 0 ? (
-              <p className="text-slate-400 text-sm italic">ยังไม่มีคำที่บันทึกเป็นคำผิด</p>
+              <p className="text-white/40 text-sm italic">ยังไม่มีคำที่บันทึกเป็นคำผิด</p>
             ) : (
               <ul className="space-y-2 max-h-64 overflow-y-auto">
                 {wrongWordsList.map((item, i) => {
@@ -195,15 +195,15 @@ export default function Settings({
                   const gameLabel = { th: 'เกมแปลไทย', pinyin: 'Pinyin', vol: 'เติมคำ', type: 'ฝึกพิมพ์', flashcard: 'Flashcard' }[item.game_type] || item.game_type;
                   const dateStr = item.created_at ? new Date(item.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) : '';
                   return (
-                    <li key={item.id || `${item.flashcard_id}-${item.created_at}-${i}`} className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left flex justify-between items-start gap-2">
+                    <li key={item.id || `${item.flashcard_id}-${item.created_at}-${i}`} className="bg-amber-500/10 border border-amber-400/25 rounded-xl p-3 text-left flex justify-between items-start gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start gap-2">
                           <div>
-                            <span className="font-bold text-slate-800">{card?.cn || '—'}</span>
-                            <span className="text-slate-500 text-sm ml-1">{card?.pinyin || ''}</span>
-                            <div className="text-red-600 text-sm font-medium">{card?.th || ''}</div>
+                            <span className="font-bold text-white">{card?.cn || '—'}</span>
+                            <span className="text-white/50 text-sm ml-1">{card?.pinyin || ''}</span>
+                            <div className="text-red-300 text-sm font-medium">{card?.th || ''}</div>
                           </div>
-                          <span className="text-[10px] text-slate-400 whitespace-nowrap">{gameLabel} · {dateStr}</span>
+                          <span className="text-[10px] text-white/40 whitespace-nowrap">{gameLabel} · {dateStr}</span>
                         </div>
                       </div>
                       <button
@@ -236,12 +236,12 @@ export default function Settings({
         style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
         onDragStart={(e) => e.preventDefault()}
       >
-        <button onClick={() => setPage('settings')} className="text-orange-600 font-black underline italic uppercase text-xs">← BACK</button>
+        <button onClick={() => setPage('settings')} className="text-orange-400 font-black underline italic uppercase text-xs">← BACK</button>
         <h2 className="text-xl font-black uppercase italic mb-4">Scheduling</h2>
-        
+
         {/* Weekly Schedule */}
-        <div className="bg-white p-5 rounded-3xl border-2 border-slate-100 space-y-4 shadow-sm">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-full italic">Weekly (Lv 3: 2 Days | Lv 4: 1 Day)</p>
+        <div className="bg-white/5 p-5 rounded-3xl border-2 border-white/10 space-y-4 shadow-sm">
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-widest text-center w-full italic">Weekly (Lv 3: 2 Days | Lv 4: 1 Day)</p>
           <div className="grid grid-cols-4 gap-2">
             {daysOfWeek.map(day => (
               <button 
@@ -256,7 +256,7 @@ export default function Settings({
                   setSchedules(newS); 
                   saveSettings(timerSetting, gameTimerSetting, typeTimerSetting, newS);
                 }} 
-                className={`text-[10px] p-2 rounded-xl font-black border-2 transition-all select-none ${schedules.lv3?.includes(day) ? 'bg-orange-500 text-white border-orange-500' : schedules.lv4?.includes(day) ? 'bg-blue-500 text-white border-blue-500' : 'bg-slate-50 text-black border-slate-100'}`}
+                className={`text-[10px] p-2 rounded-xl font-black border-2 transition-all select-none ${schedules.lv3?.includes(day) ? 'bg-orange-500 text-white border-orange-500' : schedules.lv4?.includes(day) ? 'bg-blue-500 text-white border-blue-500' : 'bg-white/5 text-white border-white/10'}`}
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >
                 {day}<br/>{schedules.lv3?.includes(day) ? 'LV3' : schedules.lv4?.includes(day) ? 'LV4' : '-'}
@@ -266,8 +266,8 @@ export default function Settings({
         </div>
 
         {/* Monthly Schedule */}
-        <div className="bg-white p-5 rounded-3xl border-2 border-slate-100 space-y-4 shadow-sm mb-10 text-center">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-full italic">Monthly (Lv 5: 2 Dates | Lv 6: 1 Date)</p>
+        <div className="bg-white/5 p-5 rounded-3xl border-2 border-white/10 space-y-4 shadow-sm mb-10 text-center">
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-widest text-center w-full italic">Monthly (Lv 5: 2 Dates | Lv 6: 1 Date)</p>
           <div className="grid grid-cols-6 gap-2 p-1">
             {datesOfMonth.map(date => (
               <button 
@@ -282,7 +282,7 @@ export default function Settings({
                   setSchedules(newS); 
                   saveSettings(timerSetting, gameTimerSetting, typeTimerSetting, newS);
                 }} 
-                className={`text-sm p-2.5 rounded-xl font-black border-2 transition-all select-none ${schedules.lv5?.includes(date) ? 'bg-purple-500 text-white border-purple-500' : schedules.lv6?.includes(date) ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-slate-50 text-black border-slate-100'}`}
+                className={`text-sm p-2.5 rounded-xl font-black border-2 transition-all select-none ${schedules.lv5?.includes(date) ? 'bg-purple-500 text-white border-purple-500' : schedules.lv6?.includes(date) ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white/5 text-white border-white/10'}`}
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >
                 {date}

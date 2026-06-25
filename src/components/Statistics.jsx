@@ -15,17 +15,17 @@ const EMPTY_SUMMARY = { active_days: 0, total_words: 0, total_seconds: 0 };
 
 function SummaryCard({ label, value, accent = 'orange', compact = false }) {
   const accents = {
-    orange: 'from-orange-50 to-orange-100 border-orange-200 text-orange-600',
-    blue: 'from-blue-50 to-blue-100 border-blue-200 text-blue-600',
-    purple: 'from-purple-50 to-purple-100 border-purple-200 text-purple-600',
-    emerald: 'from-emerald-50 to-emerald-100 border-emerald-200 text-emerald-600',
+    orange: 'from-orange-500/15 to-orange-500/10 border-orange-400/25 text-orange-300',
+    blue: 'from-blue-500/15 to-blue-500/10 border-blue-400/25 text-blue-300',
+    purple: 'from-purple-500/15 to-purple-500/10 border-purple-400/25 text-purple-300',
+    emerald: 'from-emerald-500/15 to-emerald-500/10 border-emerald-400/25 text-emerald-300',
   };
   const classes = accents[accent] || accents.orange;
-  const valueSize = compact ? 'text-xl leading-tight' : 'text-2xl';
+  const valueSize = compact ? 'text-base leading-tight' : 'text-2xl';
 
   return (
     <div className={`p-4 rounded-2xl border-2 bg-gradient-to-r ${classes}`}>
-      <div className="text-xs font-black text-slate-600 uppercase mb-1">{label}</div>
+      <div className="text-xs font-black text-white/60 uppercase mb-1">{label}</div>
       <div className={`${valueSize} font-black ${classes.split(' ').pop()} ${compact ? 'whitespace-nowrap' : ''}`}>
         {value}
       </div>
@@ -46,7 +46,7 @@ function LevelBadge({ levelKey }) {
 function DailyBreakdownTable({ dailyRows, schedules }) {
   if (!dailyRows.length) {
     return (
-      <div className="text-center py-8 text-slate-400 font-bold">
+      <div className="text-center py-8 text-white/40 font-bold">
         ยังไม่มีประวัติการเล่นในช่วงนี้
       </div>
     );
@@ -64,23 +64,23 @@ function DailyBreakdownTable({ dailyRows, schedules }) {
     <div className="overflow-x-auto -mx-2">
       <table className="w-full min-w-[640px] text-xs">
         <thead>
-          <tr className="border-b-2 border-slate-200">
-            <th className="text-left py-2 px-2 font-black text-slate-600 uppercase">วันที่</th>
+          <tr className="border-b-2 border-white/15">
+            <th className="text-left py-2 px-2 font-black text-white/60 uppercase">วันที่</th>
             {LEVEL_KEYS.map((key) => (
-              <th key={key} className="text-center py-2 px-1 font-black text-slate-600">
+              <th key={key} className="text-center py-2 px-1 font-black text-white/60">
                 <LevelBadge levelKey={key} />
               </th>
             ))}
-            <th className="text-center py-2 px-2 font-black text-slate-600 uppercase">รวม</th>
-            <th className="text-center py-2 px-2 font-black text-slate-600 uppercase">เวลา</th>
+            <th className="text-center py-2 px-2 font-black text-white/60 uppercase">รวม</th>
+            <th className="text-center py-2 px-2 font-black text-white/60 uppercase">เวลา</th>
           </tr>
         </thead>
         <tbody>
           {dailyRows.map((row) => {
             const scheduledLevels = getScheduledLevelsForDate(row.stat_date, schedules);
             return (
-            <tr key={row.stat_date} className="border-b border-slate-100 hover:bg-slate-50">
-              <td className="py-2 px-2 font-bold text-slate-800">
+            <tr key={row.stat_date} className="border-b border-white/10 hover:bg-white/5">
+              <td className="py-2 px-2 font-bold text-white">
                 <div className="flex flex-wrap items-center gap-1">
                   <span className="whitespace-nowrap">{formatStatDate(row.stat_date)}</span>
                   {scheduledLevels.map((levelKey) => (
@@ -91,25 +91,25 @@ function DailyBreakdownTable({ dailyRows, schedules }) {
               {LEVEL_KEYS.map((key) => {
                 const count = row.by_level?.[key] || 0;
                 return (
-                  <td key={key} className="text-center py-2 px-1 font-black text-slate-700">
-                    {count > 0 ? count : <span className="text-slate-300">-</span>}
+                  <td key={key} className="text-center py-2 px-1 font-black text-white/70">
+                    {count > 0 ? count : <span className="text-white/25">-</span>}
                   </td>
                 );
               })}
-              <td className="text-center py-2 px-2 font-black text-orange-600">{row.total_words || 0}</td>
-              <td className="text-center py-2 px-2 font-bold text-slate-600 whitespace-nowrap">
+              <td className="text-center py-2 px-2 font-black text-orange-400">{row.total_words || 0}</td>
+              <td className="text-center py-2 px-2 font-bold text-white/60 whitespace-nowrap">
                 {formatPlayDuration(row.total_seconds || 0)}
               </td>
             </tr>
             );
           })}
-          <tr className="bg-slate-100 font-black">
-            <td className="py-2 px-2 uppercase text-slate-700">รวม</td>
+          <tr className="bg-white/10 font-black">
+            <td className="py-2 px-2 uppercase text-white/70">รวม</td>
             {LEVEL_KEYS.map((key) => (
-              <td key={key} className="text-center py-2 px-1 text-slate-800">{totals[key] || 0}</td>
+              <td key={key} className="text-center py-2 px-1 text-white">{totals[key] || 0}</td>
             ))}
-            <td className="text-center py-2 px-2 text-orange-600">{grandTotalWords}</td>
-            <td className="text-center py-2 px-2 text-slate-700">{formatPlayDuration(grandTotalSeconds)}</td>
+            <td className="text-center py-2 px-2 text-orange-400">{grandTotalWords}</td>
+            <td className="text-center py-2 px-2 text-white/70">{formatPlayDuration(grandTotalSeconds)}</td>
           </tr>
         </tbody>
       </table>
@@ -121,24 +121,24 @@ function LeaderboardSection({ title, items, valueKey, formatValue }) {
   const topItems = (items || []).slice(0, 5);
   if (!topItems.length) {
     return (
-      <div className="bg-white p-4 rounded-2xl border-2 border-slate-100">
-        <h4 className="font-black text-sm uppercase italic mb-2 text-slate-700">{title}</h4>
-        <div className="text-slate-400 text-sm">ยังไม่มีข้อมูล</div>
+      <div className="bg-white/5 p-4 rounded-2xl border-2 border-white/10">
+        <h4 className="font-black text-sm uppercase italic mb-2 text-white/70">{title}</h4>
+        <div className="text-white/40 text-sm">ยังไม่มีข้อมูล</div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white p-4 rounded-2xl border-2 border-slate-100">
-      <h4 className="font-black text-sm uppercase italic mb-3 text-slate-700">{title}</h4>
+    <div className="bg-white/5 p-4 rounded-2xl border-2 border-white/10">
+      <h4 className="font-black text-sm uppercase italic mb-3 text-white/70">{title}</h4>
       <div className="space-y-2">
         {topItems.map((item, index) => (
-          <div key={item.user_id} className="flex items-center justify-between p-2 rounded-xl bg-slate-50">
+          <div key={item.user_id} className="flex items-center justify-between p-2 rounded-xl bg-white/5">
             <div className="flex items-center gap-2">
               <span className="text-lg">{index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}</span>
-              <span className="font-black text-slate-800 text-sm">{item.display_name}</span>
+              <span className="font-black text-white text-sm">{item.display_name}</span>
             </div>
-            <span className="font-black text-orange-600">{formatValue(item[valueKey], item)}</span>
+            <span className="font-black text-orange-400">{formatValue(item[valueKey], item)}</span>
           </div>
         ))}
       </div>
@@ -245,7 +245,7 @@ export default function Statistics({ user, setPage }) {
   if (loading && !statsData) {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
-        <div className="text-2xl font-black italic text-slate-600">กำลังโหลด...</div>
+        <div className="text-2xl font-black italic text-white/60">กำลังโหลด...</div>
       </div>
     );
   }
@@ -256,22 +256,22 @@ export default function Statistics({ user, setPage }) {
       style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}
       onDragStart={(e) => e.preventDefault()}
     >
-      <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline">
+      <button onClick={() => setPage('dashboard')} className="text-orange-400 font-black text-sm uppercase italic underline">
         ← Back
       </button>
       <h2 className="text-3xl font-black text-center uppercase italic mb-2">📈 Statistics</h2>
-      <p className="text-center text-xs font-bold text-slate-500 px-4">
+      <p className="text-center text-xs font-bold text-white/50 px-4">
         ประวัติการเล่น Flashcards — นับเฉพาะวันที่มีการเล่นเกม
       </p>
 
-      <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 space-y-3">
+      <div className="bg-white/5 p-4 rounded-2xl border-2 border-white/10 space-y-3">
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">ปี</label>
+            <label className="text-[10px] font-black text-white/50 uppercase block mb-1">ปี</label>
             <select
               value={year}
               onChange={(e) => setYear(Number(e.target.value))}
-              className="w-full p-2 rounded-xl border-2 border-slate-200 font-black text-sm"
+              className="w-full p-2 rounded-xl border-2 border-white/15 bg-white/10 text-white font-black text-sm [&>option]:text-slate-800"
             >
               {yearOptions.map((y) => (
                 <option key={y} value={y}>{y}</option>
@@ -279,14 +279,14 @@ export default function Statistics({ user, setPage }) {
             </select>
           </div>
           <div>
-            <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">เดือน</label>
+            <label className="text-[10px] font-black text-white/50 uppercase block mb-1">เดือน</label>
             <select
               value={month}
               onChange={(e) => {
                 const val = e.target.value;
                 setMonth(val === 'all' ? 'all' : Number(val));
               }}
-              className="w-full p-2 rounded-xl border-2 border-slate-200 font-black text-sm"
+              className="w-full p-2 rounded-xl border-2 border-white/15 bg-white/10 text-white font-black text-sm [&>option]:text-slate-800"
             >
               {THAI_MONTHS.map((m) => (
                 <option key={m.value} value={m.value}>{m.label}</option>
@@ -296,7 +296,7 @@ export default function Statistics({ user, setPage }) {
         </div>
 
         <div>
-          <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">User</label>
+          <label className="text-[10px] font-black text-white/50 uppercase block mb-1">User</label>
           <select
             value={selectedUserId}
             onChange={(e) => {
@@ -304,7 +304,7 @@ export default function Statistics({ user, setPage }) {
               setSelectedUserId(value);
               setActiveTab(value ? 'personal' : 'overview');
             }}
-            className="w-full p-2 rounded-xl border-2 border-slate-200 font-black text-sm"
+            className="w-full p-2 rounded-xl border-2 border-white/15 bg-white/10 text-white font-black text-sm [&>option]:text-slate-800"
           >
             <option value="">ทุกคน (ภาพรวม)</option>
             {(statsData?.users || []).map((u) => (
@@ -317,9 +317,9 @@ export default function Statistics({ user, setPage }) {
       </div>
 
       {error && (
-        <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 text-red-700 font-bold text-sm text-center">
+        <div className="bg-red-500/10 border-2 border-red-400/30 rounded-2xl p-4 text-red-300 font-bold text-sm text-center">
           {error}
-          <div className="text-xs font-normal mt-2 text-red-500">
+          <div className="text-xs font-normal mt-2 text-red-300/70">
             กรุณารัน migration `supabase_migration_flashcard_statistics.sql` บน Supabase
           </div>
         </div>
@@ -335,7 +335,7 @@ export default function Statistics({ user, setPage }) {
           value={
             <span className="inline-flex items-baseline gap-1.5">
               <span>{avgWordsPerDay} คำ</span>
-              <span className="text-slate-400">·</span>
+              <span className="text-white/40">·</span>
               <span>{formatPlayDuration(avgSecondsPerDay)}</span>
             </span>
           }
@@ -350,7 +350,7 @@ export default function Statistics({ user, setPage }) {
             setActiveTab('personal');
           }}
           className={`flex-1 py-3 rounded-full font-black text-sm uppercase transition-all ${
-            activeTab === 'personal' ? 'bg-orange-500 text-white' : 'bg-white border-2 border-slate-300 text-slate-700'
+            activeTab === 'personal' ? 'bg-orange-500 text-white' : 'bg-white/5 border-2 border-white/15 text-white/70'
           }`}
         >
           ของฉัน
@@ -359,7 +359,7 @@ export default function Statistics({ user, setPage }) {
           <button
             onClick={() => setActiveTab('overview')}
             className={`flex-1 py-3 rounded-full font-black text-sm uppercase transition-all ${
-              activeTab === 'overview' ? 'bg-orange-500 text-white' : 'bg-white border-2 border-slate-300 text-slate-700'
+              activeTab === 'overview' ? 'bg-orange-500 text-white' : 'bg-white/5 border-2 border-white/15 text-white/70'
             }`}
           >
             ภาพรวม
@@ -376,12 +376,12 @@ export default function Statistics({ user, setPage }) {
       </div>
 
       {activeTab === 'personal' && (
-        <div className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-sm">
+        <div className="bg-white/5 p-4 rounded-3xl border-2 border-white/10 shadow-sm">
           <h3 className="text-lg font-black uppercase italic mb-4 text-center">
             รายวัน — {selectedUserName || 'ของฉัน'}
           </h3>
           {loading ? (
-            <div className="text-center py-8 text-slate-400 font-bold">กำลังโหลด...</div>
+            <div className="text-center py-8 text-white/40 font-bold">กำลังโหลด...</div>
           ) : (
             <DailyBreakdownTable dailyRows={dailyRows} schedules={viewSchedules} />
           )}
@@ -411,31 +411,31 @@ export default function Statistics({ user, setPage }) {
             />
           </div>
 
-          <div className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-sm">
+          <div className="bg-white/5 p-4 rounded-3xl border-2 border-white/10 shadow-sm">
             <h3 className="text-lg font-black uppercase italic mb-4 text-center">Ranking รวม</h3>
             <div className="space-y-2 max-h-[50vh] overflow-y-auto">
               {leaderboard.length === 0 && (
-                <div className="text-center py-8 text-slate-400 font-bold">ยังไม่มีข้อมูล Ranking</div>
+                <div className="text-center py-8 text-white/40 font-bold">ยังไม่มีข้อมูล Ranking</div>
               )}
               {leaderboard.map((item, index) => (
                 <button
                   key={item.user_id}
                   type="button"
                   onClick={() => handleLeaderboardRowClick(item.user_id)}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-slate-100 bg-slate-50 hover:bg-orange-50 hover:border-orange-200 transition-all text-left"
+                  className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-white/10 bg-white/5 hover:bg-orange-500/10 hover:border-orange-400/30 transition-all text-left"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="text-xl shrink-0">
                       {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index + 1}`}
                     </span>
                     <div className="min-w-0">
-                      <div className="font-black text-slate-800 truncate">{item.display_name}</div>
-                      <div className="text-[10px] font-bold text-slate-500">
+                      <div className="font-black text-white truncate">{item.display_name}</div>
+                      <div className="text-[10px] font-bold text-white/50">
                         {item.active_days} วัน · {formatPlayDuration(item.total_seconds)} · {item.total_words} คำ
                       </div>
                     </div>
                   </div>
-                  <span className="text-orange-600 font-black text-sm shrink-0">ดู →</span>
+                  <span className="text-orange-400 font-black text-sm shrink-0">ดู →</span>
                 </button>
               ))}
             </div>

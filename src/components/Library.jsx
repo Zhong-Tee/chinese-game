@@ -60,7 +60,7 @@ export default function Library({
           </div>
             ))
         ) : (
-          <div className="col-span-3 text-center text-slate-400 py-8">กำลังโหลดข้อมูล...</div>
+          <div className="col-span-3 text-center text-white/40 py-8">กำลังโหลดข้อมูล...</div>
         )}
       </div>
       {libraryDetail && (

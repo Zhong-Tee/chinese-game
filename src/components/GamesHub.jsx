@@ -31,25 +31,25 @@ export default function GamesHub({ setPage, gameState = { exp: 0, coin: 0 }, onS
       onDragStart={(e) => e.preventDefault()}
     >
       <div className="flex items-center justify-between">
-        <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-xs uppercase italic underline">← Back</button>
+        <button onClick={() => setPage('dashboard')} className="text-orange-400 font-black text-xs uppercase italic underline">← Back</button>
         <div className="flex gap-2">
-          <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-black text-xs">⭐ {gameState.exp ?? 0}</span>
-          <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full font-black text-xs inline-flex items-center gap-1"><CoinIcon className="w-4 h-4" /> {gameState.coin ?? 0}</span>
+          <span className="bg-emerald-500/15 text-emerald-300 px-3 py-1 rounded-full font-black text-xs">⭐ {gameState.exp ?? 0}</span>
+          <span className="bg-yellow-500/15 text-yellow-300 px-3 py-1 rounded-full font-black text-xs inline-flex items-center gap-1"><CoinIcon className="w-4 h-4" /> {gameState.coin ?? 0}</span>
         </div>
       </div>
 
-      <h2 className="text-3xl font-black text-center uppercase italic text-slate-800 tracking-tighter">⚔️ เลือกด่าน</h2>
+      <h2 className="text-3xl font-black text-center uppercase italic text-white tracking-tighter">⚔️ เลือกด่าน</h2>
 
       {loading ? (
-        <div className="text-center text-slate-400 py-10">กำลังโหลด...</div>
+        <div className="text-center text-white/40 py-10">กำลังโหลด...</div>
       ) : stages.length === 0 ? (
-        <div className="text-center text-slate-400 py-10 px-6">
+        <div className="text-center text-white/40 py-10 px-6">
           ยังไม่มีการตั้งค่าด่าน — ให้ admin ตั้งค่าในหน้า Admin Panel ก่อน
         </div>
       ) : (
         <div className="relative flex flex-col items-center gap-6 pt-2">
           {/* เส้นเชื่อมระหว่างด่าน (เหมือนแผนที่) */}
-          <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-1 bg-slate-200 rounded-full -z-0" />
+          <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-1 bg-white/15 rounded-full -z-0" />
           {stages.map((s, idx) => {
             const color = STAGE_COLORS[idx % STAGE_COLORS.length];
             const alignClass = idx % 2 === 0 ? 'self-start ml-6' : 'self-end mr-6';

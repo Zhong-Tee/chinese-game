@@ -166,7 +166,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
         <div className="text-center">
-          <div className="text-2xl font-black italic text-slate-600">กำลังโหลด...</div>
+          <div className="text-2xl font-black italic text-white/60">กำลังโหลด...</div>
         </div>
       </div>
     );
@@ -178,7 +178,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
       style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}
       onDragStart={(e) => e.preventDefault()}
     >
-      <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline">← Back</button>
+      <button onClick={() => setPage('dashboard')} className="text-orange-400 font-black text-sm uppercase italic underline">← Back</button>
       <h2 className="text-3xl font-black text-center uppercase italic mb-6">📊 Score Dashboard</h2>
 
       <div className="flex gap-2 mb-6">
@@ -187,7 +187,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
           className={`flex-1 py-3 rounded-full font-black text-sm uppercase transition-all ${
             activeTab === 'personal' 
               ? 'bg-orange-500 text-white' 
-              : 'bg-white border-2 border-slate-300 text-slate-700'
+              : 'bg-white/5 border-2 border-white/15 text-white/70'
           }`}
         >
           ข้อมูลส่วนตัว
@@ -197,7 +197,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
           className={`flex-1 py-3 rounded-full font-black text-sm uppercase transition-all ${
             activeTab === 'ranking' 
               ? 'bg-orange-500 text-white' 
-              : 'bg-white border-2 border-slate-300 text-slate-700'
+              : 'bg-white/5 border-2 border-white/15 text-white/70'
           }`}
         >
           Ranking
@@ -206,93 +206,93 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
 
       {activeTab === 'personal' && (
         <div className="space-y-4">
-          <div className="bg-white p-6 rounded-3xl border-2 border-slate-100 shadow-sm">
+          <div className="bg-white/5 p-6 rounded-3xl border-2 border-white/10 shadow-sm">
             <h3 className="text-xl font-black uppercase italic mb-4 text-center">📈 สถิติของคุณ</h3>
             
             <div className="space-y-4">
-              <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
-                <span className="text-slate-700 font-bold">จำนวนคำศัพท์ที่เลือก</span>
-                <span className="text-2xl font-black text-orange-600">{personalStats.selectedWords}</span>
+              <div className="flex justify-between items-center p-4 bg-white/5 rounded-2xl">
+                <span className="text-white/70 font-bold">จำนวนคำศัพท์ที่เลือก</span>
+                <span className="text-2xl font-black text-orange-400">{personalStats.selectedWords}</span>
               </div>
 
-              <div className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl">
-                <span className="text-slate-700 font-bold">คำศัพท์ Level 7</span>
-                <span className="text-2xl font-black text-purple-600">{personalStats.level7Words}</span>
+              <div className="flex justify-between items-center p-4 bg-white/5 rounded-2xl">
+                <span className="text-white/70 font-bold">คำศัพท์ Level 7</span>
+                <span className="text-2xl font-black text-purple-300">{personalStats.level7Words}</span>
               </div>
 
-              <div className="flex justify-between items-center p-4 bg-gradient-to-r from-emerald-50 to-emerald-100 rounded-2xl border-2 border-emerald-200">
-                <span className="text-slate-700 font-bold">คะแนนปัจจุบัน</span>
-                <span className="text-3xl font-black text-emerald-600">{personalStats.currentTotalScore}</span>
+              <div className="flex justify-between items-center p-4 bg-gradient-to-r from-emerald-500/15 to-emerald-500/10 rounded-2xl border-2 border-emerald-400/25">
+                <span className="text-white/70 font-bold">คะแนนปัจจุบัน</span>
+                <span className="text-3xl font-black text-emerald-300">{personalStats.currentTotalScore}</span>
               </div>
 
-              <div className="flex justify-between items-center p-4 bg-gradient-to-r from-yellow-50 to-yellow-100 rounded-2xl border-2 border-yellow-200">
-                <span className="text-slate-700 font-bold">คะแนนรวมสูงสุด</span>
-                <span className="text-3xl font-black text-yellow-600">{personalStats.bestTotalScore}</span>
+              <div className="flex justify-between items-center p-4 bg-gradient-to-r from-yellow-500/15 to-yellow-500/10 rounded-2xl border-2 border-yellow-400/25">
+                <span className="text-white/70 font-bold">คะแนนรวมสูงสุด</span>
+                <span className="text-3xl font-black text-yellow-300">{personalStats.bestTotalScore}</span>
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border-2 border-slate-100 shadow-sm">
+          <div className="bg-white/5 p-6 rounded-3xl border-2 border-white/10 shadow-sm">
             <h3 className="text-xl font-black uppercase italic mb-4 text-center">🎮 คะแนนสูงสุดแต่ละเกม</h3>
             
             <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="p-4 bg-emerald-50 rounded-2xl border-2 border-emerald-200 text-center">
-                <div className="text-xs font-black text-slate-600 uppercase mb-1">เกมแปลไทย</div>
-                <div className="text-2xl font-black text-emerald-600">{personalStats.bestScoresPerGame.th}</div>
+              <div className="p-4 bg-emerald-500/10 rounded-2xl border-2 border-emerald-400/25 text-center">
+                <div className="text-xs font-black text-white/60 uppercase mb-1">เกมแปลไทย</div>
+                <div className="text-2xl font-black text-emerald-300">{personalStats.bestScoresPerGame.th}</div>
               </div>
-              <div className="p-4 bg-blue-50 rounded-2xl border-2 border-blue-200 text-center">
-                <div className="text-xs font-black text-slate-600 uppercase mb-1">Pinyin</div>
-                <div className="text-2xl font-black text-blue-600">{personalStats.bestScoresPerGame.pinyin}</div>
+              <div className="p-4 bg-blue-500/10 rounded-2xl border-2 border-blue-400/25 text-center">
+                <div className="text-xs font-black text-white/60 uppercase mb-1">Pinyin</div>
+                <div className="text-2xl font-black text-blue-300">{personalStats.bestScoresPerGame.pinyin}</div>
               </div>
-              <div className="p-4 bg-purple-50 rounded-2xl border-2 border-purple-200 text-center">
-                <div className="text-xs font-black text-slate-600 uppercase mb-1">เติมคำ</div>
-                <div className="text-2xl font-black text-purple-600">{personalStats.bestScoresPerGame.vol}</div>
+              <div className="p-4 bg-purple-500/10 rounded-2xl border-2 border-purple-400/25 text-center">
+                <div className="text-xs font-black text-white/60 uppercase mb-1">เติมคำ</div>
+                <div className="text-2xl font-black text-purple-300">{personalStats.bestScoresPerGame.vol}</div>
               </div>
-              <div className="p-4 bg-indigo-50 rounded-2xl border-2 border-indigo-200 text-center">
-                <div className="text-xs font-black text-slate-600 uppercase mb-1">ฝึกพิมพ์</div>
-                <div className="text-2xl font-black text-indigo-600">{personalStats.bestScoresPerGame.type}</div>
+              <div className="p-4 bg-indigo-500/10 rounded-2xl border-2 border-indigo-400/25 text-center">
+                <div className="text-xs font-black text-white/60 uppercase mb-1">ฝึกพิมพ์</div>
+                <div className="text-2xl font-black text-indigo-300">{personalStats.bestScoresPerGame.type}</div>
               </div>
             </div>
 
             <h3 className="text-xl font-black uppercase italic mb-4 text-center mt-6">📊 คะแนนปัจจุบันแต่ละเกม</h3>
             
             <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="p-4 bg-emerald-50 rounded-2xl border-2 border-emerald-200 text-center">
-                <div className="text-xs font-black text-slate-600 uppercase mb-1">เกมแปลไทย</div>
-                <div className="text-2xl font-black text-emerald-600">{personalStats.currentScoresPerGame.th}</div>
+              <div className="p-4 bg-emerald-500/10 rounded-2xl border-2 border-emerald-400/25 text-center">
+                <div className="text-xs font-black text-white/60 uppercase mb-1">เกมแปลไทย</div>
+                <div className="text-2xl font-black text-emerald-300">{personalStats.currentScoresPerGame.th}</div>
               </div>
-              <div className="p-4 bg-blue-50 rounded-2xl border-2 border-blue-200 text-center">
-                <div className="text-xs font-black text-slate-600 uppercase mb-1">Pinyin</div>
-                <div className="text-2xl font-black text-blue-600">{personalStats.currentScoresPerGame.pinyin}</div>
+              <div className="p-4 bg-blue-500/10 rounded-2xl border-2 border-blue-400/25 text-center">
+                <div className="text-xs font-black text-white/60 uppercase mb-1">Pinyin</div>
+                <div className="text-2xl font-black text-blue-300">{personalStats.currentScoresPerGame.pinyin}</div>
               </div>
-              <div className="p-4 bg-purple-50 rounded-2xl border-2 border-purple-200 text-center">
-                <div className="text-xs font-black text-slate-600 uppercase mb-1">เติมคำ</div>
-                <div className="text-2xl font-black text-purple-600">{personalStats.currentScoresPerGame.vol}</div>
+              <div className="p-4 bg-purple-500/10 rounded-2xl border-2 border-purple-400/25 text-center">
+                <div className="text-xs font-black text-white/60 uppercase mb-1">เติมคำ</div>
+                <div className="text-2xl font-black text-purple-300">{personalStats.currentScoresPerGame.vol}</div>
               </div>
-              <div className="p-4 bg-indigo-50 rounded-2xl border-2 border-indigo-200 text-center">
-                <div className="text-xs font-black text-slate-600 uppercase mb-1">ฝึกพิมพ์</div>
-                <div className="text-2xl font-black text-indigo-600">{personalStats.currentScoresPerGame.type}</div>
+              <div className="p-4 bg-indigo-500/10 rounded-2xl border-2 border-indigo-400/25 text-center">
+                <div className="text-xs font-black text-white/60 uppercase mb-1">ฝึกพิมพ์</div>
+                <div className="text-2xl font-black text-indigo-300">{personalStats.currentScoresPerGame.type}</div>
               </div>
             </div>
 
             <h3 className="text-xl font-black uppercase italic mb-4 text-center mt-6">🔥 Best Streak แต่ละเกม</h3>
             
             <div className="grid grid-cols-2 gap-3">
-              <div className="p-4 bg-emerald-50 rounded-2xl border-2 border-emerald-200 text-center">
-                <div className="text-xs font-black text-slate-600 uppercase mb-1">เกมแปลไทย</div>
-                <div className="text-2xl font-black text-emerald-600">{personalStats.bestStreaksPerGame.th} คำ</div>
+              <div className="p-4 bg-emerald-500/10 rounded-2xl border-2 border-emerald-400/25 text-center">
+                <div className="text-xs font-black text-white/60 uppercase mb-1">เกมแปลไทย</div>
+                <div className="text-2xl font-black text-emerald-300">{personalStats.bestStreaksPerGame.th} คำ</div>
               </div>
-              <div className="p-4 bg-blue-50 rounded-2xl border-2 border-blue-200 text-center">
-                <div className="text-xs font-black text-slate-600 uppercase mb-1">Pinyin</div>
-                <div className="text-2xl font-black text-blue-600">{personalStats.bestStreaksPerGame.pinyin} คำ</div>
+              <div className="p-4 bg-blue-500/10 rounded-2xl border-2 border-blue-400/25 text-center">
+                <div className="text-xs font-black text-white/60 uppercase mb-1">Pinyin</div>
+                <div className="text-2xl font-black text-blue-300">{personalStats.bestStreaksPerGame.pinyin} คำ</div>
               </div>
-              <div className="p-4 bg-purple-50 rounded-2xl border-2 border-purple-200 text-center">
-                <div className="text-xs font-black text-slate-600 uppercase mb-1">เติมคำ</div>
-                <div className="text-2xl font-black text-purple-600">{personalStats.bestStreaksPerGame.vol} คำ</div>
+              <div className="p-4 bg-purple-500/10 rounded-2xl border-2 border-purple-400/25 text-center">
+                <div className="text-xs font-black text-white/60 uppercase mb-1">เติมคำ</div>
+                <div className="text-2xl font-black text-purple-300">{personalStats.bestStreaksPerGame.vol} คำ</div>
               </div>
-              <div className="p-4 bg-indigo-50 rounded-2xl border-2 border-indigo-200 text-center">
-                <div className="text-xs font-black text-slate-600 uppercase mb-1">ฝึกพิมพ์</div>
-                <div className="text-2xl font-black text-indigo-600">{personalStats.bestStreaksPerGame.type} คำ</div>
+              <div className="p-4 bg-indigo-500/10 rounded-2xl border-2 border-indigo-400/25 text-center">
+                <div className="text-xs font-black text-white/60 uppercase mb-1">ฝึกพิมพ์</div>
+                <div className="text-2xl font-black text-indigo-300">{personalStats.bestStreaksPerGame.type} คำ</div>
               </div>
             </div>
           </div>
@@ -301,14 +301,14 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
 
       {activeTab === 'ranking' && (
         <div className="space-y-4">
-          <div className="bg-white p-4 rounded-2xl border-2 border-slate-100">
+          <div className="bg-white/5 p-4 rounded-2xl border-2 border-white/10">
             <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => setRankingGameType('overall')}
                 className={`py-2 rounded-xl font-black text-xs uppercase transition-all ${
                   rankingGameType === 'overall'
                     ? 'bg-orange-500 text-white'
-                    : 'bg-slate-100 text-slate-700'
+                    : 'bg-white/10 text-white/70'
                 }`}
               >
                 รวม
@@ -318,7 +318,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
                 className={`py-2 rounded-xl font-black text-xs uppercase transition-all ${
                   rankingGameType === 'th'
                     ? 'bg-emerald-500 text-white'
-                    : 'bg-slate-100 text-slate-700'
+                    : 'bg-white/10 text-white/70'
                 }`}
               >
                 แปลไทย
@@ -328,7 +328,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
                 className={`py-2 rounded-xl font-black text-xs uppercase transition-all ${
                   rankingGameType === 'pinyin'
                     ? 'bg-blue-500 text-white'
-                    : 'bg-slate-100 text-slate-700'
+                    : 'bg-white/10 text-white/70'
                 }`}
               >
                 Pinyin
@@ -338,7 +338,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
                 className={`py-2 rounded-xl font-black text-xs uppercase transition-all ${
                   rankingGameType === 'vol'
                     ? 'bg-purple-500 text-white'
-                    : 'bg-slate-100 text-slate-700'
+                    : 'bg-white/10 text-white/70'
                 }`}
               >
                 เติมคำ
@@ -348,7 +348,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
                 className={`py-2 rounded-xl font-black text-xs uppercase transition-all ${
                   rankingGameType === 'type'
                     ? 'bg-indigo-500 text-white'
-                    : 'bg-slate-100 text-slate-700'
+                    : 'bg-white/10 text-white/70'
                 }`}
               >
                 ฝึกพิมพ์
@@ -356,7 +356,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border-2 border-slate-100 shadow-sm">
+          <div className="bg-white/5 p-6 rounded-3xl border-2 border-white/10 shadow-sm">
             <h3 className="text-xl font-black uppercase italic mb-4 text-center">
               {rankingGameType === 'overall' ? '🏆 Overall Ranking' : `🏆 ${rankingGameType === 'th' ? 'เกมแปลไทย' : rankingGameType === 'pinyin' ? 'Pinyin' : rankingGameType === 'vol' ? 'เติมคำ' : 'ฝึกพิมพ์'} Ranking`}
             </h3>
@@ -366,10 +366,10 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
               (rankingGameType === 'pinyin' && pinyinRank) ||
               (rankingGameType === 'vol' && volRank) ||
               (rankingGameType === 'type' && typeRank)) && (
-              <div className="mb-4 p-4 bg-gradient-to-r from-orange-100 to-orange-200 rounded-2xl border-2 border-orange-300">
+              <div className="mb-4 p-4 bg-gradient-to-r from-orange-500/20 to-orange-500/10 rounded-2xl border-2 border-orange-400/30">
                 <div className="text-center">
-                  <div className="text-sm font-black text-slate-700 uppercase mb-1">อันดับของคุณ</div>
-                  <div className="text-3xl font-black text-orange-600">
+                  <div className="text-sm font-black text-white/70 uppercase mb-1">อันดับของคุณ</div>
+                  <div className="text-3xl font-black text-orange-400">
                     #{rankingGameType === 'overall' ? overallRank : 
                       rankingGameType === 'th' ? thRank :
                       rankingGameType === 'pinyin' ? pinyinRank :
@@ -387,10 +387,10 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
                     key={item.user_id || index}
                     className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${
                       isCurrentUser
-                        ? 'bg-orange-100 border-orange-300 shadow-md'
+                        ? 'bg-orange-500/20 border-orange-400/40 shadow-md'
                         : index < 3
-                        ? 'bg-slate-50 border-slate-200'
-                        : 'bg-white border-slate-100'
+                        ? 'bg-white/5 border-white/15'
+                        : 'bg-white/5 border-white/10'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -399,15 +399,15 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
                           {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
                         </span>
                       ) : (
-                        <span className="text-xl font-black text-slate-400 w-8">#{index + 1}</span>
+                        <span className="text-xl font-black text-white/40 w-8">#{index + 1}</span>
                       )}
                       <div>
-                        <div className={`font-black ${isCurrentUser ? 'text-orange-600' : 'text-slate-800'}`}>
+                        <div className={`font-black ${isCurrentUser ? 'text-orange-400' : 'text-white'}`}>
                           {isCurrentUser ? '✨ คุณ' : `User #${index + 1}`}
                         </div>
                       </div>
                     </div>
-                    <div className="text-2xl font-black text-orange-600">
+                    <div className="text-2xl font-black text-orange-400">
                       {item.total_score || 0}
                     </div>
                   </div>
@@ -415,7 +415,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
               })}
               
               {((rankingGameType === 'overall' ? rankings.overall : rankings.byGame[rankingGameType]) || []).length === 0 && (
-                <div className="text-center py-8 text-slate-400">
+                <div className="text-center py-8 text-white/40">
                   ยังไม่มีข้อมูล Ranking
                 </div>
               )}

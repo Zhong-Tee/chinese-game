@@ -122,33 +122,33 @@ export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, o
     const ownedLabel = isUpgrade ? `ติดตั้งแล้ว x${ownedQty}` : `มีอยู่ x${ownedQty}`;
     const maxed = isMaxed(item);
     return (
-      <div key={item.id} className={`bg-white rounded-2xl border-2 shadow-sm p-3 flex items-center gap-3 ${maxed ? 'border-amber-200 bg-amber-50/40' : 'border-slate-100'}`}>
-        <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center text-2xl shrink-0">
+      <div key={item.id} className={`bg-white/5 rounded-2xl border-2 shadow-sm p-3 flex items-center gap-3 ${maxed ? 'border-amber-400/40 bg-amber-500/10' : 'border-white/10'}`}>
+        <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-2xl shrink-0">
           {item.icon_url ? <img src={item.icon_url} alt={item.name} className="w-9 h-9 object-contain" /> : (EFFECT_ICON[item.effect_type] || '🎁')}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-black text-slate-800 text-sm">{item.name}</div>
-          <div className="text-[11px] text-slate-500">{item.description}</div>
+          <div className="font-black text-white text-sm">{item.name}</div>
+          <div className="text-[11px] text-white/50">{item.description}</div>
           {maxed
-            ? <div className="text-[10px] font-black text-amber-500">⛔ ถึงเพดานสูงสุดแล้ว</div>
-            : ownedQty > 0 && <div className="text-[10px] font-black text-emerald-500">{ownedLabel}</div>}
+            ? <div className="text-[10px] font-black text-amber-300">⛔ ถึงเพดานสูงสุดแล้ว</div>
+            : ownedQty > 0 && <div className="text-[10px] font-black text-emerald-400">{ownedLabel}</div>}
         </div>
         <div className="shrink-0 flex flex-col items-end gap-1.5">
           {maxed ? (
-            <span className="px-3 py-1.5 rounded-xl font-black text-xs uppercase bg-amber-100 text-amber-600">เต็มแล้ว</span>
+            <span className="px-3 py-1.5 rounded-xl font-black text-xs uppercase bg-amber-500/15 text-amber-300">เต็มแล้ว</span>
           ) : (
             <>
-              <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+              <div className="flex items-center gap-1 bg-white/10 rounded-lg p-0.5">
                 <button
                   onClick={() => changeQty(item.id, -1)}
                   disabled={busyId === item.id || buyCount <= 1}
-                  className="w-6 h-6 rounded-md bg-white text-slate-700 font-black flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-40"
+                  className="w-6 h-6 rounded-md bg-white/10 text-white font-black flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-40"
                 >−</button>
-                <span className="w-7 text-center font-black text-slate-800 text-sm">{buyCount}</span>
+                <span className="w-7 text-center font-black text-white text-sm">{buyCount}</span>
                 <button
                   onClick={() => changeQty(item.id, 1)}
                   disabled={busyId === item.id || buyCount >= 99}
-                  className="w-6 h-6 rounded-md bg-white text-slate-700 font-black flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-40"
+                  className="w-6 h-6 rounded-md bg-white/10 text-white font-black flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-40"
                 >+</button>
               </div>
               <button
@@ -168,32 +168,32 @@ export default function Shop({ setPage, user, gameState = { exp: 0, coin: 0 }, o
   return (
     <div className="space-y-4 pt-2 pb-12 select-none" style={{ touchAction: 'pan-y' }} onDragStart={(e) => e.preventDefault()}>
       {toast && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[80] bg-slate-800 text-white px-5 py-2 rounded-full shadow-xl font-black text-sm">{toast}</div>
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[80] bg-white/10 backdrop-blur-md border border-white/15 text-white px-5 py-2 rounded-full shadow-xl font-black text-sm">{toast}</div>
       )}
       <div className="flex items-center justify-between">
-        <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-xs uppercase italic underline">← Back</button>
+        <button onClick={() => setPage('dashboard')} className="text-orange-400 font-black text-xs uppercase italic underline">← Back</button>
         <div className="flex gap-2">
-          <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full font-black text-xs">⭐ {gameState.exp ?? 0}</span>
-          <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full font-black text-xs inline-flex items-center gap-1"><CoinIcon className="w-4 h-4" /> {gameState.coin ?? 0}</span>
+          <span className="bg-emerald-500/15 text-emerald-300 px-3 py-1 rounded-full font-black text-xs">⭐ {gameState.exp ?? 0}</span>
+          <span className="bg-yellow-500/15 text-yellow-300 px-3 py-1 rounded-full font-black text-xs inline-flex items-center gap-1"><CoinIcon className="w-4 h-4" /> {gameState.coin ?? 0}</span>
         </div>
       </div>
 
-      <h2 className="text-3xl font-black text-center uppercase italic text-slate-800 tracking-tighter">🛒 Shop</h2>
+      <h2 className="text-3xl font-black text-center uppercase italic text-white tracking-tighter">🛒 Shop</h2>
 
       {loading ? (
-        <div className="text-center text-slate-400 py-10">กำลังโหลด...</div>
+        <div className="text-center text-white/40 py-10">กำลังโหลด...</div>
       ) : (
         <>
           <div>
-            <h3 className="text-xs font-black text-emerald-500 uppercase tracking-widest mb-2">อัปเกรดตัวละคร (ใช้ ⭐ EXP)</h3>
+            <h3 className="text-xs font-black text-emerald-400 uppercase tracking-widest mb-2">อัปเกรดตัวละคร (ใช้ ⭐ EXP)</h3>
             <div className="space-y-2">
-              {upgrades.length ? upgrades.map(renderItem) : <p className="text-slate-400 text-sm italic">ยังไม่มีรายการ</p>}
+              {upgrades.length ? upgrades.map(renderItem) : <p className="text-white/40 text-sm italic">ยังไม่มีรายการ</p>}
             </div>
           </div>
           <div>
-            <h3 className="text-xs font-black text-yellow-500 uppercase tracking-widest mb-2 mt-4 inline-flex items-center gap-1">ไอเทมใช้ในด่าน (ใช้ <CoinIcon className="w-4 h-4" /> Coin)</h3>
+            <h3 className="text-xs font-black text-yellow-400 uppercase tracking-widest mb-2 mt-4 inline-flex items-center gap-1">ไอเทมใช้ในด่าน (ใช้ <CoinIcon className="w-4 h-4" /> Coin)</h3>
             <div className="space-y-2">
-              {consumables.length ? consumables.map(renderItem) : <p className="text-slate-400 text-sm italic">ยังไม่มีรายการ</p>}
+              {consumables.length ? consumables.map(renderItem) : <p className="text-white/40 text-sm italic">ยังไม่มีรายการ</p>}
             </div>
           </div>
         </>

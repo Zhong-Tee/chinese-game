@@ -87,6 +87,40 @@ export default function App() {
 
   // UI States
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  // Pull-to-refresh (custom — รองรับ iOS ที่ scroll อยู่ใน container ไม่ใช่ body)
+  const scrollRef = useRef(null);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const pullStartYRef = useRef(0);
+  const isPullingRef = useRef(false);
+
+  const handlePullStart = (e) => {
+    const el = scrollRef.current;
+    if (el && el.scrollTop <= 0) {
+      pullStartYRef.current = e.touches[0].clientY;
+      isPullingRef.current = true;
+    } else {
+      isPullingRef.current = false;
+    }
+  };
+  const handlePullMove = (e) => {
+    if (!isPullingRef.current || isRefreshing) return;
+    const el = scrollRef.current;
+    if (!el || el.scrollTop > 0) { isPullingRef.current = false; setPullDistance(0); return; }
+    const dy = e.touches[0].clientY - pullStartYRef.current;
+    if (dy > 0) setPullDistance(Math.min(dy * 0.45, 90));
+  };
+  const handlePullEnd = () => {
+    if (!isPullingRef.current) return;
+    isPullingRef.current = false;
+    if (pullDistance > 60) {
+      setIsRefreshing(true);
+      window.location.reload();
+    } else {
+      setPullDistance(0);
+    }
+  };
   const [libraryDetail, setLibraryDetail] = useState(null);
   const [libFlipped, setLibFlipped] = useState(false);
   const [username, setUsername] = useState('');
@@ -96,6 +130,11 @@ export default function App() {
   const [dragSelectMode, setDragSelectMode] = useState('add'); // 'add' | 'remove'
   const [dragTouchedIds, setDragTouchedIds] = useState([]);
   
+  // ปุ่มย้อนกลับมือถือ/เบราว์เซอร์ → ย้อนหน้าในแอพ (ไม่ออกจากแอพ)
+  const isPoppingRef = useRef(false);     // true ระหว่างที่ setPage มาจากปุ่ม back
+  const historyReadyRef = useRef(false);  // ตั้ง base entry ครั้งแรกแล้วหรือยัง
+  const pageRef = useRef('login');        // หน้าปัจจุบัน (ให้ popstate handler อ่านค่าล่าสุดได้)
+
   // Audio Context สำหรับเสียงเตือนเวลา
   const audioContextRef = useRef(null);
   const selectWordsContainerRef = useRef(null);
@@ -122,6 +161,45 @@ export default function App() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // --- 1.5 ปุ่มย้อนกลับ (มือถือ/เบราว์เซอร์) ให้ย้อนหน้าภายในแอพ ---
+  // ฟัง popstate: เมื่อกด back ให้เปลี่ยน page กลับไปหน้าที่บันทึกไว้ใน history
+  useEffect(() => {
+    const onPopState = (e) => {
+      const targetPage = e.state?.page;
+      setIsMenuOpen(false);
+      if (targetPage) {
+        isPoppingRef.current = true;
+        setPage(targetPage);
+      } else {
+        // ถึง base entry แล้ว (กำลังจะย้อนออกจากเว็บ) → ดักไว้ที่หน้า home ไม่ให้ออก
+        window.history.pushState({ page: 'dashboard' }, '');
+        if (pageRef.current !== 'dashboard') {
+          isPoppingRef.current = true;
+          setPage('dashboard');
+        }
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  // เมื่อ page เปลี่ยน: push entry ใหม่เข้า history (ยกเว้นกรณีมาจากปุ่ม back)
+  useEffect(() => {
+    pageRef.current = page;
+    if (page === 'login') return;
+    if (isPoppingRef.current) {
+      isPoppingRef.current = false;
+      return;
+    }
+    if (!historyReadyRef.current) {
+      // หน้าแรกหลังล็อกอิน: ตั้งเป็น base entry โดยไม่เพิ่ม entry ใหม่
+      window.history.replaceState({ page }, '');
+      historyReadyRef.current = true;
+    } else {
+      window.history.pushState({ page }, '');
+    }
+  }, [page]);
 
   const fetchUserSettings = async (userId) => {
     const { data } = await supabase.from('user_settings').select('*').eq('user_id', userId).single();
@@ -615,6 +693,7 @@ export default function App() {
       }
       await supabase.auth.signOut();
       setUser(null);
+      historyReadyRef.current = false;
       setPage('login');
       setIsMenuOpen(false);
     } catch (error) {
@@ -648,11 +727,15 @@ export default function App() {
   }
   const shouldShowTopBar = page !== 'fc-play' && page !== 'dashboard' && page !== 'lucky-draw';
   const isHubPage = page === 'dashboard' || page === 'lucky-draw';
+  const isCreamPage = page === 'fc-play' || page === 'fc-chars';
 
   return (
     <div
+      ref={scrollRef}
       className={`app-shell font-sans w-full select-none ${
-        isHubPage ? 'bg-[#0a0e1a] text-white' : 'bg-slate-50 text-slate-800 app-shell--scroll'
+        isCreamPage
+          ? 'bg-[#FBF4E6] text-slate-800 app-shell--scroll'
+          : isHubPage ? 'bg-[#0a0e1a] text-white' : 'bg-[#0a0e1a] text-white app-shell--scroll'
       }`}
       style={{
         touchAction: 'pan-y',
@@ -661,21 +744,44 @@ export default function App() {
         MozUserSelect: 'none',
         msUserSelect: 'none',
       }}
+      onTouchStart={handlePullStart}
+      onTouchMove={handlePullMove}
+      onTouchEnd={handlePullEnd}
       onDragStart={(e) => {
         if (e.target.tagName === 'IMG') {
           e.preventDefault();
         }
       }}
     >
+      {(pullDistance > 0 || isRefreshing) && (
+        <div
+          className="fixed top-0 left-0 right-0 z-[120] flex justify-center pointer-events-none"
+          style={{
+            transform: `translateY(${Math.min(pullDistance, 90)}px)`,
+            transition: isPullingRef.current ? 'none' : 'transform 0.2s ease-out',
+          }}
+        >
+          <div className="mt-2 w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center">
+            <div
+              className={`w-5 h-5 border-2 border-orange-500 border-t-transparent rounded-full ${isRefreshing || pullDistance > 60 ? 'animate-spin' : ''}`}
+              style={{ transform: `rotate(${pullDistance * 3}deg)` }}
+            />
+          </div>
+        </div>
+      )}
       {shouldShowTopBar && (
         <>
-          <header className="p-4 bg-white shadow-sm border-b-4 border-orange-500 flex justify-between items-center sticky top-0 z-40">
+          <header className="p-4 bg-[#0a0e1a]/90 backdrop-blur-md shadow-lg border-b-4 border-orange-500 flex justify-between items-center sticky top-0 z-40">
             <div className="flex flex-col">
               <h1 className="font-black text-orange-600 text-xl uppercase italic tracking-tighter">Nihao Game</h1>
             </div>
-            <button onClick={() => setIsMenuOpen(true)} className="w-12 h-10 bg-slate-800 text-white rounded-xl flex items-center justify-center text-2xl shadow-lg">☰</button>
+            <button
+              onClick={() => setIsMenuOpen(true)}
+              className="relative z-40 w-12 h-10 bg-slate-800 text-white rounded-xl flex items-center justify-center text-2xl shadow-lg active:scale-90 transition-transform"
+              style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent', cursor: 'pointer' }}
+            >☰</button>
           </header>
-          <MenuOverlay />
+          {isMenuOpen && <MenuOverlay />}
         </>
       )}
 
