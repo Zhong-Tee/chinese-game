@@ -696,7 +696,7 @@ export default function App() {
       </div>
     );
   }
-  const shouldShowTopBar = page !== 'fc-play' && page !== 'dashboard' && page !== 'lucky-draw';
+  const shouldShowTopBar = page !== 'fc-play' && page !== 'dashboard' && page !== 'lucky-draw' && page !== 'battle';
   const isHubPage = page === 'dashboard' || page === 'lucky-draw';
   const isCreamPage = page === 'fc-play' || page === 'fc-chars';
 
@@ -785,7 +785,7 @@ export default function App() {
       )}
 
       <main className={`app-main ${isHubPage ? 'app-main--hub' : 'overflow-y-auto'} ${page === 'admin' ? 'mx-auto max-w-5xl p-4' : isHubPage ? 'p-0' : 'mx-auto max-w-md p-4 pb-10'}`} style={{ touchAction: 'pan-y' }}>
-        {page === 'dashboard' && <Dashboard setPage={setPage} user={user} gameState={gameState} isAdmin={isAdmin} refreshGameState={() => refreshGameState()} />}
+        {page === 'dashboard' && <Dashboard setPage={setPage} user={user} gameState={gameState} isAdmin={isAdmin} refreshGameState={() => refreshGameState()} onLogout={handleLogout} />}
         {page === 'fc-chars' && <Flashcards setPage={setPage} levelCounts={levelCounts} schedules={schedules} checkLevelAvailable={checkLevelAvailable} startLevelGame={startLevelGame} />}
         {page === 'fc-play' && currentCard && (
           <FlashcardGame

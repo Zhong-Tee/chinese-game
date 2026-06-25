@@ -606,7 +606,7 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
 
   if (phase === 'loading') {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900 text-slate-300 font-black italic">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900 text-slate-300 font-black italic">
         กำลังเข้าสู่สนามรบ...
       </div>
     );
@@ -614,7 +614,7 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
 
   if (phase === 'empty') {
     return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-6 text-center bg-slate-900">
+      <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-6 px-6 text-center bg-slate-900">
         <div className="text-5xl">🚫</div>
         <p className="text-slate-200 font-bold max-w-sm">{errorMsg}</p>
         <button onClick={onExit} className="bg-orange-500 text-white px-8 py-3 rounded-2xl font-black uppercase italic shadow-lg active:scale-95">กลับ</button>
@@ -625,7 +625,7 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
   if (phase === 'won' || phase === 'lost') {
     const won = phase === 'won';
     return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 px-6 text-center" style={sceneStyle}>
+      <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-5 px-6 text-center" style={sceneStyle}>
         <div className="absolute inset-0 bg-black/70" />
         <div className="relative flex flex-col items-center gap-5">
           <div className="text-7xl drop-shadow-lg">{won ? '🏆' : '💀'}</div>
@@ -683,7 +683,7 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
 
   return (
     <div
-      className="fixed inset-0 z-50 select-none overflow-hidden"
+      className="fixed inset-0 z-[100] select-none overflow-hidden"
       style={{ ...sceneStyle, userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
       onDragStart={(e) => e.preventDefault()}
     >
@@ -709,7 +709,7 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
 
       {/* คอนเทนต์เต็มความสูง จัดเป็นคอลัมน์ */}
       <div
-        className="relative h-full flex flex-col max-w-md mx-auto px-3 pt-3 pb-4"
+        className="relative h-full flex flex-col max-w-md mx-auto px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]"
         style={{ animation: screenFx === 'bad' ? 'battleShake .42s ease-in-out' : undefined }}
       >
         {/* แถบบน: ออก / เวลา */}
@@ -718,12 +718,15 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
           <div className={`text-2xl font-black italic drop-shadow ${timer <= 3 ? 'text-red-400 animate-pulse' : 'text-white'}`}>{timer}s</div>
         </div>
 
-        {/* หลอด HP ผู้เล่น (เขียว) + ไอเทมที่ใช้อยู่ (ไอคอนใหญ่หน้าหลอด) */}
+        {/* หลอด HP ผู้เล่น (เขียว) */}
         <div className="flex items-center gap-2 mb-1.5 shrink-0">
-          <span className="w-9 h-9 flex items-center justify-center text-3xl leading-none drop-shadow shrink-0">{shield ? '🛡️' : ''}</span>
-          <div className={`relative flex-1 h-4 bg-black/45 rounded-full overflow-hidden border border-white/20 ${playerHurt ? 'animate-pulse' : ''}`}>
+          <span className="w-9 h-9 flex items-center justify-center text-2xl leading-none drop-shadow shrink-0" aria-hidden="true">
+            {shield ? '🛡️' : '❤️'}
+          </span>
+          <div className={`relative flex-1 h-5 bg-black/55 rounded-full overflow-hidden border border-emerald-400/40 ${playerHurt ? 'animate-pulse' : ''}`}>
             <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-300" style={{ width: `${maxHp ? (Math.max(0, playerHp) / maxHp) * 100 : 0}%` }} />
           </div>
+          <span className="text-sm font-black text-white drop-shadow shrink-0 tabular-nums">{Math.max(0, playerHp)}/{maxHp}</span>
         </div>
 
         {/* หลอด HP ศัตรู (แดง) */}

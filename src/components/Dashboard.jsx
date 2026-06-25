@@ -28,7 +28,7 @@ const BOTTOM_NAV = [
   { id: 'settings', label: 'More', icon: '⚙️', action: 'settings' },
 ];
 
-export default function Dashboard({ setPage, user, gameState = { exp: 0, coin: 0 }, isAdmin = false, refreshGameState }) {
+export default function Dashboard({ setPage, user, gameState = { exp: 0, coin: 0 }, isAdmin = false, refreshGameState, onLogout }) {
   const [username, setUsername] = useState('');
   const [showCharModal, setShowCharModal] = useState(false);
   const [characters, setCharacters] = useState([]);
@@ -204,6 +204,16 @@ export default function Dashboard({ setPage, user, gameState = { exp: 0, coin: 0
                 title="Admin"
               >
                 🛠️
+              </button>
+            )}
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="w-9 h-9 rounded-xl hub-glass flex items-center justify-center text-base active:scale-95 text-red-400"
+                title="Logout"
+                aria-label="Logout"
+              >
+                🚪
               </button>
             )}
           </div>
