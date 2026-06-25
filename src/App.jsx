@@ -88,39 +88,6 @@ export default function App() {
   // UI States
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  // Pull-to-refresh (custom — รองรับ iOS ที่ scroll อยู่ใน container ไม่ใช่ body)
-  const scrollRef = useRef(null);
-  const [pullDistance, setPullDistance] = useState(0);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const pullStartYRef = useRef(0);
-  const isPullingRef = useRef(false);
-
-  const handlePullStart = (e) => {
-    const el = scrollRef.current;
-    if (el && el.scrollTop <= 0) {
-      pullStartYRef.current = e.touches[0].clientY;
-      isPullingRef.current = true;
-    } else {
-      isPullingRef.current = false;
-    }
-  };
-  const handlePullMove = (e) => {
-    if (!isPullingRef.current || isRefreshing) return;
-    const el = scrollRef.current;
-    if (!el || el.scrollTop > 0) { isPullingRef.current = false; setPullDistance(0); return; }
-    const dy = e.touches[0].clientY - pullStartYRef.current;
-    if (dy > 0) setPullDistance(Math.min(dy * 0.45, 90));
-  };
-  const handlePullEnd = () => {
-    if (!isPullingRef.current) return;
-    isPullingRef.current = false;
-    if (pullDistance > 60) {
-      setIsRefreshing(true);
-      window.location.reload();
-    } else {
-      setPullDistance(0);
-    }
-  };
   const [libraryDetail, setLibraryDetail] = useState(null);
   const [libFlipped, setLibFlipped] = useState(false);
   const [username, setUsername] = useState('');
@@ -708,7 +675,11 @@ export default function App() {
       style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
       onDragStart={(e) => e.preventDefault()}
     >
-      <button onClick={() => setIsMenuOpen(false)} className="absolute top-6 right-6 text-white text-4xl">&times;</button>
+      <button
+        onClick={() => setIsMenuOpen(false)}
+        className="absolute top-[max(1.5rem,env(safe-area-inset-top))] right-[max(1.5rem,env(safe-area-inset-right))] text-white text-4xl min-w-[44px] min-h-[44px] flex items-center justify-center"
+        style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+      >&times;</button>
       <div className="flex flex-col space-y-8 text-center text-white font-black italic text-2xl uppercase">
         <button onClick={() => {setPage('dashboard'); setIsMenuOpen(false);}}>🏠 Home</button>
         <button onClick={() => {setPage('statistics'); setIsMenuOpen(false);}}>📈 Statistics</button>
@@ -731,7 +702,6 @@ export default function App() {
 
   return (
     <div
-      ref={scrollRef}
       className={`app-shell font-sans w-full select-none ${
         isCreamPage
           ? 'bg-[#FBF4E6] text-slate-800 app-shell--scroll'
@@ -744,41 +714,23 @@ export default function App() {
         MozUserSelect: 'none',
         msUserSelect: 'none',
       }}
-      onTouchStart={handlePullStart}
-      onTouchMove={handlePullMove}
-      onTouchEnd={handlePullEnd}
       onDragStart={(e) => {
         if (e.target.tagName === 'IMG') {
           e.preventDefault();
         }
       }}
     >
-      {(pullDistance > 0 || isRefreshing) && (
-        <div
-          className="fixed top-0 left-0 right-0 z-[120] flex justify-center pointer-events-none"
-          style={{
-            transform: `translateY(${Math.min(pullDistance, 90)}px)`,
-            transition: isPullingRef.current ? 'none' : 'transform 0.2s ease-out',
-          }}
-        >
-          <div className="mt-2 w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center">
-            <div
-              className={`w-5 h-5 border-2 border-orange-500 border-t-transparent rounded-full ${isRefreshing || pullDistance > 60 ? 'animate-spin' : ''}`}
-              style={{ transform: `rotate(${pullDistance * 3}deg)` }}
-            />
-          </div>
-        </div>
-      )}
       {shouldShowTopBar && (
         <>
-          <header className="p-4 bg-[#0a0e1a]/90 backdrop-blur-md shadow-lg border-b-4 border-orange-500 flex justify-between items-center sticky top-0 z-40">
-            <div className="flex flex-col">
+          <header className="px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4 bg-[#0a0e1a]/90 backdrop-blur-md shadow-lg border-b-4 border-orange-500 flex justify-between items-center sticky top-0 z-40">
+            <div className="flex flex-col min-w-0">
               <h1 className="font-black text-orange-600 text-xl uppercase italic tracking-tighter">Nihao Game</h1>
             </div>
             <button
               onClick={() => setIsMenuOpen(true)}
-              className="relative z-40 w-12 h-10 bg-slate-800 text-white rounded-xl flex items-center justify-center text-2xl shadow-lg active:scale-90 transition-transform"
+              className="relative z-50 shrink-0 min-w-[44px] min-h-[44px] w-12 h-11 bg-slate-800 text-white rounded-xl flex items-center justify-center text-2xl shadow-lg active:scale-90 transition-transform"
               style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent', cursor: 'pointer' }}
+              aria-label="เปิดเมนู"
             >☰</button>
           </header>
           {isMenuOpen && <MenuOverlay />}

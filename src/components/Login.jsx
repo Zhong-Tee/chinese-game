@@ -56,7 +56,13 @@ export default function Login({ setPage, setUser, fetchInitialData, fetchUserSet
   return (
     <div className="flex flex-1 w-full flex-col items-center justify-center p-6 text-center font-sans pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <h1 className="text-4xl font-black text-orange-600 mb-8 italic uppercase tracking-tighter">Nihao Game</h1>
-      <div className="w-full max-w-xs space-y-4">
+      <form
+        className="w-full max-w-xs space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleLogin();
+        }}
+      >
         <input 
           type="text" 
           placeholder="Username" 
@@ -72,20 +78,21 @@ export default function Login({ setPage, setUser, fetchInitialData, fetchUserSet
           onChange={e => setPassword(e.target.value)} 
         />
         <button 
-          onClick={handleLogin} 
+          type="submit"
           disabled={loading}
           className="w-full bg-orange-600 text-white p-4 rounded-3xl font-black shadow-lg uppercase active:scale-95 transition-all"
         >
           {loading ? 'Logging in...' : 'Login'}
         </button>
         <button 
+          type="button"
           onClick={handleSignUp} 
           disabled={loading}
           className="w-full bg-white border-2 border-orange-600 text-orange-600 p-4 rounded-3xl font-black shadow-lg uppercase active:scale-95 transition-all mt-4"
         >
           {loading ? 'กำลังสมัคร...' : 'สมัคร'}
         </button>
-      </div>
+      </form>
     </div>
   );
 }
