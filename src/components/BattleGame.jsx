@@ -11,10 +11,14 @@ import {
   levelUp,
   pickRandom,
   computeMedal,
-  MEDAL_INFO,
+  getDifficultyMultiplier,
+  getDifficultyRewardType,
+  getDifficultyRewardLabel,
   MAX_ITEM_CARRY,
 } from '../utils/gameStorage';
+import RewardIcon from './RewardIcon';
 import { playBgm, stopBgm, playSfx } from '../utils/gameAudio';
+import { norm, shuffle, stripPunct, sentenceTokens } from '../utils/sentenceTokens';
 
 const EXP_PER_MONSTER = 1;
 const EXP_PER_BOSS = 5;
@@ -23,10 +27,7 @@ const EXP_PER_BOSS = 5;
 const DURING_RUN_EXP_RATE = 0.2;
 const FEEDBACK_MS = 1200;
 
-const norm = (v) => String(v || '').trim();
-const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
-
-export default function BattleGame({ user, stageNo, alreadyWon = false, selectedCharacterId = null, equippedItemIds = [], allMasterCards = [], onExit, onReward, onLevelUp, onStageComplete }) {
+export default function BattleGame({ user, stageNo, difficulty = 'easy', alreadyWon = false, selectedCharacterId = null, equippedItemIds = [], allMasterCards = [], onExit, onReward, onLevelUp, onStageComplete }) {
   const [phase, setPhase] = useState('loading'); // loading | empty | playing | won | lost
   const [errorMsg, setErrorMsg] = useState('');
   const [loadKey, setLoadKey] = useState(0); // bump เพื่อเริ่มด่านใหม่
@@ -110,24 +111,6 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
     while (distractors.length < 2) distractors.push(`ตัวเลือก ${distractors.length + 1}`);
     return { choices: shuffle([correct, ...distractors]), correctAnswer: correct };
   }, [allMasterCards]);
-
-  // ตัดเครื่องหมายวรรคตอนทิ้ง (ทั้งไทย/อังกฤษ/จีน)
-  const stripPunct = (s) => String(s || '').replace(/[,.，。、；;：:!?！？""''「」『』（）()\[\]【】~～·\-—_]/g, '');
-
-  // แบ่งประโยคเป็น token: ถ้ามีช่องว่าง → แบ่งตามช่องว่าง
-  // ถ้าไม่มี (ภาษาจีน) → จับเป็นกลุ่มละ 2 ตัวอักษร จนเหลือเศษ 1 ตัวท้าย
-  const sentenceTokens = (card) => {
-    let raw = stripPunct(norm(card?.sentence_test)).replace(/\s+/g, ' ').trim();
-    if (!raw) return [];
-    if (raw.includes(' ')) return raw.split(/\s+/).filter(Boolean);
-
-    const chars = Array.from(raw);
-    const groups = [];
-    for (let i = 0; i < chars.length; i += 2) {
-      groups.push(chars.slice(i, i + 2).join(''));
-    }
-    return groups;
-  };
 
   // -------------------------------------------------------------------
   // setup the next question round
@@ -238,7 +221,13 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
           : invMapped.slice(0, 3);
         setItems(chosen);
 
-        // สร้างคิวศัตรู: มอนสเตอร์ตาม monster_count แล้วตามด้วยบอส
+        // สร้างคิวศัตรู: มอนสเตอร์ตาม monster_count แล้วตามด้วยบอส (คูณ HP/ATK ตามระดับความยาก)
+        const mult = getDifficultyMultiplier(difficulty);
+        const scaleEnemy = (e, isBoss) => {
+          const hp = (e.hp || 1) * mult;
+          const atk = (e.attack || 1) * mult;
+          return { ...e, hp, maxHp: hp, attack: atk, isBoss };
+        };
         const monsters = cfg.enemies.filter(e => e.type === 'monster');
         const bosses = cfg.enemies.filter(e => e.type === 'boss');
         const queue = [];
@@ -246,14 +235,14 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
         if (monsters.length > 0) {
           for (let i = 0; i < count; i++) {
             const m = monsters[i % monsters.length];
-            queue.push({ ...m, maxHp: m.hp, isBoss: false });
+            queue.push(scaleEnemy(m, false));
           }
         }
-        bosses.forEach(b => queue.push({ ...b, maxHp: b.hp, isBoss: true }));
+        bosses.forEach(b => queue.push(scaleEnemy(b, true)));
         if (queue.length === 0) {
           // fallback ถ้า admin ยังไม่ตั้งศัตรู
-          for (let i = 0; i < count; i++) queue.push({ name: 'มอนสเตอร์', image_url: null, hp: 3, maxHp: 3, attack: 1, isBoss: false });
-          queue.push({ name: 'บอส', image_url: null, hp: 8, maxHp: 8, attack: 2, isBoss: true });
+          for (let i = 0; i < count; i++) queue.push(scaleEnemy({ name: 'มอนสเตอร์', image_url: null, hp: 3, attack: 1 }, false));
+          queue.push(scaleEnemy({ name: 'บอส', image_url: null, hp: 8, attack: 2 }, true));
         }
         setEnemyQueue(queue);
         setEnemyIdx(0);
@@ -325,7 +314,7 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
     })();
     return () => { alive = false; stopBgm(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stageNo, user?.id, loadKey, selectedCharacterId]);
+  }, [stageNo, user?.id, loadKey, selectedCharacterId, difficulty]);
 
   // เริ่ม round แรกเมื่อพร้อมเล่น
   useEffect(() => {
@@ -396,7 +385,7 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
           const total = correct + wrongRef.current;
           const medal = computeMedal(correct, total);
           setResultStats({ correct, total, medal });
-          if (onStageComplete) onStageComplete(stageNo, { correct, total, medal });
+          if (onStageComplete) onStageComplete(stageNo, { correct, total, medal, difficulty });
           setPhase('won');
         } else {
           // ให้หลอด HP ของศัตรูลดลงจนหมดก่อน แล้วค่อยสลับเป็นตัวถัดไป
@@ -430,7 +419,7 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
         setPlayerHp(np);
       }
     }
-  }, [answered, phase, attack, enemyHp, playerHp, enemyQueue, enemyIdx, shield, currentEnemy, awardExp, awardClearBonus, triggerFx, onLevelUp, onStageComplete, stageNo]);
+  }, [answered, phase, attack, enemyHp, playerHp, enemyQueue, enemyIdx, shield, currentEnemy, awardExp, awardClearBonus, triggerFx, onLevelUp, onStageComplete, stageNo, difficulty]);
 
   // จัดการเลือกคำตอบ (pinyin/meaning)
   const handleChoice = (choice) => {
@@ -575,7 +564,7 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
           const total = correct + wrongRef.current;
           const medal = computeMedal(correct, total);
           setResultStats({ correct, total, medal });
-          if (onStageComplete) onStageComplete(stageNo, { correct, total, medal });
+          if (onStageComplete) onStageComplete(stageNo, { correct, total, medal, difficulty });
           setPhase('won');
         } else {
           const ni = enemyIdx + 1;
@@ -642,8 +631,15 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
             <div className="bg-white/95 border-2 border-slate-200 rounded-2xl px-6 py-4 flex flex-col items-center gap-2">
               {resultStats.medal && (
                 <>
-                  <div className="text-6xl drop-shadow">{MEDAL_INFO[resultStats.medal].emoji}</div>
-                  <div className="text-lg font-black text-slate-700 italic">เหรียญ{MEDAL_INFO[resultStats.medal].label}</div>
+                  <RewardIcon
+                    type={getDifficultyRewardType(difficulty)}
+                    tier={resultStats.medal}
+                    earned={true}
+                    className="w-16 h-16"
+                  />
+                  <div className="text-lg font-black text-slate-700 italic">
+                    {getDifficultyRewardLabel(difficulty)}{resultStats.medal === 'gold' ? 'ทอง' : resultStats.medal === 'silver' ? 'เงิน' : 'ทองแดง'}
+                  </div>
                 </>
               )}
               <div className="text-sm font-black text-emerald-600">
@@ -688,22 +684,75 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
       onDragStart={(e) => e.preventDefault()}
     >
       <style>{`
-        @keyframes battleShake {0%,100%{transform:translateX(0)}15%{transform:translateX(-9px)}30%{transform:translateX(9px)}45%{transform:translateX(-7px)}60%{transform:translateX(7px)}80%{transform:translateX(-4px)}}
-        @keyframes battleFlash {0%{opacity:.5}100%{opacity:0}}
+        @keyframes battleShake {0%,100%{transform:translateX(0)}15%{transform:translateX(-11px)}30%{transform:translateX(11px)}45%{transform:translateX(-8px)}60%{transform:translateX(8px)}80%{transform:translateX(-5px)}}
+        @keyframes battleFlashBad {0%{opacity:.72}35%{opacity:.42}100%{opacity:0}}
+        @keyframes battleVignetteRed {0%{opacity:.85}100%{opacity:0}}
         @keyframes battlePop {0%{transform:translate(-50%,10px) scale(.5);opacity:0}25%{opacity:1}100%{transform:translate(-50%,-70px) scale(1.25);opacity:0}}
-        @keyframes battleSlash {0%{transform:translate(-50%,-50%) scale(.3) rotate(-35deg);opacity:0}30%{opacity:1}100%{transform:translate(-50%,-50%) scale(1.6) rotate(-35deg);opacity:0}}
+        @keyframes swordSlashMark {0%{transform:translate(-50%,-50%) rotate(var(--slash-angle, -38deg)) scaleX(0);opacity:0}18%{opacity:1}42%{transform:translate(-50%,-50%) rotate(var(--slash-angle, -38deg)) scaleX(1);opacity:1}100%{transform:translate(-50%,-50%) rotate(var(--slash-angle, -38deg)) scaleX(1.08);opacity:0}}
+        @keyframes swordSlashGlow {0%{transform:translate(-50%,-50%) rotate(var(--slash-angle, -38deg)) scaleX(0);opacity:0}22%{opacity:.55}48%{transform:translate(-50%,-50%) rotate(var(--slash-angle, -38deg)) scaleX(1);opacity:.45}100%{opacity:0}}
+        @keyframes hitSpark {0%{opacity:.75;transform:scale(.35)}100%{opacity:0;transform:scale(1.35)}}
+        @keyframes bloodSplatter {0%{transform:scale(0) translate(0,0);opacity:0}22%{opacity:.95;transform:scale(1) translate(0,0)}100%{transform:scale(var(--blood-scale,1.35)) translate(var(--tx,0), var(--ty,0));opacity:0}}
         @keyframes enemyFloat {0%,100%{transform:translateY(0) rotate(0deg)}25%{transform:translateY(-7px) rotate(-1.2deg)}50%{transform:translateY(-12px) rotate(0deg)}75%{transform:translateY(-7px) rotate(1.2deg)}}
       `}</style>
 
       {/* ฟิล์มมืดให้อ่านตัวหนังสือง่ายขึ้น */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/75 pointer-events-none" />
 
-      {/* แฟลชสีเต็มจอ: เขียว=ตอบถูก / แดง=โดนโจมตี / ฟ้า=กันด้วยโล่ */}
-      {screenFx && (
+      {/* ตอบผิด / โดนโจมตี: หน้าจอกระพริบแดง + vignette */}
+      {screenFx === 'bad' && (
+        <>
+          <div
+            key={`flash-bad-${fxKey}`}
+            className="absolute inset-0 pointer-events-none z-[105] bg-red-600 mix-blend-screen"
+            style={{ animation: 'battleFlashBad .58s ease-out forwards' }}
+          />
+          <div
+            key={`vignette-bad-${fxKey}`}
+            className="absolute inset-0 pointer-events-none z-[105]"
+            style={{
+              background: 'radial-gradient(circle at center, transparent 24%, rgba(127,29,29,0.72) 100%)',
+              animation: 'battleVignetteRed .58s ease-out forwards',
+            }}
+          />
+          <div key={`blood-layer-${fxKey}`} className="absolute inset-0 pointer-events-none z-[106] overflow-hidden">
+            {[
+              { x: '46%', y: '22%', size: '1.35rem', tx: '-18px', ty: '14px', delay: '0s', color: '#dc2626' },
+              { x: '54%', y: '26%', size: '1rem', tx: '22px', ty: '10px', delay: '0.04s', color: '#b91c1c' },
+              { x: '42%', y: '30%', size: '0.85rem', tx: '-26px', ty: '-8px', delay: '0.02s', color: '#991b1b' },
+              { x: '58%', y: '28%', size: '1.1rem', tx: '28px', ty: '-12px', delay: '0.06s', color: '#ef4444' },
+              { x: '50%', y: '34%', size: '1.5rem', tx: '4px', ty: '20px', delay: '0.01s', color: '#dc2626', scale: '1.6' },
+              { x: '38%', y: '24%', size: '0.75rem', tx: '-32px', ty: '6px', delay: '0.05s', color: '#7f1d1d' },
+              { x: '62%', y: '32%', size: '0.9rem', tx: '30px', ty: '16px', delay: '0.03s', color: '#b91c1c' },
+              { x: '48%', y: '18%', size: '0.7rem', tx: '-8px', ty: '-18px', delay: '0.07s', color: '#ef4444' },
+            ].map((drop, i) => (
+              <div
+                key={`blood-${fxKey}-${i}`}
+                className="absolute rounded-full"
+                style={{
+                  left: drop.x,
+                  top: drop.y,
+                  width: drop.size,
+                  height: drop.size,
+                  background: `radial-gradient(circle at 35% 35%, ${drop.color} 0%, rgba(127,29,29,0.85) 55%, transparent 72%)`,
+                  boxShadow: `0 0 8px rgba(220,38,38,0.55)`,
+                  animation: 'bloodSplatter .62s ease-out forwards',
+                  animationDelay: drop.delay,
+                  ['--tx']: drop.tx,
+                  ['--ty']: drop.ty,
+                  ['--blood-scale']: drop.scale || '1.35',
+                }}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* กันด้วยโล่ */}
+      {screenFx === 'block' && (
         <div
-          key={`flash-${fxKey}`}
-          className={`absolute inset-0 pointer-events-none ${screenFx === 'good' ? 'bg-emerald-400' : screenFx === 'bad' ? 'bg-red-500' : 'bg-sky-400'}`}
-          style={{ animation: 'battleFlash .6s ease-out forwards' }}
+          key={`flash-block-${fxKey}`}
+          className="absolute inset-0 pointer-events-none bg-sky-400"
+          style={{ animation: 'battleFlashBad .45s ease-out forwards', opacity: 0.35 }}
         />
       )}
 
@@ -749,19 +798,95 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
         {/* มอนสเตอร์: ตรึงตำแหน่งไว้ด้านบน (ไม่ขยับตามชนิดโจทย์) + เงาที่พื้น */}
         <div className="flex-1 min-h-0 flex flex-col items-center justify-start relative pt-[1vh]">
           <div className="relative flex flex-col items-center" style={{ animation: 'enemyFloat 3.2s ease-in-out infinite' }}>
+            {/* วงแสงหลังศัตรู — แยกตัวละครออกจากโทนฉากมืด */}
+            <div
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[42%] w-[min(92vw,18rem)] h-[min(54vh,15rem)] rounded-[50%] pointer-events-none -z-10"
+              style={{
+                background: 'radial-gradient(ellipse at center, rgba(255,255,255,0.28) 0%, rgba(255,230,180,0.12) 32%, rgba(0,0,0,0) 72%)',
+              }}
+            />
+            <div
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[42%] w-[min(72vw,13rem)] h-[min(40vh,10rem)] rounded-[50%] pointer-events-none -z-10 border border-white/10"
+              style={{
+                background: 'radial-gradient(ellipse at center, rgba(255,255,255,0.08) 0%, transparent 68%)',
+                boxShadow: '0 0 36px rgba(255,255,255,0.12), inset 0 0 24px rgba(255,255,255,0.06)',
+              }}
+            />
+
             {currentEnemy?.image_url ? (
               <img
                 src={currentEnemy.image_url}
                 alt={currentEnemy.name || 'enemy'}
-                className={`max-h-[42vh] w-auto object-contain transition-transform duration-200 ${enemyHurt ? 'translate-x-2 -rotate-3' : ''}`}
-                style={{ filter: `drop-shadow(0 12px 18px rgba(0,0,0,0.55))${enemyHurt ? ' brightness(1.7)' : ''}` }}
+                className={`relative z-10 max-h-[42vh] w-auto object-contain transition-transform duration-200 ${enemyHurt ? 'translate-x-2 -rotate-3' : ''}`}
+                style={{
+                  filter: enemyHurt
+                    ? 'brightness(1.22) contrast(1.12) saturate(1.18) drop-shadow(0 0 12px rgba(255,255,255,0.5)) drop-shadow(0 0 24px rgba(251,191,36,0.35)) drop-shadow(0 16px 24px rgba(0,0,0,0.8))'
+                    : 'brightness(1.12) contrast(1.1) saturate(1.15) drop-shadow(0 0 10px rgba(255,255,255,0.38)) drop-shadow(0 0 20px rgba(0,0,0,0.55)) drop-shadow(0 16px 24px rgba(0,0,0,0.75))',
+                }}
               />
             ) : (
-              <div className={`text-[7rem] leading-none transition-transform ${enemyHurt ? 'scale-90 -rotate-6' : ''}`} style={{ filter: 'drop-shadow(0 12px 18px rgba(0,0,0,0.55))' }}>{currentEnemy?.isBoss ? '👹' : '👾'}</div>
+              <div
+                className={`relative z-10 text-[7rem] leading-none transition-transform ${enemyHurt ? 'scale-90 -rotate-6' : ''}`}
+                style={{
+                  filter: enemyHurt
+                    ? 'brightness(1.2) drop-shadow(0 0 12px rgba(255,255,255,0.55)) drop-shadow(0 0 24px rgba(251,191,36,0.35)) drop-shadow(0 16px 24px rgba(0,0,0,0.8))'
+                    : 'brightness(1.08) drop-shadow(0 0 10px rgba(255,255,255,0.4)) drop-shadow(0 0 20px rgba(0,0,0,0.55)) drop-shadow(0 16px 24px rgba(0,0,0,0.75))',
+                }}
+              >
+                {currentEnemy?.isBoss ? '👹' : '👾'}
+              </div>
             )}
-            {/* เอฟเฟกต์ฟันตอนตอบถูก */}
+            {/* เอฟเฟกต์รอยดาบฟันตอนตอบถูก */}
             {screenFx === 'good' && (
-              <span key={`slash-${fxKey}`} className="absolute top-1/2 left-1/2 text-7xl pointer-events-none" style={{ animation: 'battleSlash .5s ease-out forwards' }}>⚔️</span>
+              <>
+                <div
+                  key={`spark-${fxKey}`}
+                  className="absolute top-[42%] left-1/2 -translate-x-1/2 w-40 h-40 rounded-full pointer-events-none z-20 bg-white/30 blur-2xl"
+                  style={{ animation: 'hitSpark .38s ease-out forwards' }}
+                />
+                <div
+                  key={`slash-glow-a-${fxKey}`}
+                  className="absolute top-1/2 left-1/2 pointer-events-none z-20 w-[min(78vw,15rem)] h-3 rounded-full origin-center"
+                  style={{
+                    ['--slash-angle']: '-38deg',
+                    background: 'linear-gradient(90deg, transparent, rgba(186,230,253,0.55) 40%, rgba(255,255,255,0.35) 55%, transparent)',
+                    filter: 'blur(3px)',
+                    animation: 'swordSlashGlow .48s ease-out forwards',
+                  }}
+                />
+                <div
+                  key={`slash-glow-b-${fxKey}`}
+                  className="absolute top-1/2 left-1/2 pointer-events-none z-20 w-[min(68vw,13rem)] h-3 rounded-full origin-center"
+                  style={{
+                    ['--slash-angle']: '28deg',
+                    background: 'linear-gradient(90deg, transparent, rgba(186,230,253,0.45) 40%, rgba(255,255,255,0.28) 55%, transparent)',
+                    filter: 'blur(3px)',
+                    animation: 'swordSlashGlow .48s ease-out forwards',
+                    animationDelay: '0.04s',
+                  }}
+                />
+                <div
+                  key={`slash-a-${fxKey}`}
+                  className="absolute top-1/2 left-1/2 pointer-events-none z-[21] w-[min(72vw,14rem)] h-[4px] rounded-full origin-center"
+                  style={{
+                    ['--slash-angle']: '-38deg',
+                    background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 12%, #ffffff 42%, #e0f2fe 52%, rgba(255,255,255,0.2) 68%, transparent 100%)',
+                    boxShadow: '0 0 10px rgba(255,255,255,0.95), 0 0 22px rgba(147,197,253,0.75), 0 0 34px rgba(56,189,248,0.45)',
+                    animation: 'swordSlashMark .46s ease-out forwards',
+                  }}
+                />
+                <div
+                  key={`slash-b-${fxKey}`}
+                  className="absolute top-1/2 left-1/2 pointer-events-none z-[21] w-[min(62vw,12rem)] h-[3px] rounded-full origin-center"
+                  style={{
+                    ['--slash-angle']: '28deg',
+                    background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 14%, #f8fafc 45%, #dbeafe 55%, rgba(255,255,255,0.15) 70%, transparent 100%)',
+                    boxShadow: '0 0 8px rgba(255,255,255,0.85), 0 0 18px rgba(147,197,253,0.6)',
+                    animation: 'swordSlashMark .46s ease-out forwards',
+                    animationDelay: '0.05s',
+                  }}
+                />
+              </>
             )}
             {/* ตัวเลขดาเมจลอยขึ้น */}
             {screenFx === 'good' && (
@@ -771,8 +896,11 @@ export default function BattleGame({ user, stageNo, alreadyWon = false, selected
               <span key={`blk-${fxKey}`} className="absolute top-1/4 left-1/2 text-5xl pointer-events-none" style={{ animation: 'battlePop .7s ease-out forwards' }}>🛡️</span>
             )}
           </div>
-          {/* เงาที่พื้นแทนกล่องสี่เหลี่ยม */}
-          <div className="w-36 h-4 -mt-1 rounded-[50%] bg-black/55 blur-md" />
+          {/* เงาที่พื้น — ช่วยยึดตำแหน่งศัตรูให้แยกจากฉาก */}
+          <div
+            className="relative z-0 w-44 h-5 -mt-2 rounded-[50%] blur-md"
+            style={{ background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.28) 55%, transparent 78%)' }}
+          />
         </div>
 
         {/* ส่วนล่าง: คำถาม (ไม่มีการ์ดพื้นหลัง) + ไอเทม */}

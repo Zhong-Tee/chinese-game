@@ -1123,7 +1123,7 @@ export default function AdminPanel({ setPage, isAdmin }) {
   }
 
   return (
-    <div className="space-y-4 pt-2 pb-12">
+    <div className="admin-panel space-y-4 pt-2 pb-12 text-slate-800">
       {toast && <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[80] bg-slate-800 text-white px-5 py-2 rounded-full shadow-xl font-black text-sm">{toast}</div>}
       <div className="flex items-center justify-between">
         <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black text-sm uppercase italic underline hover:text-orange-700">← Back</button>

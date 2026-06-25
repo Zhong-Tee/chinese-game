@@ -443,14 +443,36 @@ export async function consumeItem(userId, itemId) {
 }
 
 // ---------------------------------------------------------------------
-// Stage progress : ปลดล็อกด่าน + คะแนน + เหรียญรางวัล
+// Stage progress : ปลดล็อกด่าน + คะแนน + เหรียญรางวัล (แยกตามระดับความยาก)
 // ---------------------------------------------------------------------
+export const DIFFICULTY_IDS = ['easy', 'medium', 'hard'];
+
+export const DIFFICULTIES = {
+  easy: { label: 'ง่าย', multiplier: 1, rewardType: 'medal', rewardLabel: 'เหรียญ' },
+  medium: { label: 'กลาง', multiplier: 2, rewardType: 'cup', rewardLabel: 'ถ้วย' },
+  hard: { label: 'ยาก', multiplier: 3, rewardType: 'shield', rewardLabel: 'โล่' },
+};
+
 export const MEDAL_RANK = { bronze: 1, silver: 2, gold: 3 };
+export const MEDAL_TIERS = ['gold', 'silver', 'bronze'];
+
 export const MEDAL_INFO = {
   bronze: { label: 'ทองแดง', emoji: '🥉' },
   silver: { label: 'เงิน', emoji: '🥈' },
   gold: { label: 'ทอง', emoji: '🥇' },
 };
+
+export function getDifficultyMultiplier(difficulty) {
+  return DIFFICULTIES[difficulty]?.multiplier ?? 1;
+}
+
+export function getDifficultyRewardType(difficulty) {
+  return DIFFICULTIES[difficulty]?.rewardType ?? 'medal';
+}
+
+export function getDifficultyRewardLabel(difficulty) {
+  return DIFFICULTIES[difficulty]?.rewardLabel ?? 'เหรียญ';
+}
 
 // เหรียญตามความแม่นยำในการตอบ (correct/total)
 //   ทอง = ตอบถูกหมดไม่พลาดเลย, เงิน >= 80%, ทองแดง = ชนะแต่ต่ำกว่านั้น
@@ -462,12 +484,31 @@ export function computeMedal(correct, total) {
   return 'bronze';
 }
 
-// โหลดความคืบหน้าของผู้เล่นทุกด่าน คืน map { [stage_no]: { correct, total, medal } }
+// ชนะด่านในระดับใดก็ได้ → ปลดล็อกด่านถัดไป
+export function isStageCleared(stageProgress, stageNo) {
+  const prog = stageProgress[stageNo];
+  if (!prog) return false;
+  if (prog.medal) return true; // legacy flat format
+  return DIFFICULTY_IDS.some(d => prog[d]?.medal);
+}
+
+export function getStageDifficultyProgress(stageProgress, stageNo, difficulty) {
+  const prog = stageProgress[stageNo];
+  if (!prog) return null;
+  if (prog[difficulty]) return prog[difficulty];
+  if (difficulty === 'easy' && prog.medal) {
+    return { correct: prog.correct, total: prog.total, medal: prog.medal };
+  }
+  return null;
+}
+
+// โหลดความคืบหน้าของผู้เล่นทุกด่าน
+// คืน map { [stage_no]: { easy?, medium?, hard? } } แต่ละระดับมี { correct, total, medal }
 export async function getStageProgress(userId) {
   if (!userId) return {};
   const { data, error } = await supabase
     .from('user_stage_progress')
-    .select('stage_no, best_correct, best_total, medal')
+    .select('stage_no, difficulty, best_correct, best_total, medal')
     .eq('user_id', userId);
   if (error) {
     console.error('getStageProgress error:', error);
@@ -475,19 +516,27 @@ export async function getStageProgress(userId) {
   }
   const map = {};
   (data || []).forEach(r => {
-    map[r.stage_no] = { correct: r.best_correct || 0, total: r.best_total || 0, medal: r.medal || null };
+    const diff = r.difficulty || 'easy';
+    if (!map[r.stage_no]) map[r.stage_no] = {};
+    map[r.stage_no][diff] = {
+      correct: r.best_correct || 0,
+      total: r.best_total || 0,
+      medal: r.medal || null,
+    };
   });
   return map;
 }
 
-// บันทึกผลการเล่นชนะ เก็บเฉพาะผลที่ดีที่สุด (เหรียญสูงกว่า หรือเหรียญเท่ากันแต่ตอบถูกมากกว่า)
-export async function saveStageProgress(userId, stageNo, { correct, total, medal }) {
+// บันทึกผลการเล่นชนะ เก็บเฉพาะผลที่ดีที่สุดต่อระดับความยาก
+export async function saveStageProgress(userId, stageNo, difficulty, { correct, total, medal }) {
   if (!userId) return null;
+  const diff = difficulty || 'easy';
   const { data: existing } = await supabase
     .from('user_stage_progress')
     .select('best_correct, best_total, medal')
     .eq('user_id', userId)
     .eq('stage_no', stageNo)
+    .eq('difficulty', diff)
     .maybeSingle();
 
   const prevRank = existing?.medal ? (MEDAL_RANK[existing.medal] || 0) : -1;
@@ -497,10 +546,19 @@ export async function saveStageProgress(userId, stageNo, { correct, total, medal
     || (newRank === prevRank && correct > (existing.best_correct || 0));
 
   const row = isBetter
-    ? { user_id: userId, stage_no: stageNo, best_correct: correct, best_total: total, medal, updated_at: new Date().toISOString() }
+    ? {
+        user_id: userId,
+        stage_no: stageNo,
+        difficulty: diff,
+        best_correct: correct,
+        best_total: total,
+        medal,
+        updated_at: new Date().toISOString(),
+      }
     : {
         user_id: userId,
         stage_no: stageNo,
+        difficulty: diff,
         best_correct: existing.best_correct,
         best_total: existing.best_total,
         medal: existing.medal,
@@ -509,7 +567,7 @@ export async function saveStageProgress(userId, stageNo, { correct, total, medal
 
   const { error } = await supabase
     .from('user_stage_progress')
-    .upsert(row, { onConflict: 'user_id,stage_no' });
+    .upsert(row, { onConflict: 'user_id,stage_no,difficulty' });
   if (error) {
     console.error('saveStageProgress error:', error);
     return null;

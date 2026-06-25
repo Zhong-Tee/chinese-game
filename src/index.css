@@ -821,3 +821,16 @@ body,
     linear-gradient(180deg, #12082a 0%, #0a0e1a 100%);
   pointer-events: none;
 }
+
+/* Admin panel — ช่องฟอร์มพื้นขาว ต้อง override สีตัวอักษรจากธีมมืดของ app shell */
+.admin-panel input:not([type="file"]):not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+.admin-panel select,
+.admin-panel textarea {
+  color: #1e293b;
+  background-color: #fff;
+}
+
+.admin-panel input::placeholder,
+.admin-panel textarea::placeholder {
+  color: #94a3b8;
+}

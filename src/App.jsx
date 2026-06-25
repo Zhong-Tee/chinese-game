@@ -9,6 +9,7 @@ import Library from './components/Library';
 import Score from './components/Score';
 import Statistics from './components/Statistics';
 import GamesHub from './components/GamesHub';
+import DifficultySelect from './components/DifficultySelect';
 import BattleGame from './components/BattleGame';
 import Shop from './components/Shop';
 import LuckyDraw from './components/LuckyDraw';
@@ -16,6 +17,12 @@ import AdminPanel from './components/AdminPanel';
 import { saveWrongWord } from './utils/wrongWordsStorage';
 import { createFlashcardSessionTracker } from './utils/flashcardStatsStorage';
 import { getGameState, addCurrency, getExpForLevel, getStageProgress, saveStageProgress } from './utils/gameStorage';
+import {
+  sentenceTokens,
+  shouldFlashcardRearrange,
+  shouldFlashcardTyping,
+  compareTypingAnswer,
+} from './utils/sentenceTokens';
 
 export default function App() {
   const [page, setPage] = useState('login');
@@ -25,7 +32,8 @@ export default function App() {
   // Game economy
   const [gameState, setGameState] = useState({ exp: 0, coin: 0 });
   const [activeStage, setActiveStage] = useState(null); // ด่านที่กำลังเล่นใน GAMES
-  const [stageProgress, setStageProgress] = useState({}); // ความคืบหน้าด่าน (ปลดล็อก + เหรียญ)
+  const [activeDifficulty, setActiveDifficulty] = useState('easy'); // ระดับความยากที่เลือก
+  const [stageProgress, setStageProgress] = useState({}); // ความคืบหน้าด่าน (ปลดล็อก + เหรียญ แยกตามระดับ)
   const [lastCoinToast, setLastCoinToast] = useState(null);
 
   const refreshGameState = useCallback(async (userId) => {
@@ -44,8 +52,8 @@ export default function App() {
   
   // Settings & Data
   const [timerSetting, setTimerSetting] = useState(5); // สำหรับ Flashcard
-  const [gameTimerSetting, setGameTimerSetting] = useState(5); // สำหรับ Mini Games
-  const [typeTimerSetting, setTypeTimerSetting] = useState(5); // สำหรับ Type Game
+  const [gameTimerSetting, setGameTimerSetting] = useState(5); // สำหรับช่วงเรียงคำศัพท์ Flashcard
+  const [typeTimerSetting, setTypeTimerSetting] = useState(5); // สำหรับช่วงพิมพ์คำศัพท์ Flashcard
   const [schedules, setSchedules] = useState({ lv3: [], lv4: [], lv5: [], lv6: [] });
   const [allMasterCards, setAllMasterCards] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -57,14 +65,18 @@ export default function App() {
   const [timer, setTimer] = useState(5);
   const [gameActive, setGameActive] = useState(false);
   const [gameQueue, setGameQueue] = useState([]);
-  const [flashcardStage, setFlashcardStage] = useState('pinyin'); // pinyin | meaning | result
+  const [flashcardStage, setFlashcardStage] = useState('pinyin'); // pinyin | meaning | rearrange | typing
   const [flashcardChoices, setFlashcardChoices] = useState([]);
   const [flashcardSelectedAnswer, setFlashcardSelectedAnswer] = useState('');
   const [flashcardCorrectAnswer, setFlashcardCorrectAnswer] = useState('');
   const [flashcardStageCorrect, setFlashcardStageCorrect] = useState(false);
   const [flashcardStageAnswered, setFlashcardStageAnswered] = useState(false);
-  const [flashcardStageResults, setFlashcardStageResults] = useState({ pinyin: null, meaning: null });
+  const [flashcardStageResults, setFlashcardStageResults] = useState({ pinyin: null, meaning: null, rearrange: null, typing: null });
   const [flashcardTimedOut, setFlashcardTimedOut] = useState(false);
+  const [flashcardRearrangeTokens, setFlashcardRearrangeTokens] = useState([]);
+  const [flashcardRearrangeAssembled, setFlashcardRearrangeAssembled] = useState([]);
+  const [flashcardRearrangeCorrect, setFlashcardRearrangeCorrect] = useState('');
+  const [flashcardTypedAnswer, setFlashcardTypedAnswer] = useState('');
   const FLASHCARD_CORRECT_REVEAL_MS = 2000;
   const flashcardSessionRef = useRef(null);
   if (!flashcardSessionRef.current) {
@@ -187,8 +199,8 @@ export default function App() {
     
     const { error } = await supabase.from('user_settings').update({ 
       timer_setting: newTimer, 
-      minigame_timer: newGameTimer, // บันทึกค่า gameTimerSetting ไปยังคอลัมน์ minigame_timer
-      type_timer: newTypeTimer || typeTimerSetting, // บันทึกค่า type_timer
+      minigame_timer: newGameTimer, // เวลาเรียงคำศัพท์ (Flashcard ช่วงที่ 3)
+      type_timer: newTypeTimer || typeTimerSetting, // เวลาพิมพ์คำศัพท์ (Flashcard ช่วงพิมพ์)
       schedules: newSchedules 
     }).eq('user_id', user.id);
     
@@ -419,6 +431,8 @@ export default function App() {
     setFlashcardCorrectAnswer('');
     setFlashcardStageCorrect(false);
     setFlashcardStageAnswered(false);
+    setFlashcardRearrangeAssembled([]);
+    setFlashcardTypedAnswer('');
   }, []);
 
   const startLevelGame = async (level) => {
@@ -555,10 +569,55 @@ export default function App() {
     setTimer(timerSetting);
   }, [buildChoices, currentCard, resetStageState, timerSetting]);
 
+  const moveToRearrangeStage = useCallback(() => {
+    if (!currentCard) return;
+    const toks = sentenceTokens(currentCard);
+    const withIds = toks.map((t, i) => ({ id: `${i}-${t}`, text: t }));
+    resetStageState();
+    setFlashcardRearrangeTokens(shuffleArray(withIds));
+    setFlashcardRearrangeCorrect(toks.join(''));
+    setFlashcardCorrectAnswer(toks.join(' '));
+    setFlashcardStage('rearrange');
+    setTimer(gameTimerSetting);
+  }, [currentCard, gameTimerSetting, resetStageState]);
+
+  const moveToTypingStage = useCallback(() => {
+    if (!currentCard) return;
+    const vocab = normalizeOptionText(currentCard?.vocabulary);
+    resetStageState();
+    setFlashcardCorrectAnswer(vocab);
+    setFlashcardStage('typing');
+    setTimer(typeTimerSetting);
+  }, [currentCard, resetStageState, typeTimerSetting]);
+
   const submitCurrentCard = useCallback(async () => {
-    const passed = flashcardStageResults.pinyin === true && flashcardStageResults.meaning === true;
+    const needsRearrange = shouldFlashcardRearrange(activeLevel, currentCard);
+    const needsTyping = shouldFlashcardTyping(activeLevel, currentCard);
+    const passed =
+      flashcardStageResults.pinyin === true &&
+      flashcardStageResults.meaning === true &&
+      (!needsRearrange || flashcardStageResults.rearrange === true) &&
+      (!needsTyping || flashcardStageResults.typing === true);
     await moveToNextCard(passed);
-  }, [flashcardStageResults.meaning, flashcardStageResults.pinyin, moveToNextCard]);
+  }, [activeLevel, currentCard, flashcardStageResults, moveToNextCard]);
+
+  const advanceAfterMeaning = useCallback(async () => {
+    if (shouldFlashcardRearrange(activeLevel, currentCard)) {
+      moveToRearrangeStage();
+    } else if (shouldFlashcardTyping(activeLevel, currentCard)) {
+      moveToTypingStage();
+    } else {
+      await submitCurrentCard();
+    }
+  }, [activeLevel, currentCard, moveToRearrangeStage, moveToTypingStage, submitCurrentCard]);
+
+  const advanceAfterRearrange = useCallback(async () => {
+    if (shouldFlashcardTyping(activeLevel, currentCard)) {
+      moveToTypingStage();
+    } else {
+      await submitCurrentCard();
+    }
+  }, [activeLevel, currentCard, moveToTypingStage, submitCurrentCard]);
 
   const handleContinueStage = useCallback(async () => {
     if (!currentCard || !flashcardStageAnswered) return;
@@ -567,25 +626,114 @@ export default function App() {
       return;
     }
     if (flashcardStage === 'meaning') {
+      await advanceAfterMeaning();
+      return;
+    }
+    if (flashcardStage === 'rearrange') {
+      await advanceAfterRearrange();
+      return;
+    }
+    if (flashcardStage === 'typing') {
       await submitCurrentCard();
     }
-  }, [currentCard, flashcardStageAnswered, flashcardStage, moveToMeaningStage, submitCurrentCard]);
+  }, [
+    advanceAfterMeaning,
+    advanceAfterRearrange,
+    currentCard,
+    flashcardStageAnswered,
+    flashcardStage,
+    moveToMeaningStage,
+    submitCurrentCard,
+  ]);
+
+  const handleRearrangeSubmit = useCallback(() => {
+    if (!currentCard || flashcardStageAnswered || flashcardStage !== 'rearrange') return;
+    if (flashcardRearrangeAssembled.length === 0) return;
+
+    const text = flashcardRearrangeAssembled
+      .map((id) => flashcardRearrangeTokens.find((t) => t.id === id)?.text || '')
+      .join('');
+    const isCorrect = text === flashcardRearrangeCorrect;
+    const toks = sentenceTokens(currentCard);
+
+    setFlashcardSelectedAnswer(text);
+    setFlashcardCorrectAnswer(toks.join(' '));
+    setFlashcardStageCorrect(isCorrect);
+    setFlashcardStageAnswered(true);
+    setFlashcardTimedOut(false);
+    setFlashcardStageResults((prev) => ({ ...prev, rearrange: isCorrect }));
+  }, [
+    currentCard,
+    flashcardRearrangeAssembled,
+    flashcardRearrangeCorrect,
+    flashcardRearrangeTokens,
+    flashcardStage,
+    flashcardStageAnswered,
+  ]);
+
+  const handleTypingSubmit = useCallback(() => {
+    if (!currentCard || flashcardStageAnswered || flashcardStage !== 'typing') return;
+    if (!flashcardTypedAnswer.trim()) return;
+
+    const correct = normalizeOptionText(currentCard?.vocabulary);
+    const isCorrect = compareTypingAnswer(flashcardTypedAnswer, correct);
+
+    setFlashcardSelectedAnswer(flashcardTypedAnswer.trim());
+    setFlashcardCorrectAnswer(correct);
+    setFlashcardStageCorrect(isCorrect);
+    setFlashcardStageAnswered(true);
+    setFlashcardTimedOut(false);
+    setFlashcardStageResults((prev) => ({ ...prev, typing: isCorrect }));
+  }, [currentCard, flashcardStage, flashcardStageAnswered, flashcardTypedAnswer]);
+
+  const handleRearrangeTapToken = useCallback((tokenId) => {
+    if (flashcardStageAnswered || flashcardRearrangeAssembled.includes(tokenId)) return;
+    setFlashcardRearrangeAssembled((prev) => [...prev, tokenId]);
+  }, [flashcardRearrangeAssembled, flashcardStageAnswered]);
+
+  const handleRearrangeRemoveAt = useCallback((index) => {
+    if (flashcardStageAnswered) return;
+    setFlashcardRearrangeAssembled((prev) => prev.filter((_, i) => i !== index));
+  }, [flashcardStageAnswered]);
+
+  const handleRearrangeBackspace = useCallback(() => {
+    if (flashcardStageAnswered) return;
+    setFlashcardRearrangeAssembled((prev) => prev.slice(0, -1));
+  }, [flashcardStageAnswered]);
+
+  const handleRearrangeReset = useCallback(() => {
+    if (flashcardStageAnswered) return;
+    setFlashcardRearrangeAssembled([]);
+  }, [flashcardStageAnswered]);
 
   const handleCardTimeout = useCallback(() => {
     if (!gameActive || !currentCard || flashcardStageAnswered) return;
 
-    const field = flashcardStage === 'pinyin' ? 'pinyin' : 'th';
-    const correctAnswer = normalizeOptionText(currentCard?.[field]);
-
     setFlashcardTimedOut(true);
     setFlashcardSelectedAnswer('');
-    setFlashcardCorrectAnswer(correctAnswer);
     setFlashcardStageCorrect(false);
     setFlashcardStageAnswered(true);
+
+    if (flashcardStage === 'rearrange') {
+      const toks = sentenceTokens(currentCard);
+      setFlashcardCorrectAnswer(toks.join(' '));
+      setFlashcardStageResults((prev) => ({ ...prev, rearrange: false }));
+      return;
+    }
+
+    if (flashcardStage === 'typing') {
+      setFlashcardCorrectAnswer(normalizeOptionText(currentCard?.vocabulary));
+      setFlashcardStageResults((prev) => ({ ...prev, typing: false }));
+      return;
+    }
+
+    const field = flashcardStage === 'pinyin' ? 'pinyin' : 'th';
+    const correctAnswer = normalizeOptionText(currentCard?.[field]);
+    setFlashcardCorrectAnswer(correctAnswer);
     if (flashcardStage === 'pinyin') {
-      setFlashcardStageResults(prev => ({ ...prev, pinyin: false }));
+      setFlashcardStageResults((prev) => ({ ...prev, pinyin: false }));
     } else {
-      setFlashcardStageResults(prev => ({ ...prev, meaning: false }));
+      setFlashcardStageResults((prev) => ({ ...prev, meaning: false }));
     }
   }, [currentCard, flashcardStage, flashcardStageAnswered, gameActive]);
 
@@ -597,7 +745,11 @@ export default function App() {
       setTimer(timerSetting);
       setFlashcardStage('pinyin');
       setFlashcardChoices(firstStage.choices);
-      setFlashcardStageResults({ pinyin: null, meaning: null });
+      setFlashcardStageResults({ pinyin: null, meaning: null, rearrange: null, typing: null });
+      setFlashcardRearrangeTokens([]);
+      setFlashcardRearrangeAssembled([]);
+      setFlashcardRearrangeCorrect('');
+      setFlashcardTypedAnswer('');
       setFlashcardTimedOut(false);
       resetStageState();
     } else if (gameActive && gameQueue.length === 0 && !currentCard) {
@@ -625,19 +777,25 @@ export default function App() {
       if (flashcardStage === 'pinyin') {
         moveToMeaningStage();
       } else if (flashcardStage === 'meaning') {
+        advanceAfterMeaning();
+      } else if (flashcardStage === 'rearrange') {
+        advanceAfterRearrange();
+      } else if (flashcardStage === 'typing') {
         submitCurrentCard();
       }
     }, FLASHCARD_CORRECT_REVEAL_MS);
     return () => clearTimeout(timeoutId);
   }, [
     FLASHCARD_CORRECT_REVEAL_MS,
+    advanceAfterMeaning,
+    advanceAfterRearrange,
     flashcardStage,
     flashcardStageAnswered,
     flashcardStageCorrect,
     gameActive,
     currentCard,
     moveToMeaningStage,
-    submitCurrentCard
+    submitCurrentCard,
   ]);
 
   const checkLevelAvailable = (lv) => {
@@ -812,6 +970,16 @@ export default function App() {
             isTimedOut={flashcardTimedOut}
             onSelectChoice={handleStageAnswer}
             onContinueStage={handleContinueStage}
+            rearrangeTokens={flashcardRearrangeTokens}
+            rearrangeAssembled={flashcardRearrangeAssembled}
+            onRearrangeTapToken={handleRearrangeTapToken}
+            onRearrangeRemoveAt={handleRearrangeRemoveAt}
+            onRearrangeBackspace={handleRearrangeBackspace}
+            onRearrangeReset={handleRearrangeReset}
+            onSubmitRearrange={handleRearrangeSubmit}
+            typedAnswer={flashcardTypedAnswer}
+            onTypingChange={setFlashcardTypedAnswer}
+            onSubmitTyping={handleTypingSubmit}
           />
         )}
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}
@@ -836,13 +1004,24 @@ export default function App() {
           />
         )}
 
-        {/* --- GAMES Hub: เลือกด่าน --- */}
+        {/* --- GAMES: เลือกระดับความยาก --- */}
         {page === 'games' && (
+          <DifficultySelect
+            setPage={setPage}
+            gameState={gameState}
+            onSelectDifficulty={(diff) => { setActiveDifficulty(diff); setPage('games-stages'); }}
+          />
+        )}
+
+        {/* --- GAMES Hub: เลือกด่าน --- */}
+        {page === 'games-stages' && (
           <GamesHub
             setPage={setPage}
             user={user}
             gameState={gameState}
             stageProgress={stageProgress}
+            difficulty={activeDifficulty}
+            onBackToDifficulty={() => setPage('games')}
             onSelectStage={(stageNo) => { setActiveStage(stageNo); setPage('battle'); }}
           />
         )}
@@ -852,11 +1031,12 @@ export default function App() {
           <BattleGame
             user={user}
             stageNo={activeStage}
-            alreadyWon={!!stageProgress[activeStage]?.medal}
+            difficulty={activeDifficulty}
+            alreadyWon={!!stageProgress[activeStage]?.[activeDifficulty]?.medal}
             selectedCharacterId={gameState.selectedCharacterId}
             equippedItemIds={gameState.equippedItemIds}
             allMasterCards={allMasterCards}
-            onExit={() => { setPage('games'); refreshGameState(); refreshStageProgress(); }}
+            onExit={() => { setPage('games-stages'); refreshGameState(); refreshStageProgress(); }}
             onReward={(reward) => {
               if (reward) setGameState(prev => ({ ...prev, ...reward }));
             }}
@@ -864,12 +1044,21 @@ export default function App() {
               if (updated) setGameState(prev => ({ ...prev, ...updated }));
             }}
             onStageComplete={(stageNo, stats) => {
+              const diff = stats.difficulty || activeDifficulty;
               if (user?.id) {
-                saveStageProgress(user.id, stageNo, stats).then((saved) => {
-                  setStageProgress(prev => ({ ...prev, [stageNo]: saved || stats }));
+                saveStageProgress(user.id, stageNo, diff, stats).then((saved) => {
+                  if (saved) {
+                    setStageProgress(prev => ({
+                      ...prev,
+                      [stageNo]: { ...(prev[stageNo] || {}), [diff]: saved },
+                    }));
+                  }
                 });
               } else {
-                setStageProgress(prev => ({ ...prev, [stageNo]: stats }));
+                setStageProgress(prev => ({
+                  ...prev,
+                  [stageNo]: { ...(prev[stageNo] || {}), [diff]: stats },
+                }));
               }
             }}
           />

@@ -48,7 +48,7 @@ export default function Settings({
         <div className="bg-white/5 p-6 rounded-[2.5rem] border-2 border-white/10 shadow-sm space-y-8">
           {/* ความเร็วเสียงอ่าน */}
           <div className="text-center">
-            <label className="block text-[10px] font-black mb-2 uppercase text-sky-400">Speech Speed</label>
+            <label className="block text-sm sm:text-base font-black mb-3 uppercase text-sky-400">Speech Speed</label>
 
             <div className="flex items-center justify-center gap-4">
               <button
@@ -93,12 +93,11 @@ export default function Settings({
             >
               🔊 ทดลองฟัง
             </button>
-            <p className="text-[10px] text-white/40 mt-2 italic">ปรับเองได้ — ใช้กับปุ่มลำโพงทุกหน้า</p>
           </div>
 
           {/* ตั้งเวลา Flashcard */}
           <div className="text-center">
-            <label className="block text-[10px] font-black text-white/40 mb-2 uppercase">Flashcard Timer</label>
+            <label className="block text-sm sm:text-base font-black mb-3 uppercase text-orange-400">Flashcard Timer</label>
             <div className="flex items-center justify-center gap-4">
               <button 
                 onClick={() => {
@@ -124,9 +123,9 @@ export default function Settings({
             </div>
           </div>
 
-          {/* ตั้งเวลา Mini Games */}
+          {/* ตั้งเวลาเรียงคำศัพท์ (Flashcard ช่วงที่ 3) */}
           <div className="text-center">
-            <label className="block text-[10px] font-black mb-2 uppercase text-emerald-400">Mini Game Timer</label>
+            <label className="block text-sm sm:text-base font-black mb-3 uppercase text-emerald-400">เวลาเรียงคำศัพท์</label>
             <div className="flex items-center justify-center gap-4">
               <button 
                 onClick={() => {
@@ -152,9 +151,9 @@ export default function Settings({
             </div>
           </div>
 
-          {/* ตั้งเวลา Type Game */}
+          {/* ตั้งเวลาพิมพ์คำศัพท์ (Flashcard ช่วงพิมพ์) */}
           <div className="text-center">
-            <label className="block text-[10px] font-black mb-2 uppercase text-indigo-400">Type Timer</label>
+            <label className="block text-sm sm:text-base font-black mb-3 uppercase text-indigo-400">เวลาพิมพ์คำศัพท์</label>
             <div className="flex items-center justify-center gap-4">
               <button 
                 onClick={() => {
@@ -185,7 +184,7 @@ export default function Settings({
 
           {/* รายการคำผิด (จากมินิเกม กด WRONG) */}
           <div className="pt-4 border-t border-white/10">
-            <h3 className="text-[10px] font-black text-white/40 mb-2 uppercase tracking-widest">คำผิด</h3>
+            <h3 className="text-base sm:text-lg font-black text-white/70 mb-3 uppercase tracking-wide">คำผิด</h3>
             {wrongWordsList.length === 0 ? (
               <p className="text-white/40 text-sm italic">ยังไม่มีคำที่บันทึกเป็นคำผิด</p>
             ) : (

@@ -8,6 +8,7 @@ import CoinIcon from './CoinIcon';
 import GiftBox from './GiftBox';
 import { HubNavIcon } from './HubNavIcons';
 import fightBtnImg from '../../game/icon/fight-btn.png';
+import gameLogoImg from '../../game/word fighter.png';
 
 const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️', add_time: '⏳', bomb: '💣' };
 
@@ -222,6 +223,12 @@ export default function Dashboard({ setPage, user, gameState = { exp: 0, coin: 0
 
       {/* Main — เว้นพื้นที่กลางให้รูปปกตัวละคร */}
       <div className="hub-main-stage relative z-10 flex-1 min-h-0">
+        <img
+          src={gameLogoImg}
+          alt="Word Fighter"
+          className="absolute -top-20 sm:-top-16 left-3 sm:left-5 z-20 w-[min(52vw,14rem)] sm:w-[min(44vw,16rem)] md:w-72 h-auto object-contain drop-shadow-[0_4px_16px_rgba(0,0,0,0.65)] pointer-events-none select-none"
+          draggable={false}
+        />
         {/* Lucky Draw — มุมซ้ายล่าง ไม่บังตัวละครกลางจอ */}
         <div className="hub-lucky-anchor pointer-events-auto">
           <button
