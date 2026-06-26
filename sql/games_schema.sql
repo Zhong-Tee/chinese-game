@@ -99,7 +99,7 @@ create table if not exists public.game_music (
 
 -- ---------------------------------------------------------------------
 -- 8. game_sfx : Sound effect ต่อท่าโจมตี/เหตุการณ์ (ข้อ 2.6)
---    key เช่น: player_attack, enemy_attack, hit, win, lose, item
+--    key เช่น: player_attack, enemy_attack, hit, win, lose, item, lucky_draw, hub_music
 -- ---------------------------------------------------------------------
 create table if not exists public.game_sfx (
   key text primary key,

@@ -18,7 +18,8 @@ import { SCHEDULED_LEVEL_KEYS } from './utils/levelScheduleMeta';
 import AdminPanel from './components/AdminPanel';
 import { saveWrongWord } from './utils/wrongWordsStorage';
 import { createFlashcardSessionTracker } from './utils/flashcardStatsStorage';
-import { getGameState, addCurrency, getExpForLevel, getStageProgress, saveStageProgress } from './utils/gameStorage';
+import { getGameState, addCurrency, getExpForLevel, getStageProgress, saveStageProgress, getSfxMap } from './utils/gameStorage';
+import { playBgm, stopBgm } from './utils/gameAudio';
 import {
   sentenceTokens,
   shouldFlashcardRearrange,
@@ -181,6 +182,21 @@ export default function App() {
     } else {
       window.history.pushState({ page }, '');
     }
+  }, [page]);
+
+  // เพลงหน้า Home — loop ขณะอยู่ dashboard หยุดเมื่อออก
+  useEffect(() => {
+    if (page !== 'dashboard') return undefined;
+    let alive = true;
+    (async () => {
+      const sfx = await getSfxMap();
+      if (!alive || !sfx.hub_music) return;
+      playBgm(sfx.hub_music, 0.35);
+    })();
+    return () => {
+      alive = false;
+      stopBgm();
+    };
   }, [page]);
 
   const fetchUserSettings = async (userId) => {
@@ -605,22 +621,22 @@ export default function App() {
   }, [activeLevel, currentCard, flashcardStageResults, moveToNextCard]);
 
   const advanceAfterMeaning = useCallback(async () => {
-    if (shouldFlashcardRearrange(activeLevel, currentCard)) {
-      moveToRearrangeStage();
-    } else if (shouldFlashcardTyping(activeLevel, currentCard)) {
+    if (shouldFlashcardTyping(activeLevel, currentCard)) {
       moveToTypingStage();
+    } else if (shouldFlashcardRearrange(activeLevel, currentCard)) {
+      moveToRearrangeStage();
     } else {
       await submitCurrentCard();
     }
   }, [activeLevel, currentCard, moveToRearrangeStage, moveToTypingStage, submitCurrentCard]);
 
-  const advanceAfterRearrange = useCallback(async () => {
-    if (shouldFlashcardTyping(activeLevel, currentCard)) {
-      moveToTypingStage();
+  const advanceAfterTyping = useCallback(async () => {
+    if (shouldFlashcardRearrange(activeLevel, currentCard)) {
+      moveToRearrangeStage();
     } else {
       await submitCurrentCard();
     }
-  }, [activeLevel, currentCard, moveToTypingStage, submitCurrentCard]);
+  }, [activeLevel, currentCard, moveToRearrangeStage, submitCurrentCard]);
 
   const handleContinueStage = useCallback(async () => {
     if (!currentCard || !flashcardStageAnswered) return;
@@ -632,16 +648,16 @@ export default function App() {
       await advanceAfterMeaning();
       return;
     }
-    if (flashcardStage === 'rearrange') {
-      await advanceAfterRearrange();
+    if (flashcardStage === 'typing') {
+      await advanceAfterTyping();
       return;
     }
-    if (flashcardStage === 'typing') {
+    if (flashcardStage === 'rearrange') {
       await submitCurrentCard();
     }
   }, [
     advanceAfterMeaning,
-    advanceAfterRearrange,
+    advanceAfterTyping,
     currentCard,
     flashcardStageAnswered,
     flashcardStage,
@@ -781,9 +797,9 @@ export default function App() {
         moveToMeaningStage();
       } else if (flashcardStage === 'meaning') {
         advanceAfterMeaning();
-      } else if (flashcardStage === 'rearrange') {
-        advanceAfterRearrange();
       } else if (flashcardStage === 'typing') {
+        advanceAfterTyping();
+      } else if (flashcardStage === 'rearrange') {
         submitCurrentCard();
       }
     }, FLASHCARD_CORRECT_REVEAL_MS);
@@ -791,7 +807,7 @@ export default function App() {
   }, [
     FLASHCARD_CORRECT_REVEAL_MS,
     advanceAfterMeaning,
-    advanceAfterRearrange,
+    advanceAfterTyping,
     flashcardStage,
     flashcardStageAnswered,
     flashcardStageCorrect,
@@ -874,6 +890,7 @@ export default function App() {
     );
   }
   const shouldShowTopBar = page !== 'fc-play' && page !== 'dashboard' && page !== 'lucky-draw' && page !== 'battle';
+  const isSelectWordsPage = page === 'select-words';
   const isHubPage = page === 'dashboard' || page === 'lucky-draw';
   const isCreamPage = page === 'fc-play' || page === 'fc-chars' || page === 'library' || page === 'statistics';
 
@@ -882,7 +899,7 @@ export default function App() {
       className={`app-shell font-sans w-full select-none ${
         isCreamPage
           ? 'bg-[#FBF4E6] text-slate-800 app-shell--scroll'
-          : isHubPage ? 'bg-[#0a0e1a] text-white' : 'bg-[#0a0e1a] text-white app-shell--scroll'
+          : isHubPage ? 'bg-[#0a0e1a] text-white' : `bg-[#0a0e1a] text-white${isSelectWordsPage ? '' : ' app-shell--scroll'}`
       }`}
       style={{
         touchAction: 'pan-y',
@@ -970,7 +987,7 @@ export default function App() {
         </div>
       )}
 
-      <main className={`app-main ${isHubPage ? 'app-main--hub' : 'overflow-y-auto'} ${page === 'admin' ? 'mx-auto max-w-5xl p-4' : isHubPage ? 'p-0' : 'mx-auto max-w-md p-4 pb-10'}`} style={{ touchAction: 'pan-y' }}>
+      <main className={`app-main ${isHubPage ? 'app-main--hub' : isSelectWordsPage ? 'overflow-hidden flex flex-col' : 'overflow-y-auto'} ${page === 'admin' ? 'mx-auto max-w-5xl p-4' : isHubPage ? 'p-0' : 'mx-auto max-w-md p-4 pb-10'}`} style={{ touchAction: 'pan-y' }}>
         {page === 'dashboard' && (
           <Dashboard
             setPage={setPage}
@@ -1136,34 +1153,7 @@ export default function App() {
               : selectedIds.filter(id => !dragTouchedIds.includes(id)))
             : selectedIds;
           return (
-          <div 
-            ref={selectWordsContainerRef}
-            className="space-y-4 pb-10 text-center select-none"
-            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: isDragSelecting ? 'none' : 'pan-y' }}
-            onDragStart={(e) => e.preventDefault()}
-            onMouseMove={(e) => {
-              if (isDragSelecting && e.buttons === 1) {
-                const el = document.elementFromPoint(e.clientX, e.clientY);
-                const cardEl = el?.closest('[data-card-id]');
-                const id = cardEl ? parseInt(cardEl.getAttribute('data-card-id'), 10) : NaN;
-                if (!isNaN(id)) setDragTouchedIds(prev => prev.includes(id) ? prev : [...prev, id]);
-              } else if (longPressTimerRef.current != null) {
-                maybeClearLongPressOnMove(e.clientX, e.clientY);
-              }
-            }}
-            onTouchMove={(e) => {
-              if (isDragSelecting && e.touches[0]) {
-                e.preventDefault();
-                const t = e.touches[0];
-                const el = document.elementFromPoint(t.clientX, t.clientY);
-                const cardEl = el?.closest('[data-card-id]');
-                const id = cardEl ? parseInt(cardEl.getAttribute('data-card-id'), 10) : NaN;
-                if (!isNaN(id)) setDragTouchedIds(prev => prev.includes(id) ? prev : [...prev, id]);
-              } else if (longPressTimerRef.current != null && e.touches[0]) {
-                maybeClearLongPressOnMove(e.touches[0].clientX, e.touches[0].clientY);
-              }
-            }}
-          >
+          <div className="flex flex-col flex-1 min-h-0 -mx-4 text-center select-none">
             {longPressDragActiveToast && (
               <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
                 <div className="bg-orange-500 text-white px-6 py-4 rounded-2xl shadow-xl font-black text-center text-sm animate-pulse max-w-[90%]">
@@ -1172,14 +1162,42 @@ export default function App() {
               </div>
             )}
 
-            <div className="flex justify-between items-center sticky top-20 bg-slate-50 py-2 z-10 px-2 border-b border-slate-100">
-              <button onClick={() => setPage('settings')} className="text-orange-600 font-black italic underline uppercase text-xs">← Back</button>
+            <div className="shrink-0 flex justify-between items-center px-4 py-2 bg-[#0a0e1a] border-b border-white/10 z-20">
+              <button onClick={() => setPage('settings')} className="text-orange-500 font-black italic underline uppercase text-xs">← Back</button>
               <div className="flex flex-col items-end">
                 <div className="bg-orange-600 text-white px-4 py-1 rounded-full font-black text-xs">Selected {selectedIds.length}</div>
                 <span className="text-[10px] text-slate-400 mt-0.5">กดค้าง 2 วินาที แล้วลากเพื่อเลือกหลายคำ</span>
               </div>
             </div>
 
+            <div
+              ref={selectWordsContainerRef}
+              className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pt-4 pb-10 space-y-4"
+              style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none', touchAction: isDragSelecting ? 'none' : 'pan-y' }}
+              onDragStart={(e) => e.preventDefault()}
+              onMouseMove={(e) => {
+                if (isDragSelecting && e.buttons === 1) {
+                  const el = document.elementFromPoint(e.clientX, e.clientY);
+                  const cardEl = el?.closest('[data-card-id]');
+                  const id = cardEl ? parseInt(cardEl.getAttribute('data-card-id'), 10) : NaN;
+                  if (!isNaN(id)) setDragTouchedIds(prev => prev.includes(id) ? prev : [...prev, id]);
+                } else if (longPressTimerRef.current != null) {
+                  maybeClearLongPressOnMove(e.clientX, e.clientY);
+                }
+              }}
+              onTouchMove={(e) => {
+                if (isDragSelecting && e.touches[0]) {
+                  e.preventDefault();
+                  const t = e.touches[0];
+                  const el = document.elementFromPoint(t.clientX, t.clientY);
+                  const cardEl = el?.closest('[data-card-id]');
+                  const id = cardEl ? parseInt(cardEl.getAttribute('data-card-id'), 10) : NaN;
+                  if (!isNaN(id)) setDragTouchedIds(prev => prev.includes(id) ? prev : [...prev, id]);
+                } else if (longPressTimerRef.current != null && e.touches[0]) {
+                  maybeClearLongPressOnMove(e.touches[0].clientX, e.touches[0].clientY);
+                }
+              }}
+            >
             {/* เลือกแบบช่วง (1–N) — อยู่ใต้แถบ Back ให้ scroll เห็นได้บน Vercel */}
             <div className="bg-white p-4 rounded-2xl border-2 border-orange-200 mb-4 shadow-sm">
               <label className="block text-xs font-black text-slate-600 mb-2 uppercase">เลือกแบบช่วง (1–{allMasterCards?.length ?? 0})</label>
@@ -1275,6 +1293,7 @@ export default function App() {
               ) : (
                 <div className="col-span-3 text-center text-slate-400 py-8">กำลังโหลดข้อมูล...</div>
               )}
+            </div>
             </div>
           </div>
         );

@@ -47,15 +47,18 @@ export default function FlashcardGame({
   const isTyping = stage === 'typing';
   const hasRearrange = shouldFlashcardRearrange(activeLevel, currentCard);
 
-  const typingStageNo = hasRearrange ? 4 : 3;
+  const typingStageNo = 3;
+  const rearrangeStageNo = 4;
 
   const stageTitle = stage === 'pinyin'
     ? 'ช่วงที่ 1: เลือก Pinyin'
     : stage === 'meaning'
       ? 'ช่วงที่ 2: เลือกคำแปลไทย'
-      : stage === 'rearrange'
-        ? 'ช่วงที่ 3: เรียงประโยค'
-        : `ช่วงที่ ${typingStageNo}: พิมพ์คำศัพท์`;
+      : stage === 'typing'
+        ? `ช่วงที่ ${typingStageNo}: พิมพ์คำศัพท์`
+        : hasRearrange
+          ? `ช่วงที่ ${rearrangeStageNo}: เรียงประโยค`
+          : 'เรียงประโยค';
 
   const stageLabel = stage === 'pinyin'
     ? 'Pinyin ที่ถูกต้อง'
@@ -127,15 +130,18 @@ export default function FlashcardGame({
                 <p className="text-xs font-black uppercase text-slate-500 mt-2">คำแปลประโยค</p>
                 <h2
                   className="mt-1 font-black text-slate-900 leading-snug break-words text-center"
-                  style={{ fontSize: 'clamp(1.6rem, 7vw, 2.4rem)' }}
+                  style={{ fontSize: 'clamp(1.2rem, 5.5vw, 1.75rem)' }}
                 >
                   {currentCard.translate || currentCard.th || '-'}
                 </h2>
-                {(currentCard.vocabulary || currentCard.pinyin_vocab) && (
+                {currentCard.sentence_test && (
                   <div className="mt-3 rounded-2xl bg-white/70 px-4 py-3 text-center">
-                    <div className="text-xs font-black uppercase text-slate-500">Vocabulary</div>
-                    <div className="font-bold text-slate-600 mt-1 break-words" style={{ fontSize: 'clamp(1rem, 4.5vw, 1.25rem)' }}>
-                      {currentCard.pinyin_vocab || '-'}
+                    <div className="text-xs font-black uppercase text-slate-500">ประโยคจีน</div>
+                    <div
+                      className="font-black text-slate-900 mt-1 break-words leading-snug"
+                      style={{ fontSize: 'clamp(1.1rem, 4.8vw, 1.45rem)' }}
+                    >
+                      {currentCard.sentence_test}
                     </div>
                   </div>
                 )}
@@ -145,7 +151,7 @@ export default function FlashcardGame({
                 <div className={`relative mt-2 ${hideSpeaker ? '' : 'pr-12 sm:pr-14'}`}>
                   <h2
                     className="font-black text-slate-900 leading-none break-words text-center"
-                    style={{ fontSize: 'clamp(2.5rem, 14vw, 4rem)' }}
+                    style={{ fontSize: 'clamp(2rem, 11vw, 3rem)' }}
                   >
                     {currentCard.vocabulary || '-'}
                   </h2>
@@ -195,8 +201,8 @@ export default function FlashcardGame({
                         className="font-black text-slate-900 leading-snug break-words text-center"
                         style={{
                           fontSize: stage === 'meaning'
-                            ? 'clamp(2.25rem, 11vw, 3.25rem)'
-                            : 'clamp(1.45rem, 6.2vw, 1.85rem)',
+                            ? 'clamp(1.75rem, 9vw, 2.5rem)'
+                            : 'clamp(1.2rem, 5vw, 1.55rem)',
                         }}
                       >
                         {currentCard.vocabulary || '-'}
@@ -245,7 +251,7 @@ export default function FlashcardGame({
                       type="button"
                       onClick={() => onRearrangeRemoveAt?.(i)}
                       disabled={isStageAnswered}
-                      className="bg-white border-2 border-orange-400 text-slate-800 px-2.5 py-1 rounded-xl font-black text-xl active:scale-95 disabled:opacity-90"
+                      className="bg-white border-2 border-orange-400 text-slate-800 px-2.5 py-1 rounded-xl font-black text-lg active:scale-95 disabled:opacity-90"
                     >
                       {rearrangeTokens.find((t) => t.id === id)?.text}
                     </button>
@@ -294,7 +300,7 @@ export default function FlashcardGame({
                       type="button"
                       onClick={() => onRearrangeTapToken?.(tk.id)}
                       disabled={used || isStageAnswered}
-                      className={`px-3.5 py-2 rounded-xl font-black text-xl border-2 transition-all active:scale-95 ${
+                      className={`px-3.5 py-2 rounded-xl font-black text-lg border-2 transition-all active:scale-95 ${
                         used
                           ? 'opacity-25 bg-slate-100 border-slate-200 text-slate-400'
                           : 'bg-white border-slate-200 text-slate-800 shadow-sm hover:border-orange-300'

@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useEffect, useState } from 'react';
-import { getLuckyDrawStatus, claimLuckyDraw } from '../utils/gameStorage';
+import React, { useEffect, useRef, useState } from 'react';
+import { getLuckyDrawStatus, claimLuckyDraw, getSfxMap } from '../utils/gameStorage';
+import { playSfx } from '../utils/gameAudio';
 import CoinIcon from './CoinIcon';
 import GiftBox from './GiftBox';
 
@@ -37,12 +38,14 @@ export default function LuckyDraw({ setPage, user, gameState = { exp: 0, coin: 0
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [toast, setToast] = useState(null);
+  const sfxRef = useRef({});
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
 
   useEffect(() => {
     (async () => {
-      const status = await getLuckyDrawStatus();
+      const [status, sfx] = await Promise.all([getLuckyDrawStatus(), getSfxMap()]);
+      sfxRef.current = sfx;
       setClaimedToday(status.claimedToday);
       setStreak(status.streak);
       setEpicCycle(status.epicCycle || 7);
@@ -56,6 +59,7 @@ export default function LuckyDraw({ setPage, user, gameState = { exp: 0, coin: 0
     setBusy(true);
     setResult(null);
     setBoxState('opening');
+    playSfx(sfxRef.current.lucky_draw);
     const start = Date.now();
     const res = await claimLuckyDraw();
     const wait = Math.max(0, 1300 - (Date.now() - start));

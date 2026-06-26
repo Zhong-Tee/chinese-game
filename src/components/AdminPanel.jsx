@@ -21,6 +21,8 @@ const SFX_KEYS = [
   { key: 'win', label: 'ชนะ' },
   { key: 'lose', label: 'แพ้' },
   { key: 'item', label: 'ใช้ไอเทม' },
+  { key: 'lucky_draw', label: 'Lucky Draw' },
+  { key: 'hub_music', label: 'เพลงหน้า Home' },
 ];
 
 async function uploadFile(file, folder) {
@@ -509,11 +511,11 @@ function SfxTab({ notify }) {
   };
 
   return (
-    <Section title="เสียง Fighting Sound Effects">
+    <Section title="เสียง Sound Effects">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6">
         {SFX_KEYS.map(({ key, label }) => (
           <div key={key} className="flex items-center gap-3 border-b border-slate-100 py-3">
-            <span className="text-sm font-black text-slate-600 w-24 shrink-0">{label}</span>
+            <span className="text-sm font-black text-slate-600 w-28 shrink-0">{label}</span>
             {sfx[key] && <audio src={sfx[key]} controls className="h-8 flex-1 min-w-0" />}
             <FileButton accept="audio/*" onSelect={file => upload(key, file)} disabled={uploading === key} className="shrink-0 px-4 py-2">
               {uploading === key ? '...' : 'เลือกเสียง'}
