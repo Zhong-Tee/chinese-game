@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import {
   clearExpRewardsCache,
@@ -10,6 +10,13 @@ import {
   BASE_MAX_HP,
   BASE_ATTACK,
 } from '../utils/gameStorage';
+import {
+  FLASHCARD_EXPORT_COLUMNS,
+  parseFlashcardCsv,
+  fetchAllFlashcardsForExport,
+  downloadFlashcardCsv,
+  importFlashcardsFromRecords,
+} from '../utils/flashcardImportExport';
 
 const BUCKET = 'game-assets';
 // อีโมจิ fallback ตาม effect ให้ตรงกับที่แสดงในร้าน/ตอนต่อสู้จริง
@@ -23,6 +30,9 @@ const SFX_KEYS = [
   { key: 'item', label: 'ใช้ไอเทม' },
   { key: 'lucky_draw', label: 'Lucky Draw' },
   { key: 'hub_music', label: 'เพลงหน้า Home' },
+  { key: 'flashcard_correct', label: 'Flashcard ตอบถูก' },
+  { key: 'flashcard_wrong', label: 'Flashcard ตอบผิด' },
+  { key: 'flashcard_timer', label: 'Flashcard เตือนเวลา' },
 ];
 
 async function uploadFile(file, folder) {
@@ -1098,7 +1108,228 @@ function LuckyDrawTab({ notify }) {
   );
 }
 
+// ============ TAB: คำศัพท์ (Export / Import) ============
+function FlashcardsTab({ notify }) {
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [cardCount, setCardCount] = useState(null);
+  const [importResult, setImportResult] = useState(null);
+  const [importProgress, setImportProgress] = useState(null);
+  const [progressStale, setProgressStale] = useState(false);
+  const progressTsRef = useRef(0);
+
+  useEffect(() => {
+    supabase.from('flashcards').select('id1', { count: 'exact', head: true }).then(({ count }) => {
+      setCardCount(count ?? 0);
+    });
+  }, [importResult]);
+
+  useEffect(() => {
+    if (!importing) {
+      setProgressStale(false);
+      return undefined;
+    }
+    const timer = setInterval(() => {
+      setProgressStale(Date.now() - progressTsRef.current > 15000);
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [importing]);
+
+  const handleProgress = useCallback((progress) => {
+    progressTsRef.current = progress.ts || Date.now();
+    setImportProgress(progress);
+  }, []);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const rows = await fetchAllFlashcardsForExport(supabase);
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadFlashcardCsv(rows, `flashcards_${stamp}.csv`);
+      notify(`Export สำเร็จ ${rows.length} คำ`);
+    } catch (e) {
+      notify(`Export ล้มเหลว: ${e.message}`);
+    }
+    setExporting(false);
+  };
+
+  const handleImport = async (file) => {
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+    setImportProgress(null);
+    setProgressStale(false);
+    progressTsRef.current = Date.now();
+    try {
+      handleProgress({
+        phase: 'reading',
+        label: 'กำลังอ่านไฟล์...',
+        processed: 0,
+        total: 0,
+        percent: 2,
+        inserted: 0,
+        updated: 0,
+        unchanged: 0,
+        ts: Date.now(),
+      });
+      const text = await file.text();
+      const { records, errors: parseErrors } = parseFlashcardCsv(text);
+      if (parseErrors.length > 0) {
+        setImportResult({ totalRows: 0, inserted: 0, updated: 0, unchanged: 0, errors: parseErrors });
+        notify('Import ล้มเหลว — ตรวจไฟล์ CSV');
+        setImporting(false);
+        setImportProgress(null);
+        return;
+      }
+      if (records.length === 0) {
+        setImportResult({ totalRows: 0, inserted: 0, updated: 0, unchanged: 0, errors: ['ไม่พบข้อมูลในไฟล์'] });
+        notify('ไฟล์ไม่มีข้อมูล');
+        setImporting(false);
+        setImportProgress(null);
+        return;
+      }
+      handleProgress({
+        phase: 'reading',
+        label: `อ่านไฟล์แล้ว ${records.length} แถว`,
+        processed: records.length,
+        total: records.length,
+        percent: 8,
+        inserted: 0,
+        updated: 0,
+        unchanged: 0,
+        ts: Date.now(),
+      });
+      const result = await importFlashcardsFromRecords(supabase, records, handleProgress);
+      setImportResult(result);
+      const ok = result.errors.length === 0;
+      notify(
+        ok
+          ? `Import สำเร็จ: ใหม่ ${result.inserted}, อัปเดต ${result.updated}, ไม่เปลี่ยน ${result.unchanged}`
+          : `Import มีข้อผิดพลาด ${result.errors.length} รายการ`
+      );
+    } catch (e) {
+      setImportResult({ totalRows: 0, inserted: 0, updated: 0, unchanged: 0, errors: [e.message] });
+      notify(`Import ล้มเหลว: ${e.message}`);
+    }
+    setImporting(false);
+    setImportProgress(null);
+    setProgressStale(false);
+  };
+
+  const progressPercent = Math.min(100, Math.max(0, importProgress?.percent ?? 0));
+  const showUploadCount = importProgress && ['inserting', 'updating'].includes(importProgress.phase);
+  const progressDetail = importProgress
+    ? importProgress.phase === 'analyzing'
+      ? `ตรวจสอบแล้ว ${importProgress.processed} / ${importProgress.total} แถว`
+      : showUploadCount
+        ? `อัปโหลดแล้ว ${importProgress.processed} / ${importProgress.total} แถว`
+        : importProgress.total > 0
+          ? `${importProgress.processed} / ${importProgress.total} แถว`
+          : null
+    : null;
+
+  return (
+    <div className="space-y-4">
+      <Section title="Export / Import คำศัพท์">
+        <p className="text-[11px] font-bold text-slate-400 -mt-1">
+          รูปแบบ CSV: {FLASHCARD_EXPORT_COLUMNS.join(', ')}
+          {cardCount != null && (
+            <span className="block mt-1 text-slate-500">คำศัพท์ในระบบปัจจุบัน: {cardCount} คำ</span>
+          )}
+        </p>
+        <p className="text-[11px] font-bold text-slate-500">
+          Import จะเพิ่มคำใหม่, ข้ามแถวที่ข้อมูลเหมือนเดิม, และอัปเดตเฉพาะแถวที่มีการเปลี่ยนแปลง (match ด้วย id1)
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={handleExport}
+            disabled={exporting || importing}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-black text-sm uppercase shadow-md transition-colors active:scale-95 disabled:opacity-50"
+          >
+            {exporting ? 'กำลัง Export...' : 'Export CSV'}
+          </button>
+          <FileButton accept=".csv,text/csv" onSelect={handleImport} disabled={importing || exporting}>
+            {importing ? 'กำลัง Import...' : 'Import CSV'}
+          </FileButton>
+        </div>
+
+        {importing && importProgress && (
+          <div className="mt-4 rounded-2xl border-2 border-orange-200 bg-orange-50/80 p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-black text-orange-700">{importProgress.label}</div>
+                {progressDetail && (
+                  <div className="text-xs font-bold text-orange-600/80 mt-0.5">{progressDetail}</div>
+                )}
+                {(importProgress.inserted > 0 || importProgress.updated > 0 || importProgress.unchanged > 0) && (
+                  <div className="text-[10px] font-bold text-slate-500 mt-1">
+                    ใหม่ {importProgress.inserted} · อัปเดต {importProgress.updated} · ไม่เปลี่ยน {importProgress.unchanged}
+                  </div>
+                )}
+              </div>
+              <div className="text-lg font-black text-orange-600 shrink-0">{progressPercent}%</div>
+            </div>
+            <div className="h-3 rounded-full bg-white border border-orange-200 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${progressStale ? 'bg-amber-500' : 'bg-orange-500'}`}
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            {progressStale ? (
+              <p className="text-[11px] font-bold text-amber-700">
+                ไม่มีความคืบหน้าเกิน 15 วินาที — อาจกำลังรอเครือข่ายหรือประมวลผลอยู่ กรุณารอสักครู่
+              </p>
+            ) : (
+              <p className="text-[10px] font-bold text-slate-400">
+                {importProgress.phase === 'analyzing'
+                  ? 'ขั้นตอนนี้เปรียบเทียบข้อมูลในไฟล์กับระบบ (ยังไม่อัปโหลด)'
+                  : ['inserting', 'updating'].includes(importProgress.phase)
+                    ? 'กำลังบันทึกลงฐานข้อมูล...'
+                    : 'กำลังเตรียมข้อมูล...'}
+              </p>
+            )}
+          </div>
+        )}
+      </Section>
+
+      {importResult && (
+        <Section title="ผลการ Import ล่าสุด">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-black">
+            <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-100">
+              <div className="text-slate-400 uppercase text-[10px]">แถวในไฟล์</div>
+              <div className="text-lg text-slate-800">{importResult.totalRows}</div>
+            </div>
+            <div className="bg-emerald-50 rounded-xl p-3 text-center border border-emerald-100">
+              <div className="text-emerald-600 uppercase text-[10px]">คำใหม่</div>
+              <div className="text-lg text-emerald-700">{importResult.inserted}</div>
+            </div>
+            <div className="bg-sky-50 rounded-xl p-3 text-center border border-sky-100">
+              <div className="text-sky-600 uppercase text-[10px]">อัปเดต</div>
+              <div className="text-lg text-sky-700">{importResult.updated}</div>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-3 text-center border border-slate-200">
+              <div className="text-slate-500 uppercase text-[10px]">ไม่แก้ไข</div>
+              <div className="text-lg text-slate-700">{importResult.unchanged}</div>
+            </div>
+          </div>
+          {importResult.errors.length > 0 && (
+            <div className="mt-3 rounded-xl bg-red-50 border border-red-200 p-3 max-h-48 overflow-y-auto">
+              <div className="text-xs font-black text-red-600 mb-2">ข้อผิดพลาด ({importResult.errors.length})</div>
+              <ul className="space-y-1 text-xs font-bold text-red-700">
+                {importResult.errors.map((err, i) => (
+                  <li key={i}>• {err}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Section>
+      )}
+    </div>
+  );
+}
+
 const TABS = [
+  { id: 'flashcards', label: 'คำศัพท์' },
   { id: 'stages', label: 'ด่าน' },
   { id: 'exp', label: 'COIN' },
   { id: 'assets', label: 'พื้นหลัง/เพลง' },
@@ -1142,6 +1373,7 @@ export default function AdminPanel({ setPage, isAdmin }) {
         ))}
       </div>
 
+      {tab === 'flashcards' && <FlashcardsTab notify={notify} />}
       {tab === 'stages' && <StagesTab notify={notify} />}
       {tab === 'exp' && <ExpTab notify={notify} />}
       {tab === 'assets' && <StageAssetsTab notify={notify} />}

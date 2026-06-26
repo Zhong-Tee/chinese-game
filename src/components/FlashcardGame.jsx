@@ -130,18 +130,38 @@ export default function FlashcardGame({
                 <p className="text-xs font-black uppercase text-slate-500 mt-2">คำแปลประโยค</p>
                 <h2
                   className="mt-1 font-black text-slate-900 leading-snug break-words text-center"
-                  style={{ fontSize: 'clamp(1.2rem, 5.5vw, 1.75rem)' }}
+                  style={{ fontSize: 'clamp(0.8rem, 3.2vw, 1rem)' }}
                 >
                   {currentCard.translate || currentCard.th || '-'}
                 </h2>
                 {currentCard.sentence_test && (
                   <div className="mt-3 rounded-2xl bg-white/70 px-4 py-3 text-center">
                     <div className="text-xs font-black uppercase text-slate-500">ประโยคจีน</div>
+                    <div className="relative mt-1 pr-11 sm:pr-12">
+                      <div
+                        className="font-black text-slate-900 break-words leading-snug"
+                        style={{ fontSize: 'clamp(1.1rem, 4.8vw, 1.45rem)' }}
+                      >
+                        {currentCard.sentence_test}
+                      </div>
+                      <div className="absolute right-0 top-1/2 -translate-y-1/2">
+                        <SpeakerButton
+                          text={currentCard.sentence_test}
+                          label="ฟังเสียงประโยคจีน"
+                          className="w-9 h-9 sm:w-10 sm:h-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {currentCard.pinyin_sentence && (
+                  <div className="mt-2 rounded-2xl bg-white/70 px-4 py-3 text-center">
+                    <div className="text-xs font-black uppercase text-slate-500">pinyin</div>
                     <div
-                      className="font-black text-slate-900 mt-1 break-words leading-snug"
-                      style={{ fontSize: 'clamp(1.1rem, 4.8vw, 1.45rem)' }}
+                      className="font-bold text-slate-700 mt-1 break-words leading-snug"
+                      style={{ fontSize: 'clamp(1rem, 4.2vw, 1.25rem)' }}
                     >
-                      {currentCard.sentence_test}
+                      {currentCard.pinyin_sentence}
                     </div>
                   </div>
                 )}
@@ -171,7 +191,7 @@ export default function FlashcardGame({
                 <div className={`relative mt-2 ${hideSpeaker ? '' : 'pr-12 sm:pr-14'}`}>
                   <h2
                     className="leading-none font-black text-slate-900 break-words text-center"
-                    style={{ fontSize: 'clamp(4rem, 18vw, 6.3rem)' }}
+                    style={{ fontSize: 'clamp(2.1rem, 9.5vw, 3.5rem)' }}
                   >
                     {currentCard.cn || '-'}
                   </h2>
@@ -201,7 +221,7 @@ export default function FlashcardGame({
                         className="font-black text-slate-900 leading-snug break-words text-center"
                         style={{
                           fontSize: stage === 'meaning'
-                            ? 'clamp(1.75rem, 9vw, 2.5rem)'
+                            ? 'clamp(1.35rem, 6.5vw, 1.85rem)'
                             : 'clamp(1.2rem, 5vw, 1.55rem)',
                         }}
                       >
@@ -367,7 +387,9 @@ export default function FlashcardGame({
                     key={`${stage}-${index}-${choice}`}
                     onClick={() => onSelectChoice(choice)}
                     disabled={isStageAnswered}
-                    className={`rounded-2xl border-2 px-4 py-2.5 font-black text-left transition text-[1.65rem] leading-tight ${
+                    className={`rounded-2xl border-2 px-4 py-2.5 font-black text-left transition leading-tight ${
+                      stage === 'meaning' ? 'text-[1.05rem]' : 'text-[1.2rem]'
+                    } ${
                       showAsCorrect
                         ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
                         : showAsWrong

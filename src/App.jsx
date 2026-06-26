@@ -21,6 +21,11 @@ import { createFlashcardSessionTracker } from './utils/flashcardStatsStorage';
 import { getGameState, addCurrency, getExpForLevel, getStageProgress, saveStageProgress, getSfxMap } from './utils/gameStorage';
 import { playBgm, stopBgm } from './utils/gameAudio';
 import {
+  playFlashcardCorrectSfx,
+  playFlashcardWrongSfx,
+  playFlashcardTimerWarnSfx,
+} from './utils/flashcardSfx';
+import {
   sentenceTokens,
   shouldFlashcardRearrange,
   shouldFlashcardTyping,
@@ -82,6 +87,8 @@ export default function App() {
   const [flashcardTypedAnswer, setFlashcardTypedAnswer] = useState('');
   const FLASHCARD_CORRECT_REVEAL_MS = 2000;
   const flashcardSessionRef = useRef(null);
+  const flashcardSfxRef = useRef({});
+  const flashcardTimerWarnAtRef = useRef(null);
   if (!flashcardSessionRef.current) {
     flashcardSessionRef.current = createFlashcardSessionTracker();
   }
@@ -493,6 +500,22 @@ export default function App() {
     }
   };
 
+  const playFlashcardFeedbackSfx = useCallback((isCorrect) => {
+    if (isCorrect) playFlashcardCorrectSfx(flashcardSfxRef.current);
+    else playFlashcardWrongSfx(flashcardSfxRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!gameActive) return;
+    getSfxMap().then((map) => {
+      flashcardSfxRef.current = map;
+    });
+  }, [gameActive]);
+
+  useEffect(() => {
+    flashcardTimerWarnAtRef.current = null;
+  }, [currentCard, flashcardStage, flashcardStageAnswered, gameActive]);
+
   const moveToNextCard = useCallback(async (isCardPassed) => {
     if (!currentCard || !user?.id) return;
 
@@ -577,7 +600,8 @@ export default function App() {
     } else if (flashcardStage === 'meaning') {
       setFlashcardStageResults(prev => ({ ...prev, meaning: isCorrect }));
     }
-  }, [currentCard, flashcardStage, flashcardStageAnswered]);
+    playFlashcardFeedbackSfx(isCorrect);
+  }, [currentCard, flashcardStage, flashcardStageAnswered, playFlashcardFeedbackSfx]);
 
   const moveToMeaningStage = useCallback(() => {
     if (!currentCard) return;
@@ -681,6 +705,7 @@ export default function App() {
     setFlashcardStageAnswered(true);
     setFlashcardTimedOut(false);
     setFlashcardStageResults((prev) => ({ ...prev, rearrange: isCorrect }));
+    playFlashcardFeedbackSfx(isCorrect);
   }, [
     currentCard,
     flashcardRearrangeAssembled,
@@ -688,6 +713,7 @@ export default function App() {
     flashcardRearrangeTokens,
     flashcardStage,
     flashcardStageAnswered,
+    playFlashcardFeedbackSfx,
   ]);
 
   const handleTypingSubmit = useCallback(() => {
@@ -703,7 +729,8 @@ export default function App() {
     setFlashcardStageAnswered(true);
     setFlashcardTimedOut(false);
     setFlashcardStageResults((prev) => ({ ...prev, typing: isCorrect }));
-  }, [currentCard, flashcardStage, flashcardStageAnswered, flashcardTypedAnswer]);
+    playFlashcardFeedbackSfx(isCorrect);
+  }, [currentCard, flashcardStage, flashcardStageAnswered, flashcardTypedAnswer, playFlashcardFeedbackSfx]);
 
   const handleRearrangeTapToken = useCallback((tokenId) => {
     if (flashcardStageAnswered || flashcardRearrangeAssembled.includes(tokenId)) return;
@@ -732,6 +759,7 @@ export default function App() {
     setFlashcardSelectedAnswer('');
     setFlashcardStageCorrect(false);
     setFlashcardStageAnswered(true);
+    playFlashcardWrongSfx(flashcardSfxRef.current);
 
     if (flashcardStage === 'rearrange') {
       const toks = sentenceTokens(currentCard);
@@ -789,6 +817,14 @@ export default function App() {
     }
     return () => clearInterval(interval);
   }, [flashcardStageAnswered, gameActive, currentCard, handleCardTimeout, timer]);
+
+  useEffect(() => {
+    if (!gameActive || !currentCard || flashcardStageAnswered) return;
+    if (timer !== 10) return;
+    if (flashcardTimerWarnAtRef.current) return;
+    flashcardTimerWarnAtRef.current = true;
+    playFlashcardTimerWarnSfx(flashcardSfxRef.current);
+  }, [timer, gameActive, currentCard, flashcardStageAnswered]);
 
   useEffect(() => {
     if (!gameActive || !currentCard || !flashcardStageAnswered || !flashcardStageCorrect) return;
