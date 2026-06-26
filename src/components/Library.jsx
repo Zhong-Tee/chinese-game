@@ -29,7 +29,7 @@ export default function Library({
       <div className="flex items-center mb-4">
         <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black italic underline uppercase text-xs">← Back to Menu</button>
       </div>
-      <h2 className="text-2xl font-black italic uppercase text-center mb-6">Your Library ({selectedIds.length})</h2>
+      <h2 className="text-2xl font-black italic uppercase text-center mb-6 text-slate-800">Your Library ({selectedIds.length})</h2>
       <div className="grid grid-cols-3 gap-2">
         {allMasterCards && allMasterCards.length > 0 ? (
           allMasterCards
@@ -46,7 +46,7 @@ export default function Library({
           <div
             key={card?.id1 || card?.id}
             onClick={() => { setLibraryDetail(card); setLibFlipped(false); }}
-            className="aspect-[3/4] rounded-xl shadow-md border-2 border-white active:scale-95 transition p-2.5 flex flex-col justify-between bg-[#FDE7CC]"
+            className="aspect-[3/4] rounded-xl shadow-md border-2 border-white active:scale-95 transition p-2.5 flex flex-col justify-between bg-white"
           >
             <div className="text-[10px] text-right text-slate-500 font-bold">{card?.id1 || card?.id}</div>
             <div className="text-center">
@@ -60,7 +60,7 @@ export default function Library({
           </div>
             ))
         ) : (
-          <div className="col-span-3 text-center text-white/40 py-8">กำลังโหลดข้อมูล...</div>
+          <div className="col-span-3 text-center text-slate-400 py-8">กำลังโหลดข้อมูล...</div>
         )}
       </div>
       {libraryDetail && (
@@ -87,7 +87,7 @@ export default function Library({
             </>
           ) : (
             <>
-              <div className="w-full max-w-sm rounded-[2rem] shadow-2xl border-4 border-white mb-8 p-6 bg-[#FDE7CC]">
+              <div className="w-full max-w-sm rounded-[2rem] shadow-2xl border-4 border-white mb-8 p-6 bg-white">
                 <div className="text-center space-y-3">
                   <div className="text-7xl font-black text-slate-900 leading-none break-words">{libraryDetail.cn || '—'}</div>
                   <div className="relative pr-11">

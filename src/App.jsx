@@ -13,6 +13,8 @@ import DifficultySelect from './components/DifficultySelect';
 import BattleGame from './components/BattleGame';
 import Shop from './components/Shop';
 import LuckyDraw from './components/LuckyDraw';
+import LevelPlayPrompt from './components/LevelPlayPrompt';
+import { SCHEDULED_LEVEL_KEYS } from './utils/levelScheduleMeta';
 import AdminPanel from './components/AdminPanel';
 import { saveWrongWord } from './utils/wrongWordsStorage';
 import { createFlashcardSessionTracker } from './utils/flashcardStatsStorage';
@@ -96,6 +98,7 @@ export default function App() {
 
   // Daily new-words popup
   const [dailyNewWords, setDailyNewWords] = useState(null);
+  const [levelPlayPrompt, setLevelPlayPrompt] = useState(null);
 
   // UI States
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -811,6 +814,22 @@ export default function App() {
     return false;
   };
 
+  const handleDailyWordsConfirm = useCallback(() => {
+    setDailyNewWords(null);
+    if (user?.id) fetchInitialData(user.id);
+    const playable = SCHEDULED_LEVEL_KEYS
+      .map((key) => Number(key))
+      .filter((lv) => checkLevelAvailable(lv));
+    if (playable.length > 0) setLevelPlayPrompt(playable);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, schedules]);
+
+  const handlePlayLevelFromPrompt = useCallback(async (level) => {
+    setLevelPlayPrompt(null);
+    await startLevelGame(level);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleLogout = async () => {
     try {
       if (flashcardSessionRef.current?.isActive()) {
@@ -856,7 +875,7 @@ export default function App() {
   }
   const shouldShowTopBar = page !== 'fc-play' && page !== 'dashboard' && page !== 'lucky-draw' && page !== 'battle';
   const isHubPage = page === 'dashboard' || page === 'lucky-draw';
-  const isCreamPage = page === 'fc-play' || page === 'fc-chars';
+  const isCreamPage = page === 'fc-play' || page === 'fc-chars' || page === 'library' || page === 'statistics';
 
   return (
     <div
@@ -918,7 +937,7 @@ export default function App() {
             </div>
             <div className="px-5 pb-5">
               <button
-                onClick={() => { setDailyNewWords(null); if (user?.id) fetchInitialData(user.id); }}
+                onClick={handleDailyWordsConfirm}
                 className="w-full bg-orange-600 text-white py-4 rounded-2xl font-black text-lg uppercase italic shadow-lg active:scale-95 transition-all"
               >
                 ยืนยันเข้าเกม!
@@ -926,6 +945,15 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {levelPlayPrompt && (
+        <LevelPlayPrompt
+          levels={levelPlayPrompt}
+          levelCounts={levelCounts}
+          onPlayLevel={handlePlayLevelFromPrompt}
+          onDismiss={() => setLevelPlayPrompt(null)}
+        />
       )}
 
       {/* Toast: ได้รับ Coin */}
@@ -943,7 +971,19 @@ export default function App() {
       )}
 
       <main className={`app-main ${isHubPage ? 'app-main--hub' : 'overflow-y-auto'} ${page === 'admin' ? 'mx-auto max-w-5xl p-4' : isHubPage ? 'p-0' : 'mx-auto max-w-md p-4 pb-10'}`} style={{ touchAction: 'pan-y' }}>
-        {page === 'dashboard' && <Dashboard setPage={setPage} user={user} gameState={gameState} isAdmin={isAdmin} refreshGameState={() => refreshGameState()} onLogout={handleLogout} />}
+        {page === 'dashboard' && (
+          <Dashboard
+            setPage={setPage}
+            user={user}
+            gameState={gameState}
+            isAdmin={isAdmin}
+            refreshGameState={() => refreshGameState()}
+            onLogout={handleLogout}
+            schedules={schedules}
+            levelCounts={levelCounts}
+            onPlayLevel={startLevelGame}
+          />
+        )}
         {page === 'fc-chars' && <Flashcards setPage={setPage} levelCounts={levelCounts} schedules={schedules} checkLevelAvailable={checkLevelAvailable} startLevelGame={startLevelGame} />}
         {page === 'fc-play' && currentCard && (
           <FlashcardGame

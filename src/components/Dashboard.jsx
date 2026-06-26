@@ -6,9 +6,10 @@ import {
 } from '../utils/gameStorage';
 import CoinIcon from './CoinIcon';
 import GiftBox from './GiftBox';
+import HubLevelScheduleBar from './HubLevelScheduleBar';
 import { HubNavIcon } from './HubNavIcons';
 import fightBtnImg from '../../game/icon/fight-btn.png';
-import gameLogoImg from '../../game/word fighter.png?v=2';
+import gameLogoImg from '../../game/word fighter.png?v=3';
 
 const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️', add_time: '⏳', bomb: '💣' };
 
@@ -29,7 +30,17 @@ const BOTTOM_NAV = [
   { id: 'settings', label: 'More', icon: '⚙️', action: 'settings' },
 ];
 
-export default function Dashboard({ setPage, user, gameState = { exp: 0, coin: 0 }, isAdmin = false, refreshGameState, onLogout }) {
+export default function Dashboard({
+  setPage,
+  user,
+  gameState = { exp: 0, coin: 0 },
+  isAdmin = false,
+  refreshGameState,
+  onLogout,
+  schedules = { lv3: [], lv4: [], lv5: [], lv6: [] },
+  levelCounts = {},
+  onPlayLevel,
+}) {
   const [username, setUsername] = useState('');
   const [showCharModal, setShowCharModal] = useState(false);
   const [characters, setCharacters] = useState([]);
@@ -223,14 +234,18 @@ export default function Dashboard({ setPage, user, gameState = { exp: 0, coin: 0
 
       {/* Main — เว้นพื้นที่กลางให้รูปปกตัวละคร */}
       <div className="hub-main-stage relative z-10 flex-1 min-h-0">
-        <img
-          src={gameLogoImg}
-          alt="Word Fighter"
-          className="absolute -top-20 sm:-top-16 left-3 sm:left-5 z-20 w-[min(52vw,14rem)] sm:w-[min(44vw,16rem)] md:w-72 h-auto object-contain mix-blend-screen pointer-events-none select-none"
-          draggable={false}
-        />
-        {/* Lucky Draw — มุมซ้ายล่าง ไม่บังตัวละครกลางจอ */}
+        {/* Lucky Draw + โลโก้ — มุมซ้ายล่าง ไม่บังตัวละครกลางจอ */}
         <div className="hub-lucky-anchor pointer-events-auto">
+          <img
+            src={gameLogoImg}
+            alt="Word Fighter"
+            className="hub-lucky-logo pointer-events-none select-none"
+            draggable={false}
+          />
+          <HubLevelScheduleBar
+            schedules={schedules}
+            onPlayLevel={onPlayLevel}
+          />
           <button
             onClick={() => setPage('lucky-draw')}
             className={`hub-lucky-premium hub-lucky-banner w-full text-left active:scale-[0.98] transition-transform ${luckyPending ? 'hub-lucky-premium-pending' : 'opacity-90'}`}

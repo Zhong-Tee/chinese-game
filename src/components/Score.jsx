@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { LEVEL_SCHEDULE_META } from '../utils/levelScheduleMeta';
 
 export default function Score({ user, selectedIds, levelCounts, setPage }) {
   const [personalStats, setPersonalStats] = useState({
@@ -216,7 +217,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
               </div>
 
               <div className="flex justify-between items-center p-4 bg-white/5 rounded-2xl">
-                <span className="text-white/70 font-bold">คำศัพท์ Level 7</span>
+                <span className="text-white/70 font-bold">คำศัพท์ {LEVEL_SCHEDULE_META['7'].label}</span>
                 <span className="text-2xl font-black text-purple-300">{personalStats.level7Words}</span>
               </div>
 

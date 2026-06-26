@@ -7,7 +7,7 @@ export const LEVEL_SCHEDULE_META = {
   '4': { label: 'LV4', scheduleLabel: 'รายสัปดาห์', color: 'blue', badgeClass: 'bg-blue-500 text-white' },
   '5': { label: 'LV5', scheduleLabel: 'รายเดือน', color: 'purple', badgeClass: 'bg-purple-500 text-white' },
   '6': { label: 'LV6', scheduleLabel: 'รายเดือน', color: 'emerald', badgeClass: 'bg-emerald-500 text-white' },
-  '7': { label: 'LV7', scheduleLabel: 'ทุกวัน', color: 'orange', badgeClass: 'bg-orange-500 text-white' },
+  '7': { label: 'I remember now.', scheduleLabel: 'ทุกวัน', color: 'orange', badgeClass: 'bg-orange-500 text-white' },
   mistakes: { label: 'คำผิด', scheduleLabel: 'ทุกวัน', color: 'red', badgeClass: 'bg-red-600 text-white' },
 };
 
@@ -89,4 +89,120 @@ export function getScheduledLevelsForDate(dateStr, schedules = EMPTY_SCHEDULES) 
   if (schedules.lv6?.some((d) => Number(d) === dateNum)) matched.push('6');
 
   return matched;
+}
+
+function startOfLocalDay(fromDate = new Date()) {
+  return new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+}
+
+function addLocalDays(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+export function formatLocalDateStr(fromDate = new Date()) {
+  const y = fromDate.getFullYear();
+  const m = String(fromDate.getMonth() + 1).padStart(2, '0');
+  const d = String(fromDate.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function isLevelScheduledToday(levelKey, schedules = EMPTY_SCHEDULES, fromDate = new Date()) {
+  const dateStr = formatLocalDateStr(startOfLocalDay(fromDate));
+  return getScheduledLevelsForDate(dateStr, schedules).includes(String(levelKey));
+}
+
+export function getDaysUntilLevelPlay(levelKey, schedules = EMPTY_SCHEDULES, fromDate = new Date()) {
+  const key = String(levelKey);
+  const today = startOfLocalDay(fromDate);
+  const todayStr = formatLocalDateStr(today);
+  const meta = LEVEL_SCHEDULE_META[key];
+  const scheduleDays = schedules[`lv${key}`] || [];
+
+  if (isLevelScheduledToday(key, schedules, today)) {
+    return {
+      levelKey: key,
+      meta,
+      days: 0,
+      availableToday: true,
+      nextPlayDate: todayStr,
+      unconfigured: false,
+    };
+  }
+
+  if (!scheduleDays.length) {
+    return {
+      levelKey: key,
+      meta,
+      days: null,
+      availableToday: false,
+      nextPlayDate: null,
+      unconfigured: true,
+    };
+  }
+
+  const maxLookahead = key === '3' || key === '4' ? 14 : 62;
+  for (let offset = 1; offset <= maxLookahead; offset += 1) {
+    const candidate = addLocalDays(today, offset);
+    const candidateStr = formatLocalDateStr(candidate);
+
+    if (key === '3' || key === '4') {
+      const dayName = getThaiWeekdayName(candidate);
+      if (scheduleDays.includes(dayName)) {
+        return {
+          levelKey: key,
+          meta,
+          days: offset,
+          availableToday: false,
+          nextPlayDate: candidateStr,
+          unconfigured: false,
+        };
+      }
+    } else {
+      const dateNum = candidate.getDate();
+      if (scheduleDays.some((d) => Number(d) === dateNum)) {
+        return {
+          levelKey: key,
+          meta,
+          days: offset,
+          availableToday: false,
+          nextPlayDate: candidateStr,
+          unconfigured: false,
+        };
+      }
+    }
+  }
+
+  return {
+    levelKey: key,
+    meta,
+    days: null,
+    availableToday: false,
+    nextPlayDate: null,
+    unconfigured: false,
+  };
+}
+
+export function getScheduledLevelCountdowns(schedules = EMPTY_SCHEDULES, fromDate = new Date()) {
+  return SCHEDULED_LEVEL_KEYS.map((key) => getDaysUntilLevelPlay(key, schedules, fromDate));
+}
+
+export function formatLevelCountdownText(status) {
+  if (!status) return '';
+  if (status.unconfigured) return 'รอตั้งค่า';
+  if (status.availableToday) return 'วันนี้!';
+  if (status.days === 1) return 'พรุ่งนี้';
+  if (status.days != null) return `อีก ${status.days} วัน`;
+  return '-';
+}
+
+export function sortLevelCountdowns(statuses) {
+  return [...statuses].sort((a, b) => {
+    if (a.unconfigured !== b.unconfigured) return a.unconfigured ? 1 : -1;
+    const daysA = a.availableToday ? 0 : (a.days ?? 9999);
+    const daysB = b.availableToday ? 0 : (b.days ?? 9999);
+    if (daysA !== daysB) return daysA - daysB;
+    return Number(a.levelKey) - Number(b.levelKey);
+  });
 }

@@ -1,6 +1,7 @@
 import React from 'react';
+import { LEVEL_SCHEDULE_META } from '../utils/levelScheduleMeta';
 
-export default function Flashcards({ 
+export default function Flashcards({
   setPage, 
   levelCounts, 
   schedules, 
@@ -28,11 +29,57 @@ export default function Flashcards({
         else if (lv === 5) dateInfo = schedules.lv5.length > 0 ? "วันที่ " + schedules.lv5.sort((a,b)=>a-b).join(",") : "รอตั้งค่า";
         else if (lv === 6) dateInfo = schedules.lv6.length > 0 ? "วันที่ " + schedules.lv6.sort((a,b)=>a-b).join(",") : "รอตั้งค่า";
 
+        const levelLabel = LEVEL_SCHEDULE_META[String(lv)]?.label || `LV ${lv}`;
+
+        if (lv === 7) {
+          return (
+            <div
+              key={lv}
+              className={`bg-white p-5 rounded-[2rem] shadow-sm border-2 flex flex-col items-center justify-center min-h-[130px] mb-3 transition-all ${available ? 'border-orange-400' : 'opacity-40 grayscale border-slate-200'}`}
+            >
+              <div className="flex items-center justify-center gap-2 sm:gap-3 px-2 mb-4 w-full">
+                <span className="text-3xl sm:text-4xl leading-none shrink-0" aria-hidden>🏆</span>
+                <h3 className="text-2xl sm:text-3xl font-black italic text-slate-800 text-center leading-tight">
+                  {levelLabel}
+                </h3>
+              </div>
+              <div className="flex w-full items-center min-h-[60px]">
+                <div className="w-1/4 text-left flex flex-col justify-center">
+                  <span className="text-[12pt] font-black text-orange-600 italic whitespace-nowrap">
+                    {levelCounts[lv]} Words
+                  </span>
+                </div>
+                <div className="w-2/4 text-center px-2">
+                  <div className="text-[12px] font-black text-slate-700 uppercase leading-tight bg-orange-100 py-2 px-1 rounded-xl border border-orange-200 w-full">
+                    {dateInfo}
+                  </div>
+                </div>
+                <div className="w-1/4 text-right flex justify-end items-center">
+                  {available ? (
+                    <button
+                      onClick={() => startLevelGame(lv)}
+                      className="bg-orange-500 text-white px-5 py-3 rounded-xl font-black shadow-lg shadow-orange-200 text-xs uppercase tracking-tighter active:scale-90 transition-all"
+                    >
+                      Start
+                    </button>
+                  ) : (
+                    <div className="text-[9px] font-black text-slate-400 italic border border-slate-300 px-2 py-1 rounded-lg uppercase text-center">
+                      Locked
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
         return (
           <div key={lv} className={`bg-white p-5 rounded-[2rem] shadow-sm border-2 flex items-center min-h-[110px] mb-3 transition-all ${available ? 'border-orange-400' : 'opacity-40 grayscale border-slate-200'}`}>
             {/* ซ้าย: LV และ จำนวนคำ (12pt) */}
             <div className="w-1/4 text-left flex flex-col justify-center">
-              <span className="font-black text-lg italic uppercase leading-none text-slate-800">LV {lv}</span>
+              <span className="font-black text-lg italic uppercase leading-none text-slate-800">
+                {levelLabel}
+              </span>
               <span className="text-[12pt] font-black text-orange-600 italic mt-1 whitespace-nowrap">
                 {levelCounts[lv]} Words
               </span>

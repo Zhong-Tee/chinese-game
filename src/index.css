@@ -265,8 +265,27 @@ body,
   left: 0.5rem;
   right: calc(var(--hub-rail-inset) + var(--hub-rail-width) + var(--hub-rail-gutter));
   bottom: 0.5rem;
-  z-index: 11;
+  z-index: 14;
   max-width: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+  pointer-events: auto;
+}
+
+.hub-lucky-logo {
+  width: min(52vw, 14rem);
+  height: auto;
+  object-fit: contain;
+  mix-blend-mode: screen;
+  flex-shrink: 0;
+  margin-top: 4rem;
+}
+
+.hub-lucky-anchor > button {
+  align-self: stretch;
+  width: 100%;
 }
 
 .hub-lucky-banner {
@@ -361,6 +380,10 @@ body,
     padding: 0.85rem 1rem;
   }
 
+  .hub-lucky-logo {
+    width: min(44vw, 16rem);
+  }
+
   .hub-lucky-banner__title {
     font-size: 0.875rem;
     letter-spacing: 0.06em;
@@ -430,6 +453,10 @@ body,
   .hub-lucky-anchor {
     max-width: 22rem;
   }
+
+  .hub-lucky-logo {
+    width: 20rem;
+  }
 }
 
 @container (min-width: 1024px) {
@@ -453,6 +480,10 @@ body,
 
   .hub-lucky-anchor {
     max-width: 24rem;
+  }
+
+  .hub-lucky-logo {
+    width: 22rem;
   }
 }
 
@@ -503,6 +534,145 @@ body,
 .hub-lucky-card {
   background: linear-gradient(135deg, rgba(88, 28, 135, 0.85) 0%, rgba(49, 16, 80, 0.9) 100%);
   border: 2px solid rgba(192, 132, 252, 0.5);
+}
+
+/* Level schedule countdown — above Lucky Draw */
+.hub-level-schedule-bar {
+  position: relative;
+  z-index: 3;
+  pointer-events: auto;
+  border-radius: 0.85rem;
+  padding: 0.45rem 0.55rem;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.92) 0%, rgba(30, 41, 59, 0.88) 100%);
+  border: 1px solid rgba(251, 146, 60, 0.35);
+  box-shadow: 0 0 16px rgba(251, 146, 60, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+@keyframes hub-level-today-pulse {
+  0%, 100% {
+    box-shadow: 0 0 14px rgba(52, 211, 153, 0.35), inset 0 0 0 1px rgba(110, 231, 183, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(52, 211, 153, 0.55), inset 0 0 0 1px rgba(167, 243, 208, 0.55);
+  }
+}
+
+.hub-level-schedule-bar__header {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.hub-level-schedule-bar__icon {
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.hub-level-schedule-bar__title {
+  font-size: 0.5625rem;
+  font-weight: 900;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(251, 191, 36, 0.9);
+}
+
+.hub-level-schedule-bar__items {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.3rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  touch-action: pan-x;
+}
+
+.hub-level-schedule-bar__items::-webkit-scrollbar {
+  display: none;
+}
+
+.hub-level-schedule-chip {
+  flex: 1 0 auto;
+  min-width: 3.5rem;
+  min-height: 2.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.hub-level-schedule-chip__lv {
+  font-size: 0.5625rem;
+  font-weight: 900;
+  font-style: italic;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.1;
+}
+
+.hub-level-schedule-chip__days {
+  font-size: 0.5rem;
+  font-weight: 800;
+  color: rgba(148, 163, 184, 0.95);
+  white-space: nowrap;
+  line-height: 1.1;
+}
+
+.hub-level-schedule-chip--today {
+  border: 2px solid #34d399;
+  background: linear-gradient(135deg, rgba(6, 95, 70, 0.95) 0%, rgba(16, 185, 129, 0.85) 100%);
+  box-shadow: 0 0 16px rgba(52, 211, 153, 0.45), inset 0 0 0 1px rgba(167, 243, 208, 0.4);
+  animation: hub-level-today-pulse 2s ease-in-out infinite;
+  cursor: pointer;
+}
+
+.hub-level-schedule-chip--today .hub-level-schedule-chip__lv {
+  color: #ecfdf5;
+}
+
+.hub-level-schedule-chip--today .hub-level-schedule-chip__days {
+  color: #a7f3d0;
+  font-weight: 900;
+}
+
+.hub-level-schedule-chip--today:active {
+  transform: scale(0.96);
+  background: linear-gradient(135deg, rgba(4, 120, 87, 1) 0%, rgba(5, 150, 105, 0.95) 100%);
+}
+
+.hub-level-schedule-chip--locked .hub-level-schedule-chip__days {
+  color: rgba(251, 191, 36, 0.85);
+}
+
+.hub-level-schedule-chip--muted {
+  opacity: 0.55;
+}
+
+@media (min-width: 640px) {
+  .hub-level-schedule-bar {
+    padding: 0.55rem 0.65rem;
+  }
+
+  .hub-level-schedule-bar__title {
+    font-size: 0.625rem;
+  }
+
+  .hub-level-schedule-chip__lv {
+    font-size: 0.625rem;
+  }
+
+  .hub-level-schedule-chip__days {
+    font-size: 0.5625rem;
+  }
 }
 
 /* Lucky Draw banner — premium style */
