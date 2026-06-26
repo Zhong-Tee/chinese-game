@@ -9,6 +9,28 @@ let currentBgmUrl = null;
 let bgmEnabled = true;
 
 const bufferCache = new Map();
+const stoppableSfx = new Map();
+
+function stopStoppableNodes(nodes) {
+  if (!nodes) return;
+  try {
+    nodes.source.onended = null;
+    nodes.source.stop(0);
+  } catch { /* already stopped */ }
+  try {
+    nodes.source.disconnect();
+    nodes.gain.disconnect();
+  } catch { /* noop */ }
+}
+
+export function stopSfx(stoppableId) {
+  if (!stoppableId) return;
+  const nodes = stoppableSfx.get(stoppableId);
+  if (!nodes) return;
+  if (nodes.cancel) nodes.cancel();
+  stopStoppableNodes(nodes);
+  stoppableSfx.delete(stoppableId);
+}
 
 function suppressMediaSession() {
   if (!('mediaSession' in navigator)) return;
@@ -113,15 +135,29 @@ export function stopBgm() {
   suppressMediaSession();
 }
 
-export function playSfx(url, volume = 0.7) {
+export function playSfx(url, volume = 0.7, options = {}) {
   if (!url) return;
+
+  const { stoppableId } = options;
+  if (stoppableId) stopSfx(stoppableId);
+
+  let cancelled = false;
+  if (stoppableId) {
+    stoppableSfx.set(stoppableId, {
+      cancel: () => { cancelled = true; },
+      source: null,
+      gain: null,
+    });
+  }
 
   (async () => {
     try {
       const ctx = await ensureContextRunning();
-      if (!ctx) return;
+      if (!ctx || cancelled) return;
 
       const buffer = await loadBuffer(url);
+      if (cancelled) return;
+
       const source = ctx.createBufferSource();
       const gain = ctx.createGain();
       gain.gain.value = volume;
@@ -129,13 +165,23 @@ export function playSfx(url, volume = 0.7) {
       source.connect(gain);
       gain.connect(sfxGain);
       source.onended = () => {
+        if (stoppableId) stoppableSfx.delete(stoppableId);
         try {
           source.disconnect();
           gain.disconnect();
         } catch { /* noop */ }
       };
+      if (stoppableId) {
+        stoppableSfx.set(stoppableId, { source, gain, cancel: null });
+      }
+      if (cancelled) {
+        stopStoppableNodes({ source, gain });
+        if (stoppableId) stoppableSfx.delete(stoppableId);
+        return;
+      }
       source.start(0);
     } catch (e) {
+      if (stoppableId) stoppableSfx.delete(stoppableId);
       console.warn('playSfx error:', e);
     }
   })();
