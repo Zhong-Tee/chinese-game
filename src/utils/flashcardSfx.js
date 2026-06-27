@@ -6,17 +6,19 @@ export function stopFlashcardTimerWarnSfx() {
   stopSfx(TIMER_WARN_SFX_ID);
 }
 
+/** เล่นเฉพาะเสียง flashcard_correct จาก Admin (ไม่ fallback) */
 export function playFlashcardCorrectSfx(sfx = {}) {
   stopFlashcardTimerWarnSfx();
-  playSfx(sfx.flashcard_correct || sfx.win || sfx.player_attack, 0.65);
+  playSfx(sfx.flashcard_correct, 0.65);
 }
 
+/** เล่นเฉพาะเสียง flashcard_wrong จาก Admin (ไม่ fallback) */
 export function playFlashcardWrongSfx(sfx = {}) {
   stopFlashcardTimerWarnSfx();
-  playSfx(sfx.flashcard_wrong || sfx.lose || sfx.enemy_attack || sfx.hit, 0.6);
+  playSfx(sfx.flashcard_wrong, 0.6);
 }
 
-/** เตือนเมื่อเหลือเวลา 10 วินาที (เล่นครั้งเดียวต่อช่วงโจทย์) */
+/** เล่นเฉพาะเสียง flashcard_timer จาก Admin เมื่อเหลือ 10 วินาที (ไม่ fallback) */
 export function playFlashcardTimerWarnSfx(sfx = {}) {
-  playSfx(sfx.flashcard_timer || sfx.hit, 0.35, { stoppableId: TIMER_WARN_SFX_ID });
+  playSfx(sfx.flashcard_timer, 0.35, { stoppableId: TIMER_WARN_SFX_ID });
 }

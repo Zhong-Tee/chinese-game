@@ -500,12 +500,17 @@ function EnemiesTab({ notify }) {
 
 // ============ TAB: SFX ============
 function SfxTab({ notify }) {
-  const [sfx, setSfx] = useState({});
+  const [sfxRows, setSfxRows] = useState({});
   const [uploading, setUploading] = useState(null);
+  const [toggling, setToggling] = useState(null);
+
   const load = useCallback(async () => {
-    const { data } = await supabase.from('game_sfx').select('*');
-    const map = {}; (data || []).forEach(r => { map[r.key] = r.audio_url; });
-    setSfx(map);
+    const { data } = await supabase.from('game_sfx').select('key, audio_url, active');
+    const map = {};
+    (data || []).forEach((r) => {
+      map[r.key] = { audio_url: r.audio_url, active: r.active !== false };
+    });
+    setSfxRows(map);
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -514,24 +519,74 @@ function SfxTab({ notify }) {
     setUploading(key);
     try {
       const url = await uploadFile(file, 'sfx');
-      await supabase.from('game_sfx').upsert({ key, audio_url: url }, { onConflict: 'key' });
-      await load(); notify('บันทึกเสียงแล้ว');
+      const prev = sfxRows[key];
+      await supabase.from('game_sfx').upsert(
+        { key, audio_url: url, active: prev?.active !== false },
+        { onConflict: 'key' },
+      );
+      await load();
+      notify('บันทึกเสียงแล้ว');
     } catch (e) { notify('ล้มเหลว: ' + e.message); }
     setUploading(null);
   };
 
+  const toggleActive = async (key) => {
+    const row = sfxRows[key];
+    if (!row?.audio_url) {
+      notify('อัปโหลดเสียงก่อนจึงจะเปิด/ปิดได้');
+      return;
+    }
+    const nextActive = !row.active;
+    setToggling(key);
+    const { error } = await supabase.from('game_sfx').update({ active: nextActive }).eq('key', key);
+    setToggling(null);
+    if (error) {
+      notify(`บันทึกล้มเหลว: ${error.message}`);
+      return;
+    }
+    setSfxRows((prev) => ({
+      ...prev,
+      [key]: { ...prev[key], active: nextActive },
+    }));
+    notify(nextActive ? 'เปิดใช้งานเสียงแล้ว' : 'ปิดใช้งานเสียงแล้ว');
+  };
+
   return (
     <Section title="เสียง Sound Effects">
+      <p className="text-[11px] font-bold text-slate-400 -mt-1">
+        ปิดใช้งานแล้วเสียงนั้นจะไม่เล่นในเกม (ต้องอัปโหลดไฟล์ก่อนจึงจะสลับได้)
+      </p>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6">
-        {SFX_KEYS.map(({ key, label }) => (
-          <div key={key} className="flex items-center gap-3 border-b border-slate-100 py-3">
-            <span className="text-sm font-black text-slate-600 w-28 shrink-0">{label}</span>
-            {sfx[key] && <audio src={sfx[key]} controls className="h-8 flex-1 min-w-0" />}
-            <FileButton accept="audio/*" onSelect={file => upload(key, file)} disabled={uploading === key} className="shrink-0 px-4 py-2">
-              {uploading === key ? '...' : 'เลือกเสียง'}
-            </FileButton>
-          </div>
-        ))}
+        {SFX_KEYS.map(({ key, label }) => {
+          const row = sfxRows[key];
+          const isActive = row?.active !== false;
+          const hasAudio = !!row?.audio_url;
+          return (
+            <div key={key} className={`flex items-center gap-2 border-b border-slate-100 py-3 ${!isActive && hasAudio ? 'opacity-60' : ''}`}>
+              <span className="text-sm font-black text-slate-600 w-24 shrink-0 leading-tight">{label}</span>
+              {hasAudio ? (
+                <audio src={row.audio_url} controls className="h-8 flex-1 min-w-0" />
+              ) : (
+                <span className="flex-1 min-w-0 text-xs font-bold text-slate-400 italic">ยังไม่มีไฟล์</span>
+              )}
+              <button
+                type="button"
+                onClick={() => toggleActive(key)}
+                disabled={!hasAudio || toggling === key}
+                className={`shrink-0 px-3 py-2 rounded-xl font-black text-xs uppercase transition-colors active:scale-95 disabled:opacity-40 ${
+                  isActive
+                    ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                    : 'bg-slate-500 hover:bg-slate-600 text-white'
+                }`}
+              >
+                {toggling === key ? '...' : isActive ? 'ใช้งาน' : 'ปิดใช้งาน'}
+              </button>
+              <FileButton accept="audio/*" onSelect={file => upload(key, file)} disabled={uploading === key} className="shrink-0 px-3 py-2 text-xs">
+                {uploading === key ? '...' : 'เลือกเสียง'}
+              </FileButton>
+            </div>
+          );
+        })}
       </div>
     </Section>
   );

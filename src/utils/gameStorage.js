@@ -247,13 +247,16 @@ export async function getStageConfig(stageNo) {
 }
 
 export async function getSfxMap() {
-  const { data, error } = await supabase.from('game_sfx').select('*');
+  const { data, error } = await supabase.from('game_sfx').select('key, audio_url, active');
   if (error) {
     console.error('getSfxMap error:', error);
     return {};
   }
   const map = {};
-  (data || []).forEach(r => { map[r.key] = r.audio_url; });
+  (data || []).forEach((r) => {
+    if (r.active === false || !r.audio_url) return;
+    map[r.key] = r.audio_url;
+  });
   return map;
 }
 
