@@ -127,41 +127,40 @@ export default function FlashcardGame({
 
             {isRearrange ? (
               <>
-                <p className="text-xs font-black uppercase text-slate-500 mt-2">คำแปลประโยค</p>
-                <h2
-                  className="mt-1 font-black text-slate-900 leading-snug break-words text-center"
-                  style={{ fontSize: 'clamp(0.8rem, 3.2vw, 1rem)' }}
-                >
-                  {currentCard.translate || currentCard.th || '-'}
-                </h2>
-                {currentCard.sentence_test && (
+                {(currentCard.translate || currentCard.th) && (
                   <div className="mt-3 rounded-2xl bg-white/70 px-4 py-3 text-center">
-                    <div className="text-xs font-black uppercase text-slate-500">ประโยคจีน</div>
-                    <div className="relative mt-1 pr-11 sm:pr-12">
-                      <div
-                        className="font-black text-slate-900 break-words leading-snug"
-                        style={{ fontSize: 'clamp(1.1rem, 4.8vw, 1.45rem)' }}
-                      >
-                        {currentCard.sentence_test}
-                      </div>
-                      <div className="absolute right-0 top-1/2 -translate-y-1/2">
-                        <SpeakerButton
-                          text={currentCard.sentence_test}
-                          label="ฟังเสียงประโยคจีน"
-                          className="w-9 h-9 sm:w-10 sm:h-10"
-                        />
-                      </div>
+                    <div className="text-xs font-black uppercase text-slate-500">ประโยคไทย</div>
+                    <div
+                      className="font-black text-slate-900 mt-1 break-words leading-snug"
+                      style={{ fontSize: 'clamp(0.95rem, 4vw, 1.2rem)' }}
+                    >
+                      {currentCard.translate || currentCard.th}
                     </div>
                   </div>
                 )}
-                {currentCard.pinyin_sentence && (
+                {(currentCard.pinyin_sentence || currentCard.sentence_test) && (
                   <div className="mt-2 rounded-2xl bg-white/70 px-4 py-3 text-center">
                     <div className="text-xs font-black uppercase text-slate-500">pinyin</div>
-                    <div
-                      className="font-bold text-slate-700 mt-1 break-words leading-snug"
-                      style={{ fontSize: 'clamp(1rem, 4.2vw, 1.25rem)' }}
-                    >
-                      {currentCard.pinyin_sentence}
+                    <div className={`relative mt-1 ${currentCard.sentence_test ? 'pr-11 sm:pr-12' : ''}`}>
+                      {currentCard.pinyin_sentence ? (
+                        <div
+                          className="font-bold text-slate-700 break-words leading-snug"
+                          style={{ fontSize: 'clamp(1rem, 4.2vw, 1.25rem)' }}
+                        >
+                          {currentCard.pinyin_sentence}
+                        </div>
+                      ) : (
+                        <div className="text-sm font-bold text-slate-400 italic">—</div>
+                      )}
+                      {currentCard.sentence_test && (
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2">
+                          <SpeakerButton
+                            text={currentCard.sentence_test}
+                            label="ฟังเสียงประโยคจีน"
+                            className="w-9 h-9 sm:w-10 sm:h-10"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
