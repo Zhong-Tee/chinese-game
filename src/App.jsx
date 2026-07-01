@@ -17,7 +17,7 @@ import LevelPlayPrompt from './components/LevelPlayPrompt';
 import { SCHEDULED_LEVEL_KEYS } from './utils/levelScheduleMeta';
 import AdminPanel from './components/AdminPanel';
 import { saveWrongWord } from './utils/wrongWordsStorage';
-import { createFlashcardSessionTracker } from './utils/flashcardStatsStorage';
+import { createFlashcardSessionTracker, recordFlashcardWrongAnswer } from './utils/flashcardStatsStorage';
 import { getGameState, addCurrency, getExpForLevel, getStageProgress, saveStageProgress, getSfxMap } from './utils/gameStorage';
 import { playBgm, stopBgm } from './utils/gameAudio';
 import {
@@ -573,6 +573,10 @@ export default function App() {
         setLastCoinToast(`+${gained} Coin`);
         setTimeout(() => setLastCoinToast(null), 1500);
       }
+    }
+
+    if (!isCardPassed) {
+      await recordFlashcardWrongAnswer();
     }
 
     await flashcardSessionRef.current?.recordWord();

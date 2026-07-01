@@ -36,6 +36,15 @@ export async function recordFlashcardPlaySeconds(level, secondsDelta) {
   }
 }
 
+export async function recordFlashcardWrongAnswer() {
+  try {
+    const { error } = await supabase.rpc('increment_flashcard_wrong_answer');
+    if (error) console.error('recordFlashcardWrongAnswer:', error);
+  } catch (err) {
+    console.error('recordFlashcardWrongAnswer:', err);
+  }
+}
+
 export async function fetchFlashcardStatistics(startDate, endDate, targetUserId = null) {
   const { data, error } = await supabase.rpc('get_flashcard_statistics', {
     p_start_date: startDate,

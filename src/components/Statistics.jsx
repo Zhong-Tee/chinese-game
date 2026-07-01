@@ -11,7 +11,13 @@ import {
   getScheduledLevelsForDate,
 } from '../utils/levelScheduleMeta';
 
-const EMPTY_SUMMARY = { active_days: 0, total_words: 0, total_seconds: 0 };
+const EMPTY_SUMMARY = {
+  active_days: 0,
+  total_words: 0,
+  total_seconds: 0,
+  level7_words: 0,
+  wrong_answers: 0,
+};
 
 function SummaryCard({ label, value, accent = 'orange', compact = false }) {
   const accents = {
@@ -19,6 +25,8 @@ function SummaryCard({ label, value, accent = 'orange', compact = false }) {
     blue: 'border-blue-300 text-blue-600',
     purple: 'border-purple-300 text-purple-600',
     emerald: 'border-emerald-300 text-emerald-600',
+    amber: 'border-amber-300 text-amber-600',
+    red: 'border-red-300 text-red-600',
   };
   const classes = accents[accent] || accents.orange;
   const valueSize = compact ? 'text-base leading-tight' : 'text-2xl';
@@ -228,6 +236,12 @@ export default function Statistics({ user, setPage }) {
   const avgSecondsPerDay = activeDays > 0
     ? Math.round((summary.total_seconds || 0) / activeDays)
     : 0;
+  const level7Words = summary.level7_words || 0;
+  const wrongAnswers = summary.wrong_answers || 0;
+  const totalWords = summary.total_words || 0;
+  const wrongPercent = totalWords > 0
+    ? Math.round((wrongAnswers / totalWords) * 100)
+    : 0;
 
   const sortedByDays = [...leaderboard].sort((a, b) => b.active_days - a.active_days);
   const sortedByWords = [...leaderboard].sort((a, b) => b.total_words - a.total_words);
@@ -261,7 +275,9 @@ export default function Statistics({ user, setPage }) {
       </button>
       <h2 className="text-3xl font-black text-center uppercase italic mb-2 text-slate-800">📈 Statistics</h2>
       <p className="text-center text-xs font-bold text-slate-500 px-4">
-        ประวัติการเล่น Flashcards — นับเฉพาะวันที่มีการเล่นเกม
+        {activeTab === 'overview' && !selectedUserId
+          ? 'ประวัติการเล่น Flashcards — ภาพรวมรวมวันเข้าเล่นของทุกคน'
+          : 'ประวัติการเล่น Flashcards — นับเฉพาะวันที่มีการเล่นเกม'}
       </p>
 
       <div className="bg-white p-4 rounded-2xl border-2 border-slate-200 shadow-sm space-y-3">
@@ -340,6 +356,19 @@ export default function Statistics({ user, setPage }) {
             </span>
           }
           accent="emerald"
+        />
+        <SummaryCard label="คำ LV.7" value={level7Words} accent="amber" />
+        <SummaryCard
+          label="ตอบผิด"
+          compact
+          value={
+            <span className="inline-flex items-baseline gap-1.5">
+              <span>{wrongAnswers}/{totalWords}</span>
+              <span className="text-slate-400">·</span>
+              <span>{wrongPercent}%</span>
+            </span>
+          }
+          accent="red"
         />
       </div>
 

@@ -24,6 +24,20 @@ CREATE INDEX IF NOT EXISTS idx_flashcard_daily_stats_user_date
 COMMENT ON TABLE public.flashcard_daily_stats IS
   'Daily flashcard play aggregates per user and level (Asia/Bangkok stat_date)';
 
+-- 2b. Daily wrong answer count (not a flashcard level)
+CREATE TABLE IF NOT EXISTS public.flashcard_daily_wrong_answers (
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  stat_date DATE NOT NULL,
+  wrong_answers INTEGER NOT NULL DEFAULT 0 CHECK (wrong_answers >= 0),
+  PRIMARY KEY (user_id, stat_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_flashcard_daily_wrong_answers_stat_date
+  ON public.flashcard_daily_wrong_answers (stat_date);
+
+COMMENT ON TABLE public.flashcard_daily_wrong_answers IS
+  'Daily count of wrong flashcard answers per user (Asia/Bangkok stat_date)';
+
 -- 3. Helper: check if current user is admin
 CREATE OR REPLACE FUNCTION public.is_current_user_admin()
 RETURNS BOOLEAN
@@ -84,6 +98,34 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.upsert_flashcard_daily_stat(TEXT, INTEGER, INTEGER) TO authenticated;
+
+-- 4b. Record wrong answer (separate from level stats)
+CREATE OR REPLACE FUNCTION public.increment_flashcard_wrong_answer()
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_user_id UUID;
+  v_stat_date DATE;
+BEGIN
+  v_user_id := auth.uid();
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  v_stat_date := (NOW() AT TIME ZONE 'Asia/Bangkok')::DATE;
+
+  INSERT INTO public.flashcard_daily_wrong_answers (user_id, stat_date, wrong_answers)
+  VALUES (v_user_id, v_stat_date, 1)
+  ON CONFLICT (user_id, stat_date)
+  DO UPDATE SET
+    wrong_answers = flashcard_daily_wrong_answers.wrong_answers + 1;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.increment_flashcard_wrong_answer() TO authenticated;
 
 -- 5. Resolve display name from profiles
 CREATE OR REPLACE FUNCTION public.resolve_profile_display_name(
@@ -147,18 +189,44 @@ BEGIN
     v_user_id := NULL;
   END IF;
 
-  SELECT MIN(stat_date) INTO v_earliest FROM public.flashcard_daily_stats;
+  SELECT MIN(d) INTO v_earliest
+  FROM (
+    SELECT MIN(stat_date) AS d FROM public.flashcard_daily_stats
+    UNION ALL
+    SELECT MIN(stat_date) AS d FROM public.flashcard_daily_wrong_answers
+  ) dates;
 
   IF v_user_id IS NOT NULL THEN
     SELECT jsonb_build_object(
       'active_days', COALESCE(COUNT(DISTINCT stat_date), 0),
       'total_words', COALESCE(SUM(words_played), 0),
-      'total_seconds', COALESCE(SUM(play_seconds), 0)
+      'total_seconds', COALESCE(SUM(play_seconds), 0),
+      'level7_words', COALESCE(SUM(words_played) FILTER (WHERE level = '7'), 0),
+      'wrong_answers', COALESCE((
+        SELECT SUM(w.wrong_answers)
+        FROM public.flashcard_daily_wrong_answers w
+        WHERE w.user_id = v_user_id
+          AND w.stat_date BETWEEN p_start_date AND p_end_date
+      ), 0)
     )
     INTO v_summary
     FROM public.flashcard_daily_stats
     WHERE user_id = v_user_id
       AND stat_date BETWEEN p_start_date AND p_end_date;
+
+    IF v_summary IS NULL THEN
+      SELECT jsonb_build_object(
+        'active_days', 0,
+        'total_words', 0,
+        'total_seconds', 0,
+        'level7_words', 0,
+        'wrong_answers', COALESCE(SUM(w.wrong_answers), 0)
+      )
+      INTO v_summary
+      FROM public.flashcard_daily_wrong_answers w
+      WHERE w.user_id = v_user_id
+        AND w.stat_date BETWEEN p_start_date AND p_end_date;
+    END IF;
 
     SELECT COALESCE(jsonb_agg(sub.row ORDER BY sub.stat_date DESC), '[]'::jsonb)
     INTO v_daily
@@ -179,14 +247,29 @@ BEGIN
 
     v_leaderboard := '[]'::jsonb;
   ELSE
+    -- ภาพรวม: รวมวันเข้าเล่นของทุกคน (เช่น A 2 วัน + B 3 วัน = 5 วัน)
     SELECT jsonb_build_object(
-      'active_days', COALESCE(COUNT(DISTINCT stat_date), 0),
-      'total_words', COALESCE(SUM(words_played), 0),
-      'total_seconds', COALESCE(SUM(play_seconds), 0)
+      'active_days', COALESCE(SUM(active_days), 0),
+      'total_words', COALESCE(SUM(total_words), 0),
+      'total_seconds', COALESCE(SUM(total_seconds), 0),
+      'level7_words', COALESCE(SUM(level7_words), 0),
+      'wrong_answers', COALESCE((
+        SELECT SUM(w.wrong_answers)
+        FROM public.flashcard_daily_wrong_answers w
+        WHERE w.stat_date BETWEEN p_start_date AND p_end_date
+      ), 0)
     )
     INTO v_summary
-    FROM public.flashcard_daily_stats
-    WHERE stat_date BETWEEN p_start_date AND p_end_date;
+    FROM (
+      SELECT
+        COUNT(DISTINCT stat_date) AS active_days,
+        SUM(words_played) AS total_words,
+        SUM(play_seconds) AS total_seconds,
+        SUM(words_played) FILTER (WHERE level = '7') AS level7_words
+      FROM public.flashcard_daily_stats
+      WHERE stat_date BETWEEN p_start_date AND p_end_date
+      GROUP BY user_id
+    ) per_user;
 
     v_daily := '[]'::jsonb;
 
@@ -218,13 +301,18 @@ BEGIN
   FROM public.profiles p
   WHERE EXISTS (
     SELECT 1 FROM public.flashcard_daily_stats s WHERE s.user_id = p.user_id
+  ) OR EXISTS (
+    SELECT 1 FROM public.flashcard_daily_wrong_answers w WHERE w.user_id = p.user_id
   );
 
   RETURN jsonb_build_object(
     'is_admin', v_is_admin,
     'target_user_id', v_user_id,
     'earliest_stat_date', v_earliest,
-    'summary', COALESCE(v_summary, jsonb_build_object('active_days', 0, 'total_words', 0, 'total_seconds', 0)),
+    'summary', COALESCE(v_summary, jsonb_build_object(
+      'active_days', 0, 'total_words', 0, 'total_seconds', 0,
+      'level7_words', 0, 'wrong_answers', 0
+    )),
     'daily', COALESCE(v_daily, '[]'::jsonb),
     'leaderboard', COALESCE(v_leaderboard, '[]'::jsonb),
     'users', COALESCE(v_users, '[]'::jsonb)
@@ -236,10 +324,18 @@ GRANT EXECUTE ON FUNCTION public.get_flashcard_statistics(DATE, DATE, UUID) TO a
 
 -- 7. RLS
 ALTER TABLE public.flashcard_daily_stats ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.flashcard_daily_wrong_answers ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users read own flashcard stats" ON public.flashcard_daily_stats;
+DROP POLICY IF EXISTS "Authenticated users can read all flashcard stats" ON public.flashcard_daily_stats;
 CREATE POLICY "Authenticated users can read all flashcard stats"
   ON public.flashcard_daily_stats FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "Authenticated users can read all flashcard wrong answers"
+  ON public.flashcard_daily_wrong_answers;
+CREATE POLICY "Authenticated users can read all flashcard wrong answers"
+  ON public.flashcard_daily_wrong_answers FOR SELECT
   USING (auth.uid() IS NOT NULL);
 
 -- Writes only via SECURITY DEFINER RPC (no direct insert/update policies for authenticated)
