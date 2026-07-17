@@ -159,7 +159,8 @@ export default function Statistics({ user, setPage }) {
   const [year, setYear] = useState(currentYear);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [activeTab, setActiveTab] = useState('personal');
-  const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState(() => user?.id || '');
+  const [rememberNowWords, setRememberNowWords] = useState(0);
   const [loading, setLoading] = useState(true);
   const [statsData, setStatsData] = useState(null);
   const [error, setError] = useState(null);
@@ -200,6 +201,37 @@ export default function Statistics({ user, setPage }) {
   }, [user?.id, year, month, selectedUserId, activeTab]);
 
   useEffect(() => {
+    if (!selectedUserId && activeTab === 'personal' && user?.id) {
+      setSelectedUserId(user.id);
+    }
+  }, [user?.id, selectedUserId, activeTab]);
+
+  useEffect(() => {
+    const fetchRememberNowWords = async () => {
+      if (!user?.id) return;
+
+      let query = supabase
+        .from('user_progress')
+        .select('flashcard_id', { count: 'exact', head: true })
+        .eq('level', 7);
+
+      const targetId = selectedUserId || (activeTab === 'personal' ? user.id : null);
+      if (targetId) query = query.eq('user_id', targetId);
+
+      const { count, error: countError } = await query;
+      if (countError) {
+        console.error('fetchRememberNowWords:', countError);
+        setRememberNowWords(0);
+        return;
+      }
+
+      setRememberNowWords(count || 0);
+    };
+
+    fetchRememberNowWords();
+  }, [user?.id, selectedUserId, activeTab]);
+
+  useEffect(() => {
     const fetchSchedules = async () => {
       const targetId = selectedUserId || (activeTab === 'personal' ? user?.id : null);
       if (!targetId) {
@@ -236,7 +268,6 @@ export default function Statistics({ user, setPage }) {
   const avgSecondsPerDay = activeDays > 0
     ? Math.round((summary.total_seconds || 0) / activeDays)
     : 0;
-  const level7Words = summary.level7_words || 0;
   const wrongAnswers = summary.wrong_answers || 0;
   const totalWords = summary.total_words || 0;
   const wrongPercent = totalWords > 0
@@ -323,9 +354,12 @@ export default function Statistics({ user, setPage }) {
             className="w-full p-2 rounded-xl border-2 border-slate-200 bg-white text-slate-800 font-black text-sm"
           >
             <option value="">ทุกคน (ภาพรวม)</option>
+            {user?.id && !(statsData?.users || []).some((u) => u.user_id === user.id) && (
+              <option value={user.id}>ฉัน</option>
+            )}
             {(statsData?.users || []).map((u) => (
               <option key={u.user_id} value={u.user_id}>
-                {u.user_id === user?.id ? `${u.display_name} (ฉัน)` : u.display_name}
+                {u.user_id === user?.id ? 'ฉัน' : u.display_name}
               </option>
             ))}
           </select>
@@ -357,7 +391,7 @@ export default function Statistics({ user, setPage }) {
           }
           accent="emerald"
         />
-        <SummaryCard label="คำ LV.7" value={level7Words} accent="amber" />
+        <SummaryCard label="คำ LV.7" value={rememberNowWords} accent="amber" />
         <SummaryCard
           label="ตอบผิด"
           compact
@@ -375,7 +409,7 @@ export default function Statistics({ user, setPage }) {
       <div className="flex gap-2">
         <button
           onClick={() => {
-            setSelectedUserId('');
+            setSelectedUserId(user?.id || '');
             setActiveTab('personal');
           }}
           className={`flex-1 py-3 rounded-full font-black text-sm uppercase transition-all ${
