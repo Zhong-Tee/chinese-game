@@ -9,12 +9,12 @@ import {
   speakChinese,
 } from '../utils/chineseSpeech';
 
-export default function Settings({ 
-  page, setPage, user, allMasterCards,
-  timerSetting, setTimerSetting, 
+export default function Settings({
+  page, setPage, user, isAdmin = false, allMasterCards,
+  timerSetting, setTimerSetting,
   gameTimerSetting, setGameTimerSetting,
   typeTimerSetting, setTypeTimerSetting,
-  schedules, setSchedules, saveSettings 
+  schedules, setSchedules, saveSettings, saveSchedules
 }) {
   const daysOfWeek = ["จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์", "อาทิตย์"];
   const datesOfMonth = Array.from({ length: 30 }, (_, i) => i + 1);
@@ -180,7 +180,9 @@ export default function Settings({
           </div>
 
           <button onClick={() => setPage('select-words')} className="w-full bg-orange-500 text-white p-4 rounded-3xl font-black uppercase italic shadow-lg shadow-orange-100">📂 Select Study Words</button>
-          <button onClick={() => setPage('set-schedule')} className="w-full bg-white/10 border-2 border-white/15 text-white p-4 rounded-3xl font-black uppercase italic shadow-lg">📅 Set Level Schedule</button>
+          {isAdmin && (
+            <button onClick={() => setPage('set-schedule')} className="w-full bg-white/10 border-2 border-white/15 text-white p-4 rounded-3xl font-black uppercase italic shadow-lg">📅 Set Level Schedule</button>
+          )}
 
           {/* รายการคำผิด (จากมินิเกม กด WRONG) */}
           <div className="pt-4 border-t border-white/10">
@@ -227,8 +229,19 @@ export default function Settings({
     );
   }
 
-  // --- 2. หน้าจัดตารางเรียน (Scheduling) ---
+  // --- 2. หน้าจัดตารางเรียน (Scheduling) — เฉพาะ admin ---
   if (page === 'set-schedule') {
+    if (!isAdmin) {
+      return (
+        <div className="space-y-4 pt-2 select-none">
+          <button onClick={() => setPage('settings')} className="text-orange-400 font-black underline italic uppercase text-xs">← BACK</button>
+          <div className="bg-white/5 p-8 rounded-3xl border-2 border-white/10 text-center">
+            <div className="text-4xl mb-3">🔒</div>
+            <p className="text-white/70 font-black uppercase italic text-sm">เฉพาะผู้ดูแลระบบเท่านั้น</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div 
         className="space-y-4 pt-2 select-none"
@@ -252,9 +265,9 @@ export default function Settings({
                   else if (s3.length < 2) s3.push(day);
                   else if (s4.length < 1) s4.push(day);
                   const newS = { ...schedules, lv3: s3, lv4: s4 };
-                  setSchedules(newS); 
-                  saveSettings(timerSetting, gameTimerSetting, typeTimerSetting, newS);
-                }} 
+                  setSchedules(newS);
+                  saveSchedules(newS); // บันทึกเป็นค่ากลาง (มีผลทุก user)
+                }}
                 className={`text-[10px] p-2 rounded-xl font-black border-2 transition-all select-none ${schedules.lv3?.includes(day) ? 'bg-orange-500 text-white border-orange-500' : schedules.lv4?.includes(day) ? 'bg-blue-500 text-white border-blue-500' : 'bg-white/5 text-white border-white/10'}`}
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >
@@ -278,9 +291,9 @@ export default function Settings({
                   else if (s5.length < 2) s5.push(date);
                   else if (s6.length < 1) s6.push(date);
                   const newS = { ...schedules, lv5: s5, lv6: s6 };
-                  setSchedules(newS); 
-                  saveSettings(timerSetting, gameTimerSetting, typeTimerSetting, newS);
-                }} 
+                  setSchedules(newS);
+                  saveSchedules(newS); // บันทึกเป็นค่ากลาง (มีผลทุก user)
+                }}
                 className={`text-sm p-2.5 rounded-xl font-black border-2 transition-all select-none ${schedules.lv5?.includes(date) ? 'bg-purple-500 text-white border-purple-500' : schedules.lv6?.includes(date) ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white/5 text-white border-white/10'}`}
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >

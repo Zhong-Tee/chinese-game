@@ -1,12 +1,13 @@
 import React from 'react';
-import { LEVEL_SCHEDULE_META } from '../utils/levelScheduleMeta';
+import { LEVEL_SCHEDULE_META, hasLevelKey } from '../utils/levelScheduleMeta';
 
 export default function Flashcards({
-  setPage, 
-  levelCounts, 
-  schedules, 
-  checkLevelAvailable, 
-  startLevelGame 
+  setPage,
+  levelCounts,
+  schedules,
+  levelKeys = {},
+  checkLevelAvailable,
+  startLevelGame
 }) {
   return (
     <div 
@@ -23,6 +24,10 @@ export default function Flashcards({
       {/* Level 1-7 */}
       {[1, 2, 3, 4, 5, 6, 7].map(lv => {
         const available = checkLevelAvailable(lv);
+        const isKeyed = lv >= 3 && lv <= 6;
+        const holdsKey = isKeyed ? hasLevelKey(lv, levelKeys) : false;
+        // การ์ดที่ควรเน้น: เล่นได้ตอนนี้ หรือถือกุญแจอยู่ (รอเล่นวันถัดไป)
+        const highlight = available || holdsKey;
         let dateInfo = "ทุกวัน";
         if (lv === 3) dateInfo = schedules.lv3.length > 0 ? schedules.lv3.join(", ") : "รอตั้งค่า";
         else if (lv === 4) dateInfo = schedules.lv4.length > 0 ? schedules.lv4.join(", ") : "รอตั้งค่า";
@@ -74,7 +79,7 @@ export default function Flashcards({
         }
 
         return (
-          <div key={lv} className={`bg-white p-5 rounded-[2rem] shadow-sm border-2 flex items-center min-h-[110px] mb-3 transition-all ${available ? 'border-orange-400' : 'opacity-40 grayscale border-slate-200'}`}>
+          <div key={lv} className={`bg-white p-5 rounded-[2rem] shadow-sm border-2 flex items-center min-h-[110px] mb-3 transition-all ${highlight ? 'border-orange-400' : 'opacity-40 grayscale border-slate-200'}`}>
             {/* ซ้าย: LV และ จำนวนคำ (12pt) */}
             <div className="w-1/4 text-left flex flex-col justify-center">
               <span className="font-black text-lg italic uppercase leading-none text-slate-800">
@@ -93,16 +98,31 @@ export default function Flashcards({
               </div>
             </div>
 
-            {/* ขวา: ปุ่มกดทรงเหลี่ยม */}
+            {/* ขวา: ปุ่มกด / ลูกกุญแจ */}
             <div className="w-1/4 text-right flex justify-end items-center">
               {available ? (
-                <button 
-                  onClick={() => startLevelGame(lv)} 
-                  className="bg-orange-500 text-white px-5 py-3 rounded-xl font-black shadow-lg shadow-orange-200 text-xs uppercase tracking-tighter active:scale-90 transition-all"
-                >
-                  Start
-                </button>
-              ) : ( 
+                isKeyed ? (
+                  <button
+                    onClick={() => startLevelGame(lv)}
+                    title="กดปลดล็อกด้วยลูกกุญแจ"
+                    className="bg-amber-500 text-white w-14 h-14 rounded-2xl font-black shadow-lg shadow-amber-200 text-2xl active:scale-90 transition-all flex items-center justify-center animate-pulse"
+                  >
+                    🔑
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => startLevelGame(lv)}
+                    className="bg-orange-500 text-white px-5 py-3 rounded-xl font-black shadow-lg shadow-orange-200 text-xs uppercase tracking-tighter active:scale-90 transition-all"
+                  >
+                    Start
+                  </button>
+                )
+              ) : holdsKey ? (
+                <div className="flex flex-col items-center gap-0.5 text-slate-400">
+                  <span className="text-2xl opacity-70">🔑</span>
+                  <span className="text-[8px] font-black italic uppercase leading-none">พรุ่งนี้</span>
+                </div>
+              ) : (
                 <div className="text-[9px] font-black text-slate-400 italic border border-slate-300 px-2 py-1 rounded-lg uppercase text-center">Locked</div>
               )}
             </div>

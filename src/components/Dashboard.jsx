@@ -38,6 +38,7 @@ export default function Dashboard({
   refreshGameState,
   onLogout,
   schedules = { lv3: [], lv4: [], lv5: [], lv6: [] },
+  levelKeys = {},
   levelCounts = {},
   onPlayLevel,
 }) {
@@ -244,6 +245,7 @@ export default function Dashboard({
           />
           <HubLevelScheduleBar
             schedules={schedules}
+            levelKeys={levelKeys}
             onPlayLevel={onPlayLevel}
           />
           <button

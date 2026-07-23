@@ -188,6 +188,83 @@ export function getScheduledLevelCountdowns(schedules = EMPTY_SCHEDULES, fromDat
   return SCHEDULED_LEVEL_KEYS.map((key) => getDaysUntilLevelPlay(key, schedules, fromDate));
 }
 
+// =====================================================================
+// ระบบลูกกุญแจ (Level Keys) — ปลดล็อก LV3-6
+//   - เมื่อถึงวันเปิดของ level → มอบกุญแจ 1 ดอก (สูงสุด 1 ดอก/level)
+//   - กุญแจค้างไว้จนกว่าจะกดเล่น (แก้ปัญหาไม่ว่างเรียนวันนั้น)
+//   - ใช้กุญแจเล่นได้วันละ 1 level เท่านั้น (playDate กันไว้)
+// =====================================================================
+
+export const EMPTY_LEVEL_KEYS = {
+  lv3: { has: false, grantDate: null },
+  lv4: { has: false, grantDate: null },
+  lv5: { has: false, grantDate: null },
+  lv6: { has: false, grantDate: null },
+  playDate: null,
+};
+
+function keyEntry(levelKeys, levelKey) {
+  const e = levelKeys?.[`lv${levelKey}`];
+  return { has: !!e?.has, grantDate: e?.grantDate || null };
+}
+
+export function normalizeLevelKeys(raw = {}) {
+  const next = { playDate: raw?.playDate || null };
+  for (const key of SCHEDULED_LEVEL_KEYS) {
+    const e = keyEntry(raw, key);
+    next[`lv${key}`] = { has: e.has, grantDate: e.grantDate };
+  }
+  return next;
+}
+
+// มอบกุญแจตามวันเปิดของวันนี้ (idempotent) — คืน { levelKeys, changed }
+export function applyKeyGrants(schedules = EMPTY_SCHEDULES, levelKeys = {}, fromDate = new Date()) {
+  const todayStr = formatLocalDateStr(startOfLocalDay(fromDate));
+  const next = normalizeLevelKeys(levelKeys);
+  let changed = false;
+
+  for (const key of SCHEDULED_LEVEL_KEYS) {
+    if (!isLevelScheduledToday(key, schedules, fromDate)) continue;
+    const entry = next[`lv${key}`];
+    // ประมวลผลวันเปิดนี้ไปแล้ว → ข้าม (กันมอบซ้ำ + กันมอบใหม่หลังเพิ่งเล่นวันนี้)
+    if (entry.grantDate === todayStr) continue;
+    // มอบกุญแจ (cap ที่ 1 ดอก): ตั้ง has=true และ mark วันเปิดที่ประมวลผลแล้ว
+    next[`lv${key}`] = { has: true, grantDate: todayStr };
+    changed = true;
+  }
+
+  return { levelKeys: next, changed };
+}
+
+// level นี้ถือกุญแจอยู่หรือไม่
+export function hasLevelKey(levelKey, levelKeys = {}) {
+  return keyEntry(levelKeys, String(levelKey)).has;
+}
+
+// วันนี้ใช้กุญแจเล่นไปแล้วหรือยัง (จำกัดวันละ 1 level)
+export function hasUsedKeyToday(levelKeys = {}, fromDate = new Date()) {
+  const todayStr = formatLocalDateStr(startOfLocalDay(fromDate));
+  return levelKeys?.playDate === todayStr;
+}
+
+// level นี้กดเล่นปลดล็อกได้ตอนนี้ไหม (มีกุญแจ + ยังไม่ใช้สิทธิ์วันนี้)
+export function isKeyLevelPlayableToday(levelKey, levelKeys = {}, fromDate = new Date()) {
+  const key = String(levelKey);
+  if (!SCHEDULED_LEVEL_KEYS.includes(key)) return false;
+  if (!hasLevelKey(key, levelKeys)) return false;
+  return !hasUsedKeyToday(levelKeys, fromDate);
+}
+
+// ใช้กุญแจของ level นี้ (กดเล่น) → คืน levelKeys ชุดใหม่
+export function consumeLevelKey(levelKey, levelKeys = {}, fromDate = new Date()) {
+  const key = String(levelKey);
+  const todayStr = formatLocalDateStr(startOfLocalDay(fromDate));
+  const next = normalizeLevelKeys(levelKeys);
+  next[`lv${key}`] = { has: false, grantDate: todayStr };
+  next.playDate = todayStr;
+  return next;
+}
+
 export function formatLevelCountdownText(status) {
   if (!status) return '';
   if (status.unconfigured) return 'รอตั้งค่า';

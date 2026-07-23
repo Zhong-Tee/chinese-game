@@ -68,6 +68,14 @@ export default function FlashcardGame({
         ? 'ประโยคที่ถูกต้อง'
         : 'คำศัพท์ที่ถูกต้อง';
 
+  const revealPinyin = stage === 'typing'
+    ? currentCard.pinyin_vocab
+    : stage === 'rearrange'
+      ? currentCard.pinyin_sentence
+      : stage === 'meaning'
+        ? (currentCard.pinyin_vocab || currentCard.pinyin)
+        : '';
+
   const hideSpeaker = typeof activeLevel === 'number' && activeLevel >= 3 && activeLevel <= 7;
   const canShowStageFeedback = isStageAnswered;
   const shouldShowManualNext = isStageAnswered && (!isStageCorrect || isTimedOut);
@@ -406,9 +414,17 @@ export default function FlashcardGame({
           )}
 
           {canShowStageFeedback && (
-            <div className={`mt-4 rounded-2xl px-4 py-3 text-sm font-black ${isStageCorrect ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-              <span>{isTimedOut ? 'หมดเวลา' : isStageCorrect ? 'ตอบถูกต้อง' : 'ตอบผิด'}: </span>
-              <span>{stageLabel}: {correctAnswer || '-'}</span>
+            <div className={`mt-4 rounded-2xl px-4 py-3.5 font-black ${isStageCorrect ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+              <div className="text-base sm:text-lg">
+                <span>{isTimedOut ? 'หมดเวลา' : isStageCorrect ? 'ตอบถูกต้อง' : 'ตอบผิด'}: </span>
+                <span>{revealPinyin ? 'Pinyin ที่ถูกต้อง' : stageLabel}: </span>
+                {!revealPinyin && (
+                  <span style={{ fontSize: 'clamp(1.5rem, 7vw, 2.25rem)' }}>{correctAnswer || '-'}</span>
+                )}
+              </div>
+              {revealPinyin && (
+                <div className="mt-1 font-black text-center" style={{ fontSize: 'clamp(1.6rem, 8vw, 2.5rem)' }}>{revealPinyin}</div>
+              )}
             </div>
           )}
         </div>

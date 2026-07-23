@@ -14,7 +14,13 @@ import BattleGame from './components/BattleGame';
 import Shop from './components/Shop';
 import LuckyDraw from './components/LuckyDraw';
 import LevelPlayPrompt from './components/LevelPlayPrompt';
-import { SCHEDULED_LEVEL_KEYS } from './utils/levelScheduleMeta';
+import {
+  SCHEDULED_LEVEL_KEYS,
+  EMPTY_LEVEL_KEYS,
+  applyKeyGrants,
+  isKeyLevelPlayableToday,
+  consumeLevelKey,
+} from './utils/levelScheduleMeta';
 import AdminPanel from './components/AdminPanel';
 import { saveWrongWord } from './utils/wrongWordsStorage';
 import { createFlashcardSessionTracker, recordFlashcardWrongAnswer } from './utils/flashcardStatsStorage';
@@ -63,6 +69,7 @@ export default function App() {
   const [gameTimerSetting, setGameTimerSetting] = useState(5); // สำหรับช่วงเรียงคำศัพท์ Flashcard
   const [typeTimerSetting, setTypeTimerSetting] = useState(5); // สำหรับช่วงพิมพ์คำศัพท์ Flashcard
   const [schedules, setSchedules] = useState({ lv3: [], lv4: [], lv5: [], lv6: [] });
+  const [levelKeys, setLevelKeys] = useState(EMPTY_LEVEL_KEYS);
   const [allMasterCards, setAllMasterCards] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [levelCounts, setLevelCounts] = useState({1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, mistakes: 0});
@@ -207,34 +214,63 @@ export default function App() {
   }, [page]);
 
   const fetchUserSettings = async (userId) => {
-    const { data } = await supabase.from('user_settings').select('*').eq('user_id', userId).single();
-    if (data) { 
-      setTimerSetting(data.timer_setting || 5); 
+    // schedules = ค่ากลาง (game_settings) ใช้ร่วมทุกคน; timers/level_keys = รายคน (user_settings)
+    const [{ data }, { data: gs }] = await Promise.all([
+      supabase.from('user_settings').select('*').eq('user_id', userId).single(),
+      supabase.from('game_settings').select('schedules').eq('id', 1).maybeSingle(),
+    ]);
+
+    const loadedSchedules = gs?.schedules || { lv3: [], lv4: [], lv5: [], lv6: [] };
+    setSchedules(loadedSchedules);
+
+    if (data) {
+      setTimerSetting(data.timer_setting || 5);
       setGameTimerSetting(data.game_timer_setting || data.minigame_timer || 5); // เพิ่ม fallback minigame_timer
       setTypeTimerSetting(data.type_timer || 5); // ดึงค่า type_timer
-      setSchedules(data.schedules || { lv3: [], lv4: [], lv5: [], lv6: [] }); 
+      // ระบบลูกกุญแจ: มอบกุญแจตามวันเปิดของวันนี้ (ถ้าถึงกำหนด)
+      const { levelKeys: grantedKeys, changed } = applyKeyGrants(loadedSchedules, data.level_keys || {});
+      setLevelKeys(grantedKeys);
+      if (changed) persistLevelKeys(userId, grantedKeys);
     }
     else { await supabase.from('user_settings').insert([{ user_id: userId }]); }
   };
 
-  const saveSettings = async (newTimer, newGameTimer, newTypeTimer, newSchedules) => {
+  const persistLevelKeys = async (userId, newKeys) => {
+    const id = userId || user?.id;
+    if (!id) return;
+    const { error } = await supabase.from('user_settings').update({ level_keys: newKeys }).eq('user_id', id);
+    if (error) console.error('Error saving level_keys:', error);
+  };
+
+  const saveSettings = async (newTimer, newGameTimer, newTypeTimer) => {
     if (!user || !user.id) {
       console.error('User not found, cannot save settings');
       return;
     }
-    
-    const { error } = await supabase.from('user_settings').update({ 
-      timer_setting: newTimer, 
+
+    const { error } = await supabase.from('user_settings').update({
+      timer_setting: newTimer,
       minigame_timer: newGameTimer, // เวลาเรียงคำศัพท์ (Flashcard ช่วงที่ 3)
       type_timer: newTypeTimer || typeTimerSetting, // เวลาพิมพ์คำศัพท์ (Flashcard ช่วงพิมพ์)
-      schedules: newSchedules 
     }).eq('user_id', user.id);
-    
+
     if (error) {
       console.error('Error saving settings:', error);
       alert('ไม่สามารถบันทึกการตั้งค่าได้: ' + error.message);
     } else {
       console.log('Settings saved successfully:', { timer_setting: newTimer, minigame_timer: newGameTimer, type_timer: newTypeTimer || typeTimerSetting });
+    }
+  };
+
+  // ตารางเปิด Level = ค่ากลาง (เฉพาะ admin แก้ได้) → มีผลกับทุก user
+  const saveSchedules = async (newSchedules) => {
+    if (!user || !user.id) return;
+    const { error } = await supabase.from('game_settings')
+      .update({ schedules: newSchedules, updated_at: new Date().toISOString() })
+      .eq('id', 1);
+    if (error) {
+      console.error('Error saving schedules:', error);
+      alert('ไม่สามารถบันทึกตารางได้: ' + error.message);
     }
   };
 
@@ -463,6 +499,12 @@ export default function App() {
 
   const startLevelGame = async (level) => {
     try {
+      // LV3-6: ต้องมีลูกกุญแจที่ยังไม่ถูกใช้ในวันนี้ถึงจะเข้าเล่นได้
+      const isKeyedLevel = SCHEDULED_LEVEL_KEYS.includes(String(level));
+      if (isKeyedLevel && !isKeyLevelPlayableToday(level, levelKeys)) {
+        alert("ยังไม่มีลูกกุญแจสำหรับด่านนี้ หรือใช้สิทธิ์ปลดล็อกของวันนี้ไปแล้ว");
+        return;
+      }
       setActiveLevel(level);
       let query = supabase.from('user_progress').select('flashcard_id').eq('user_id', user.id);
       if (level === 'mistakes') query = query.gte('wrong_count', 3); 
@@ -489,6 +531,12 @@ export default function App() {
       if (!cards || cards.length === 0) {
         alert("ไม่พบคำศัพท์");
         return;
+      }
+      // ใช้ลูกกุญแจของด่านนี้ (LV3-6) — หักหลังจากยืนยันว่ามีคำศัพท์เล่นได้แล้ว
+      if (isKeyedLevel) {
+        const nextKeys = consumeLevelKey(level, levelKeys);
+        setLevelKeys(nextKeys);
+        persistLevelKeys(user.id, nextKeys);
       }
       setGameQueue(shuffleArray(cards));
       flashcardSessionRef.current?.start(level);
@@ -857,17 +905,10 @@ export default function App() {
     submitCurrentCard,
   ]);
 
+  // LV1/2/7 + คำผิด เล่นได้ทุกวัน; LV3-6 ต้องมีลูกกุญแจที่ยังไม่ถูกใช้ในวันนี้
   const checkLevelAvailable = (lv) => {
     if (lv === 'mistakes' || lv <= 2 || lv === 7) return true;
-    const days = ["จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์", "อาทิตย์"];
-    const today = new Date();
-    const dayName = days[today.getDay() === 0 ? 6 : today.getDay() - 1];
-    const dateNum = today.getDate();
-    if (lv === 3) return schedules.lv3?.includes(dayName);
-    if (lv === 4) return schedules.lv4?.includes(dayName);
-    if (lv === 5) return schedules.lv5?.includes(dateNum);
-    if (lv === 6) return schedules.lv6?.includes(dateNum);
-    return false;
+    return isKeyLevelPlayableToday(lv, levelKeys);
   };
 
   const handleDailyWordsConfirm = useCallback(() => {
@@ -1037,11 +1078,12 @@ export default function App() {
             refreshGameState={() => refreshGameState()}
             onLogout={handleLogout}
             schedules={schedules}
+            levelKeys={levelKeys}
             levelCounts={levelCounts}
             onPlayLevel={startLevelGame}
           />
         )}
-        {page === 'fc-chars' && <Flashcards setPage={setPage} levelCounts={levelCounts} schedules={schedules} checkLevelAvailable={checkLevelAvailable} startLevelGame={startLevelGame} />}
+        {page === 'fc-chars' && <Flashcards setPage={setPage} levelCounts={levelCounts} schedules={schedules} levelKeys={levelKeys} checkLevelAvailable={checkLevelAvailable} startLevelGame={startLevelGame} />}
         {page === 'fc-play' && currentCard && (
           <FlashcardGame
             onExitGame={handleExitFlashcardGame}
@@ -1084,10 +1126,11 @@ export default function App() {
         {page === 'statistics' && <Statistics user={user} setPage={setPage} />}
         
         {(page === 'settings' || page === 'set-schedule') && (
-          <Settings 
-            page={page} 
-            setPage={setPage} 
+          <Settings
+            page={page}
+            setPage={setPage}
             user={user}
+            isAdmin={isAdmin}
             allMasterCards={allMasterCards}
             timerSetting={timerSetting} 
             setTimerSetting={setTimerSetting} 
@@ -1095,9 +1138,10 @@ export default function App() {
             setGameTimerSetting={setGameTimerSetting}
             typeTimerSetting={typeTimerSetting}
             setTypeTimerSetting={setTypeTimerSetting}
-            schedules={schedules} 
-            setSchedules={setSchedules} 
-            saveSettings={(t, g, type, s) => saveSettings(t, g, type, s)} 
+            schedules={schedules}
+            setSchedules={setSchedules}
+            saveSettings={(t, g, type) => saveSettings(t, g, type)}
+            saveSchedules={saveSchedules}
           />
         )}
 
