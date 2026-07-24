@@ -201,6 +201,7 @@ export const EMPTY_LEVEL_KEYS = {
   lv5: { has: false, grantDate: null },
   lv6: { has: false, grantDate: null },
   playDate: null,
+  unlockedLevel: null,
 };
 
 function keyEntry(levelKeys, levelKey) {
@@ -209,11 +210,24 @@ function keyEntry(levelKeys, levelKey) {
 }
 
 export function normalizeLevelKeys(raw = {}) {
-  const next = { playDate: raw?.playDate || null };
+  const next = {
+    playDate: raw?.playDate || null,
+    unlockedLevel: raw?.unlockedLevel != null ? String(raw.unlockedLevel) : null,
+  };
   for (const key of SCHEDULED_LEVEL_KEYS) {
     const e = keyEntry(raw, key);
     next[`lv${key}`] = { has: e.has, grantDate: e.grantDate };
   }
+
+  // รองรับข้อมูลเดิมก่อนมี unlockedLevel: ด่านที่ถูกหักใน playDate คือด่านที่ปลดล็อกวันนั้น
+  if (next.playDate && !next.unlockedLevel) {
+    const consumedKey = SCHEDULED_LEVEL_KEYS.find((key) => {
+      const entry = next[`lv${key}`];
+      return !entry.has && entry.grantDate === next.playDate;
+    });
+    if (consumedKey) next.unlockedLevel = consumedKey;
+  }
+
   return next;
 }
 
@@ -251,8 +265,10 @@ export function hasUsedKeyToday(levelKeys = {}, fromDate = new Date()) {
 export function isKeyLevelPlayableToday(levelKey, levelKeys = {}, fromDate = new Date()) {
   const key = String(levelKey);
   if (!SCHEDULED_LEVEL_KEYS.includes(key)) return false;
-  if (!hasLevelKey(key, levelKeys)) return false;
-  return !hasUsedKeyToday(levelKeys, fromDate);
+  if (hasUsedKeyToday(levelKeys, fromDate)) {
+    return String(levelKeys?.unlockedLevel || '') === key;
+  }
+  return hasLevelKey(key, levelKeys);
 }
 
 // ใช้กุญแจของ level นี้ (กดเล่น) → คืน levelKeys ชุดใหม่
@@ -260,8 +276,13 @@ export function consumeLevelKey(levelKey, levelKeys = {}, fromDate = new Date())
   const key = String(levelKey);
   const todayStr = formatLocalDateStr(startOfLocalDay(fromDate));
   const next = normalizeLevelKeys(levelKeys);
+
+  // ถ้าปลดล็อกด่านนี้แล้วในวันนี้ ให้เข้าเล่นซ้ำได้โดยไม่หักกุญแจอีก
+  if (next.playDate === todayStr && next.unlockedLevel === key) return next;
+
   next[`lv${key}`] = { has: false, grantDate: todayStr };
   next.playDate = todayStr;
+  next.unlockedLevel = key;
   return next;
 }
 

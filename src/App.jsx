@@ -499,10 +499,10 @@ export default function App() {
 
   const startLevelGame = async (level) => {
     try {
-      // LV3-6: ต้องมีลูกกุญแจที่ยังไม่ถูกใช้ในวันนี้ถึงจะเข้าเล่นได้
+      // LV3-6: ใช้กุญแจได้วันละ 1 ด่าน และกลับเข้าเล่นด่านที่ปลดล็อกแล้วได้ทั้งวัน
       const isKeyedLevel = SCHEDULED_LEVEL_KEYS.includes(String(level));
       if (isKeyedLevel && !isKeyLevelPlayableToday(level, levelKeys)) {
-        alert("ยังไม่มีลูกกุญแจสำหรับด่านนี้ หรือใช้สิทธิ์ปลดล็อกของวันนี้ไปแล้ว");
+        alert("ยังไม่มีลูกกุญแจสำหรับด่านนี้ หรือวันนี้ใช้สิทธิ์ปลดล็อกกับด่านอื่นไปแล้ว");
         return;
       }
       setActiveLevel(level);
@@ -532,7 +532,7 @@ export default function App() {
         alert("ไม่พบคำศัพท์");
         return;
       }
-      // ใช้ลูกกุญแจของด่านนี้ (LV3-6) — หักหลังจากยืนยันว่ามีคำศัพท์เล่นได้แล้ว
+      // ใช้ลูกกุญแจของด่านนี้ครั้งแรกของวัน — การเข้าเล่นด่านเดิมซ้ำจะไม่หักเพิ่ม
       if (isKeyedLevel) {
         const nextKeys = consumeLevelKey(level, levelKeys);
         setLevelKeys(nextKeys);
@@ -905,7 +905,7 @@ export default function App() {
     submitCurrentCard,
   ]);
 
-  // LV1/2/7 + คำผิด เล่นได้ทุกวัน; LV3-6 ต้องมีลูกกุญแจที่ยังไม่ถูกใช้ในวันนี้
+  // LV1/2/7 + คำผิด เล่นได้ทุกวัน; LV3-6 ใช้กุญแจวันละ 1 ด่าน แล้วเล่นด่านนั้นซ้ำได้ทั้งวัน
   const checkLevelAvailable = (lv) => {
     if (lv === 'mistakes' || lv <= 2 || lv === 7) return true;
     return isKeyLevelPlayableToday(lv, levelKeys);
