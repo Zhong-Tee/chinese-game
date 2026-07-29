@@ -283,13 +283,25 @@ export default function App() {
         .then(({ data }) => setIsAdmin(!!data?.is_admin))
         .catch(() => {});
 
-      const { data: master, error: masterError } = await supabase.from('flashcards').select('*').order('id1', { ascending: true });
-      if (masterError) {
-        console.error('Error fetching flashcards:', masterError);
-        return;
+      // ดึง flashcards ทั้งหมดแบบแบ่งหน้า (Supabase จำกัด 1000 แถว/คำขอ) วนจนครบทุกแถว
+      const PAGE_SIZE = 1000;
+      let master = [];
+      for (let from = 0; ; from += PAGE_SIZE) {
+        const { data: page, error: masterError } = await supabase
+          .from('flashcards')
+          .select('*')
+          .order('id1', { ascending: true })
+          .range(from, from + PAGE_SIZE - 1);
+        if (masterError) {
+          console.error('Error fetching flashcards:', masterError);
+          return;
+        }
+        if (!page || page.length === 0) break;
+        master = master.concat(page);
+        if (page.length < PAGE_SIZE) break;
       }
-      console.log('Fetched flashcards:', master?.length || 0, 'items');
-      setAllMasterCards(master || []);
+      console.log('Fetched flashcards:', master.length, 'items');
+      setAllMasterCards(master);
       
       const { data: progress, error: progressError } = await supabase.from('user_progress').select('level, wrong_count, flashcard_id').eq('user_id', userId);
       if (progressError) {
@@ -1369,7 +1381,7 @@ export default function App() {
                       style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
                       onDragStart={(e) => e.preventDefault()}
                     >
-                      <div className="text-2xl font-bold">{card?.cn || ''}</div>
+                      <div className={`text-2xl font-bold ${isSelected ? 'text-white' : 'text-slate-800'}`}>{card?.cn || ''}</div>
                       <div className={`text-[9px] font-bold uppercase ${isSelected ? 'text-white' : 'text-slate-400'}`}>{card?.pinyin || ''}</div>
                     </div>
                   );
