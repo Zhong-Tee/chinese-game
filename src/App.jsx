@@ -6,6 +6,7 @@ import Flashcards from './components/Flashcards';
 import Settings from './components/Settings';
 import FlashcardGame from './components/FlashcardGame';
 import Library from './components/Library';
+import WordMatchGame from './components/WordMatchGame';
 import Score from './components/Score';
 import Statistics from './components/Statistics';
 import GamesHub from './components/GamesHub';
@@ -985,7 +986,7 @@ export default function App() {
   const shouldShowTopBar = page !== 'fc-play' && page !== 'dashboard' && page !== 'lucky-draw' && page !== 'battle';
   const isSelectWordsPage = page === 'select-words';
   const isHubPage = page === 'dashboard' || page === 'lucky-draw';
-  const isCreamPage = page === 'fc-play' || page === 'fc-chars' || page === 'library' || page === 'statistics';
+  const isCreamPage = page === 'fc-play' || page === 'fc-chars' || page === 'library' || page === 'statistics' || page === 'word-match';
 
   return (
     <div
@@ -1134,6 +1135,7 @@ export default function App() {
           />
         )}
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}
+        {page === 'word-match' && <WordMatchGame setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} />}
         {page === 'score' && <Score user={user} selectedIds={selectedIds} levelCounts={levelCounts} setPage={setPage} />}
         {page === 'statistics' && <Statistics user={user} setPage={setPage} />}
         

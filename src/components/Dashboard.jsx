@@ -275,6 +275,14 @@ export default function Dashboard({
 
         {/* ปุ่มโหมด — ขวากึ่งกลางลงล่าง */}
         <div className="hub-action-rail pointer-events-auto">
+          {/* เมนูใหม่: เกมจับคู่คำศัพท์ — อยู่เหนือกริดเมนู (เหนือ Library) */}
+          <button
+            onClick={() => setPage('word-match')}
+            className="hub-mode-btn bg-gradient-to-r from-orange-500 to-pink-500 flex items-center justify-center gap-2 py-2.5 mb-2 active:scale-[0.97]"
+          >
+            <span className="hub-mode-icon drop-shadow-md">🔗</span>
+            <span className="hub-mode-label drop-shadow">จับคู่คำศัพท์</span>
+          </button>
           <div className="hub-mode-grid">
             {MODE_BUTTONS.map(btn => (
               <button
