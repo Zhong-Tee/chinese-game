@@ -180,7 +180,9 @@ export default function WordMatchGame({ setPage, allMasterCards, selectedIds }) 
         <div className="flex items-center mb-4">
           <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black italic underline uppercase text-xs">← กลับหน้าหลัก</button>
         </div>
-        <h2 className="text-2xl font-black italic uppercase text-center mb-1 text-slate-800">เกมจับคู่คำศัพท์</h2>
+        <h2 className="text-2xl font-black italic uppercase text-center mb-1 text-slate-800">
+          เกมจับคู่คำศัพท์ {readyIds != null && `(${cards.length.toLocaleString()})`}
+        </h2>
         <p className="text-center text-slate-500 text-sm mb-6">เลือกตัวอักษร แล้วจับคู่คำศัพท์กับคำแปล</p>
 
         {readyIds == null ? (
@@ -192,14 +194,20 @@ export default function WordMatchGame({ setPage, allMasterCards, selectedIds }) 
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-2">
-            {cards.map(card => {
+            {cards.map((card, index) => {
               const id1 = Number(card.id1 ?? card.id);
               return (
                 <button
                   key={id1}
                   onClick={() => openCard({ id1, cn: card.cn, pinyin: card.pinyin })}
-                  className="aspect-square rounded-xl shadow-md border-2 border-white bg-white active:scale-95 transition flex flex-col items-center justify-center"
+                  className="relative aspect-square rounded-xl shadow-md border-2 border-white bg-white active:scale-95 transition flex flex-col items-center justify-center"
                 >
+                  <span
+                    className="absolute right-3 top-3 text-slate-600 text-[11px] font-bold leading-none"
+                    aria-label={`ลำดับที่ ${index + 1}`}
+                  >
+                    {index + 1}
+                  </span>
                   <div className="text-4xl font-black text-slate-900 leading-none">{card.cn}</div>
                   <div className="text-xs font-bold text-slate-500 mt-1">{card.pinyin}</div>
                 </button>

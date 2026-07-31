@@ -35,7 +35,18 @@
       "Bash(curl -s '__TRACKED_VAR__/rest/v1/flashcards?id1=gte.801&id1=lte.1300&select=id1' -H 'apikey: __TRACKED_VAR__' -H 'Authorization: Bearer __TRACKED_VAR__' -H 'Prefer: count=exact' -I)",
       "Bash(node node_modules)",
       "Bash(node gen.js)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(awk -F',' 'NR>=32 && NR<=91 {print $1\"\\\\t\"$2\"\\\\t\"$4}' \"game/flashcards_2026-06-26.csv\")",
+      "Bash(awk -F',' 'NR>=92 && NR<=181 {print $1\"\\\\t\"$2\"\\\\t\"$4}' \"game/flashcards_2026-06-26.csv\")",
+      "Bash(awk -F',' 'NR>=182 && NR<=271 {print $1\"\\\\t\"$2\"\\\\t\"$4}' \"game/flashcards_2026-06-26.csv\")",
+      "Bash(awk -F',' 'NR>=272 && NR<=361 {print $1\"\\\\t\"$2\"\\\\t\"$4}' \"game/flashcards_2026-06-26.csv\")",
+      "Bash(awk -F',' 'NR>=362 && NR<=451 {print $1\"\\\\t\"$2\"\\\\t\"$4}' \"game/flashcards_2026-06-26.csv\")",
+      "Bash(awk -F',' 'NR>=452 && NR<=541 {print $1\"\\\\t\"$2\"\\\\t\"$4}' \"game/flashcards_2026-06-26.csv\")",
+      "Bash(awk -F',' 'NR>=542 && NR<=631 {print $1\"\\\\t\"$2\"\\\\t\"$4}' \"game/flashcards_2026-06-26.csv\")",
+      "Bash(awk -F',' 'NR>=632 && NR<=721 {print $1\"\\\\t\"$2\"\\\\t\"$4}' \"game/flashcards_2026-06-26.csv\")",
+      "Bash(awk -F',' 'NR>=722 && NR<=811 {print $1\"\\\\t\"$2\"\\\\t\"$4}' \"game/flashcards_2026-06-26.csv\")",
+      "Bash(awk 'END{print NR}' \"game/flashcards_2026-06-26.csv\")",
+      "Bash(awk -F',' 'END{print $1\"\\\\t\"$2}' \"game/flashcards_2026-06-26.csv\")"
     ]
   }
 }
