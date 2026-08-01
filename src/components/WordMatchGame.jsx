@@ -48,13 +48,29 @@ export default function WordMatchGame({ setPage, allMasterCards, selectedIds }) 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const { data, error } = await supabase
-        .from('character_words')
-        .select('flashcard_id')
-        .eq('sort_order', 2);
-      if (!alive) return;
-      if (error) { console.error('load ready ids error:', error.message, '| code:', error.code, '| details:', error.details, '| hint:', error.hint); setReadyIds(new Set()); return; }
-      setReadyIds(new Set((data || []).map(r => r.flashcard_id)));
+      const pageSize = 1000;
+      const ids = new Set();
+
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase
+          .from('character_words')
+          .select('flashcard_id')
+          .eq('sort_order', 2)
+          .order('flashcard_id', { ascending: true })
+          .range(from, from + pageSize - 1);
+
+        if (!alive) return;
+        if (error) {
+          console.error('load ready ids error:', error.message, '| code:', error.code, '| details:', error.details, '| hint:', error.hint);
+          setReadyIds(new Set());
+          return;
+        }
+
+        (data || []).forEach(row => ids.add(Number(row.flashcard_id)));
+        if (!data || data.length < pageSize) break;
+      }
+
+      if (alive) setReadyIds(ids);
     })();
     return () => { alive = false; };
   }, []);

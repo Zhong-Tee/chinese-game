@@ -46,7 +46,8 @@
       "Bash(awk -F',' 'NR>=632 && NR<=721 {print $1\"\\\\t\"$2\"\\\\t\"$4}' \"game/flashcards_2026-06-26.csv\")",
       "Bash(awk -F',' 'NR>=722 && NR<=811 {print $1\"\\\\t\"$2\"\\\\t\"$4}' \"game/flashcards_2026-06-26.csv\")",
       "Bash(awk 'END{print NR}' \"game/flashcards_2026-06-26.csv\")",
-      "Bash(awk -F',' 'END{print $1\"\\\\t\"$2}' \"game/flashcards_2026-06-26.csv\")"
+      "Bash(awk -F',' 'END{print $1\"\\\\t\"$2}' \"game/flashcards_2026-06-26.csv\")",
+      "Bash(awk -F'\\\\t' '$1>=1081 && $1<=1099')"
     ]
   }
 }
