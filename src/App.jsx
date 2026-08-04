@@ -95,6 +95,8 @@ export default function App() {
   const [flashcardTypedAnswer, setFlashcardTypedAnswer] = useState('');
   const FLASHCARD_CORRECT_REVEAL_MS = 2000;
   const flashcardSessionRef = useRef(null);
+  // กันโกงกด Cancel/back/refresh หนีกลางการ์ด: หักคำลง LV1 ทันทีที่ตอบช่วงแรก (ดู applyCardEntryPenalty)
+  const cardPenaltyRef = useRef(null); // { cardId, baseWrong } = wrong_count เดิมก่อนหักโทษ
   const flashcardSfxRef = useRef({});
   const flashcardTimerWarnAtRef = useRef(null);
   if (!flashcardSessionRef.current) {
@@ -106,11 +108,16 @@ export default function App() {
   }, []);
 
   const handleExitFlashcardGame = useCallback(async () => {
+    // ถ้าตอบช่วงแรกของการ์ดไปแล้ว คำถูกหักลง LV1 แล้ว (applyCardEntryPenalty) — ออกกลางคันจึงไม่รอด
     await endFlashcardSession();
+    cardPenaltyRef.current = null;
     setPage('fc-chars');
     setGameActive(false);
     setCurrentCard(null);
-  }, [endFlashcardSession]);
+    setGameQueue([]);
+    if (user?.id) fetchInitialData(user.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endFlashcardSession, user?.id]);
 
   // Daily new-words popup
   const [dailyNewWords, setDailyNewWords] = useState(null);
@@ -577,20 +584,54 @@ export default function App() {
     flashcardTimerWarnAtRef.current = null;
   }, [currentCard, flashcardStage, flashcardStageAnswered, gameActive]);
 
+  // กันโกง: ทันทีที่ตอบช่วงแรก (ถูก/ผิด/หมดเวลา) หักคำนี้ลง LV1 + wrong_count+1 ใน DB ก่อนเลย
+  // ถ้าเล่นครบทุกช่วงแล้วผ่าน moveToNextCard จะเขียนทับเป็นเลเวลถัดไปให้เอง
+  // ดังนั้นเมื่อเริ่มตอบแล้วหนีกลางคัน (Cancel / ปุ่ม back / refresh / ปิดแอพ) = คำค้างอยู่ LV1 เสมอ
+  // (ยังไม่ตอบช่วงแรกแล้วออก = ไม่โดนโทษ)
+  const applyCardEntryPenalty = useCallback(async (card) => {
+    if (!user?.id || !card) return;
+    const cardId = card.id1 || card.id;
+    if (cardPenaltyRef.current?.cardId === cardId) return; // กัน effect ยิงซ้ำ (StrictMode)
+    cardPenaltyRef.current = { cardId, baseWrong: 0 };
+    const { data } = await supabase
+      .from('user_progress')
+      .select('wrong_count')
+      .eq('user_id', user.id)
+      .eq('flashcard_id', cardId)
+      .single();
+    const baseWrong = data?.wrong_count || 0;
+    cardPenaltyRef.current = { cardId, baseWrong };
+    const { error } = await supabase
+      .from('user_progress')
+      .update({ level: 1, wrong_count: baseWrong + 1 })
+      .eq('user_id', user.id)
+      .eq('flashcard_id', cardId);
+    if (error) console.error('[applyCardEntryPenalty] UPDATE error:', error, { cardId });
+  }, [user?.id]);
+
   const moveToNextCard = useCallback(async (isCardPassed) => {
     if (!currentCard || !user?.id) return;
 
     let nextLevel;
     let nextWrongCount;
     const cardId = currentCard.id1 || currentCard.id;
-    const { data: currentProgress } = await supabase
-      .from('user_progress')
-      .select('wrong_count, level')
-      .eq('user_id', user.id)
-      .eq('flashcard_id', cardId)
-      .single();
 
-    const currentWrong = currentProgress?.wrong_count || 0;
+    // ใช้ wrong_count เดิมที่จำไว้ตอนหักโทษเข้าการ์ด (ใน DB ตอนนี้ถูก +1 ไปแล้ว จึงห้ามอ่านกลับมาบวกซ้ำ)
+    const penalty = cardPenaltyRef.current?.cardId === cardId ? cardPenaltyRef.current : null;
+    cardPenaltyRef.current = null;
+    let currentWrong;
+    if (penalty) {
+      currentWrong = penalty.baseWrong;
+    } else {
+      // fallback (ไม่ควรเกิด): อ่านจาก DB ซึ่งรวมโทษ +1 ไว้แล้ว จึงลบออกก่อน
+      const { data: currentProgress } = await supabase
+        .from('user_progress')
+        .select('wrong_count, level')
+        .eq('user_id', user.id)
+        .eq('flashcard_id', cardId)
+        .single();
+      currentWrong = Math.max((currentProgress?.wrong_count || 1) - 1, 0);
+    }
 
     if (isCardPassed) {
       if (activeLevel === 'mistakes') {
@@ -662,11 +703,12 @@ export default function App() {
 
     if (flashcardStage === 'pinyin') {
       setFlashcardStageResults(prev => ({ ...prev, pinyin: isCorrect }));
+      applyCardEntryPenalty(currentCard); // เริ่มตอบแล้ว → หักโทษกันหนีกลางคัน
     } else if (flashcardStage === 'meaning') {
       setFlashcardStageResults(prev => ({ ...prev, meaning: isCorrect }));
     }
     playFlashcardFeedbackSfx(isCorrect);
-  }, [currentCard, flashcardStage, flashcardStageAnswered, playFlashcardFeedbackSfx]);
+  }, [applyCardEntryPenalty, currentCard, flashcardStage, flashcardStageAnswered, playFlashcardFeedbackSfx]);
 
   const moveToMeaningStage = useCallback(() => {
     if (!currentCard) return;
@@ -844,10 +886,11 @@ export default function App() {
     setFlashcardCorrectAnswer(correctAnswer);
     if (flashcardStage === 'pinyin') {
       setFlashcardStageResults((prev) => ({ ...prev, pinyin: false }));
+      applyCardEntryPenalty(currentCard); // หมดเวลาช่วงแรก = ถือว่าเริ่มตอบแล้ว → หักโทษ
     } else {
       setFlashcardStageResults((prev) => ({ ...prev, meaning: false }));
     }
-  }, [currentCard, flashcardStage, flashcardStageAnswered, gameActive]);
+  }, [applyCardEntryPenalty, currentCard, flashcardStage, flashcardStageAnswered, gameActive]);
 
   useEffect(() => {
     if (gameActive && gameQueue.length > 0 && !currentCard) {
@@ -872,6 +915,19 @@ export default function App() {
       });
     }
   }, [buildChoices, currentCard, endFlashcardSession, gameActive, gameQueue, resetStageState, timerSetting]);
+
+  // ออกจากหน้าเกมกลางคันโดยไม่ผ่านปุ่ม Cancel (เช่น ปุ่ม back ของมือถือ/เบราว์เซอร์) → ปิดเกมให้เรียบร้อย
+  // ถ้าตอบช่วงแรกไปแล้ว คำถูกหักลง LV1 ไว้ก่อนแล้ว จึงหนีโทษไม่ได้เช่นกัน
+  useEffect(() => {
+    if (!gameActive || page === 'fc-play') return;
+    cardPenaltyRef.current = null;
+    endFlashcardSession();
+    setGameActive(false);
+    setCurrentCard(null);
+    setGameQueue([]);
+    if (user?.id) fetchInitialData(user.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, gameActive, endFlashcardSession, user?.id]);
 
   useEffect(() => {
     let interval;
