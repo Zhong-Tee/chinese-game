@@ -1,0 +1,121 @@
+import { supabase } from '../supabaseClient';
+
+export const DEFAULT_DAILY_MISSION_CONFIG = {
+  enabled: true,
+  new_words_target: 5,
+  review_enabled: true,
+  match_words_target: 10,
+};
+
+export const localDateKey = (date = new Date()) => {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+};
+
+export const dailyMissionErrorMessage = (error) => {
+  const raw = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+  if (
+    raw.includes('daily_mission_config')
+    || raw.includes('daily_mission_progress')
+    || raw.includes('schema cache')
+    || error?.code === '42703'
+    || error?.code === '42P01'
+    || error?.code === 'PGRST204'
+    || error?.code === 'PGRST205'
+  ) {
+    return 'ยังไม่ได้ติดตั้งฐานข้อมูลภารกิจ กรุณารันไฟล์ sql/daily_missions.sql ใน Supabase SQL Editor แล้วรีเฟรชหน้าเว็บ';
+  }
+  return error?.message || 'กรุณาตรวจสอบฐานข้อมูล';
+};
+
+export async function fetchDailyMissionConfig() {
+  const { data, error } = await supabase
+    .from('game_settings')
+    .select('daily_mission_config')
+    .eq('id', 1)
+    .maybeSingle();
+  if (error) throw error;
+  return { ...DEFAULT_DAILY_MISSION_CONFIG, ...(data?.daily_mission_config || {}) };
+}
+
+export async function fetchTodayMission(userId) {
+  if (!userId) return null;
+  const { data, error } = await supabase
+    .from('daily_mission_progress')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('mission_date', localDateKey())
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function initializeTodayMission(userId, newWordIds = []) {
+  if (!userId) return null;
+  const config = await fetchDailyMissionConfig();
+  if (!config.enabled) return null;
+  const today = localDateKey();
+  const existing = await fetchTodayMission(userId);
+  const { data: readyRows, error: readyError } = await supabase
+    .from('character_words').select('flashcard_id').eq('sort_order', 2);
+  if (readyError) throw readyError;
+  const readyIds = [...new Set((readyRows || []).map((r) => Number(r.flashcard_id)))];
+  for (let i = readyIds.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [readyIds[i], readyIds[j]] = [readyIds[j], readyIds[i]];
+  }
+  const matchIds = readyIds.slice(0, Math.max(0, Number(config.match_words_target) || 10));
+  if (existing) {
+    const patch = {};
+    if (newWordIds.length && !(existing.new_word_ids || []).length) patch.new_word_ids = newWordIds;
+    if (!(existing.matching_card_ids || []).length && matchIds.length) patch.matching_card_ids = matchIds;
+    if (!Object.keys(patch).length) return existing;
+    const { data, error } = await supabase.from('daily_mission_progress')
+      .update(patch).eq('user_id', userId).eq('mission_date', today).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  const { data, error } = await supabase.from('daily_mission_progress').insert({
+    user_id: userId,
+    mission_date: today,
+    config_snapshot: config,
+    new_word_ids: newWordIds,
+    matching_card_ids: matchIds,
+  }).select().single();
+  if (error && error.code !== '23505') throw error;
+  return data || fetchTodayMission(userId);
+}
+
+export async function startDailyReviewMission(userId, level, wordIds) {
+  if (!userId || ![3, 4, 5, 6].includes(Number(level)) || !wordIds?.length) return;
+  const mission = await initializeTodayMission(userId);
+  if (!mission || mission.config_snapshot?.review_enabled === false || (mission.review_word_ids || []).length) return;
+  await supabase.from('daily_mission_progress').update({
+    review_level: Number(level), review_word_ids: wordIds.map(Number),
+  }).eq('user_id', userId).eq('mission_date', localDateKey());
+}
+
+export async function recordDailyWordResult(userId, cardId, nextLevel, passed) {
+  if (!userId || !passed) return;
+  const mission = await fetchTodayMission(userId);
+  if (!mission) return;
+  const id = Number(cardId);
+  const patch = {};
+  if ((mission.new_word_ids || []).map(Number).includes(id) && Number(nextLevel) >= 3) {
+    patch.new_words_completed_ids = [...new Set([...(mission.new_words_completed_ids || []).map(Number), id])];
+  }
+  if ((mission.review_word_ids || []).map(Number).includes(id)) {
+    patch.review_completed_ids = [...new Set([...(mission.review_completed_ids || []).map(Number), id])];
+  }
+  if (Object.keys(patch).length) await supabase.from('daily_mission_progress').update(patch)
+    .eq('user_id', userId).eq('mission_date', localDateKey());
+}
+
+export async function recordDailyMatchComplete(userId, cardId) {
+  const mission = await fetchTodayMission(userId);
+  if (!mission || !(mission.matching_card_ids || []).map(Number).includes(Number(cardId))) return;
+  const ids = [...new Set([...(mission.matching_completed_ids || []).map(Number), Number(cardId)])];
+  await supabase.from('daily_mission_progress').update({ matching_completed_ids: ids })
+    .eq('user_id', userId).eq('mission_date', localDateKey());
+}

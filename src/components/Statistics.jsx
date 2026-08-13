@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { fetchFlashcardStatistics } from '../utils/flashcardStatsStorage';
+import { fetchTodayMission } from '../utils/dailyMissionStorage';
 import {
   LEVEL_KEYS,
   LEVEL_SCHEDULE_META,
@@ -165,6 +166,7 @@ export default function Statistics({ user, setPage }) {
   const [statsData, setStatsData] = useState(null);
   const [error, setError] = useState(null);
   const [viewSchedules, setViewSchedules] = useState({ lv3: [], lv4: [], lv5: [], lv6: [] });
+  const [dailyMission, setDailyMission] = useState(null);
 
   const yearOptions = useMemo(() => {
     const start = statsData?.earliest_stat_date
@@ -204,6 +206,15 @@ export default function Statistics({ user, setPage }) {
     if (!selectedUserId && activeTab === 'personal' && user?.id) {
       setSelectedUserId(user.id);
     }
+  }, [user?.id, selectedUserId, activeTab]);
+
+  useEffect(() => {
+    const targetId = selectedUserId || (activeTab === 'personal' ? user?.id : null);
+    if (!targetId) { setDailyMission(null); return; }
+    fetchTodayMission(targetId).then(setDailyMission).catch((err) => {
+      console.error('fetch daily mission:', err);
+      setDailyMission(null);
+    });
   }, [user?.id, selectedUserId, activeTab]);
 
   useEffect(() => {
@@ -433,7 +444,7 @@ export default function Statistics({ user, setPage }) {
             onClick={() => setActiveTab('personal')}
             className="flex-1 py-3 rounded-full font-black text-sm uppercase transition-all bg-orange-500 text-white"
           >
-            รายละเอียด User
+            ภารกิจประจำวัน
           </button>
         )}
       </div>
@@ -441,12 +452,48 @@ export default function Statistics({ user, setPage }) {
       {activeTab === 'personal' && (
         <div className="bg-white p-4 rounded-3xl border-2 border-slate-200 shadow-sm">
           <h3 className="text-lg font-black uppercase italic mb-4 text-center text-slate-800">
-            รายวัน — {selectedUserName || 'ของฉัน'}
+            🎯 ภารกิจวันนี้ — {selectedUserName || 'ของฉัน'}
           </h3>
-          {loading ? (
-            <div className="text-center py-8 text-slate-400 font-bold">กำลังโหลด...</div>
+          {!dailyMission ? (
+            <div className="text-center py-8 text-slate-400 font-bold">ยังไม่มีข้อมูลภารกิจของวันนี้</div>
           ) : (
-            <DailyBreakdownTable dailyRows={dailyRows} schedules={viewSchedules} />
+            <div className="space-y-3">
+              {[
+                {
+                  icon: '📚', title: `คำใหม่ไปถึง LV.3`,
+                  done: (dailyMission.new_words_completed_ids || []).length,
+                  total: (dailyMission.new_word_ids || []).length || Number(dailyMission.config_snapshot?.new_words_target) || 5,
+                },
+                {
+                  icon: '🔁', title: dailyMission.review_level ? `เล่นคำ LV.${dailyMission.review_level} ให้ครบ` : 'เล่นคำ LV.3–6 ให้ครบ',
+                  done: (dailyMission.review_completed_ids || []).length,
+                  total: (dailyMission.review_word_ids || []).length,
+                  waiting: !(dailyMission.review_word_ids || []).length,
+                },
+                {
+                  icon: '🧩', title: 'เกมจับคู่ประจำวัน',
+                  done: (dailyMission.matching_completed_ids || []).length,
+                  total: (dailyMission.matching_card_ids || []).length || Number(dailyMission.config_snapshot?.match_words_target) || 10,
+                },
+              ].map((mission) => {
+                const complete = mission.total > 0 && mission.done >= mission.total;
+                const percent = mission.total > 0 ? Math.min(100, Math.round((mission.done / mission.total) * 100)) : 0;
+                return (
+                  <div key={mission.title} className={`rounded-2xl border-2 p-4 ${complete ? 'bg-emerald-50 border-emerald-400' : 'bg-slate-50 border-slate-200'}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="font-black text-slate-800"><span className="mr-2">{mission.icon}</span>{mission.title}</div>
+                      <div className={`font-black whitespace-nowrap ${complete ? 'text-emerald-600' : 'text-orange-500'}`}>
+                        {mission.waiting ? 'รอเปิด Level' : `${mission.done}/${mission.total}`}
+                      </div>
+                    </div>
+                    <div className="h-2 rounded-full bg-slate-200 overflow-hidden mt-3">
+                      <div className={`h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-orange-500'}`} style={{ width: `${percent}%` }} />
+                    </div>
+                    {complete && <div className="text-xs font-black text-emerald-600 mt-2">✓ สำเร็จแล้ว</div>}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}

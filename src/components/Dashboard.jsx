@@ -10,6 +10,7 @@ import HubLevelScheduleBar from './HubLevelScheduleBar';
 import { HubNavIcon } from './HubNavIcons';
 import fightBtnImg from '../../game/icon/fight-btn.png';
 import gameLogoImg from '../../game/word fighter.png?v=3';
+import { fetchTodayMission, localDateKey } from '../utils/dailyMissionStorage';
 
 const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️', add_time: '⏳', bomb: '💣' };
 
@@ -51,6 +52,33 @@ export default function Dashboard({
   const [ownedItems, setOwnedItems] = useState([]);
   const [savingEquip, setSavingEquip] = useState(false);
   const [luckyPending, setLuckyPending] = useState(false);
+  const [dailyMission, setDailyMission] = useState(null);
+  const [missionToast, setMissionToast] = useState(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let alive = true;
+    fetchTodayMission(user.id).then((mission) => {
+      if (!alive) return;
+      setDailyMission(mission);
+      if (!mission) return;
+      const completeStates = [
+        (mission.new_word_ids || []).length > 0 && (mission.new_words_completed_ids || []).length >= (mission.new_word_ids || []).length,
+        mission.config_snapshot?.review_enabled === false || ((mission.review_word_ids || []).length > 0 && (mission.review_completed_ids || []).length >= (mission.review_word_ids || []).length),
+        (mission.matching_card_ids || []).length > 0 && (mission.matching_completed_ids || []).length >= (mission.matching_card_ids || []).length,
+      ];
+      const completed = completeStates.filter(Boolean).length;
+      const storageKey = `daily-mission-stars:${user.id}:${localDateKey()}`;
+      const previous = Number(sessionStorage.getItem(storageKey));
+      if (Number.isFinite(previous) && completed > previous) {
+        const gained = completed - previous;
+        setMissionToast(`ภารกิจสำเร็จ! ได้รับดาว ${gained} ดวง ⭐`);
+        setTimeout(() => setMissionToast(null), 3500);
+      }
+      sessionStorage.setItem(storageKey, String(completed));
+    }).catch((error) => console.error('dashboard daily mission:', error));
+    return () => { alive = false; };
+  }, [user?.id]);
 
   useEffect(() => {
     const fetchUsername = async () => {
@@ -168,6 +196,12 @@ export default function Dashboard({
       <div className="hub-bg" style={{ opacity: coverUrl ? 0.2 : 1 }} />
       <div className="hub-scanlines" />
 
+      {missionToast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[120] rounded-2xl border-2 border-amber-300 bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-3 text-center text-sm font-black text-white shadow-2xl animate-bounce whitespace-nowrap">
+          {missionToast}
+        </div>
+      )}
+
       {/* Top HUD */}
       <header className="relative z-20 px-3 sm:px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 shrink-0">
         <div className="flex items-center gap-2 sm:gap-3">
@@ -231,6 +265,27 @@ export default function Dashboard({
             )}
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => setPage('statistics')}
+          className="mt-2 ml-auto flex w-fit items-center gap-2 rounded-2xl border border-amber-300/25 bg-slate-950/55 px-3 py-1.5 shadow-lg backdrop-blur-sm active:scale-95 transition-transform"
+          title="ดูภารกิจประจำวัน"
+          aria-label="ภารกิจประจำวัน 3 ภารกิจ"
+        >
+          <span className="text-[10px] font-black uppercase tracking-wide text-white/60">ภารกิจ</span>
+          {[0, 1, 2].map((index) => {
+            const completed = dailyMission ? [
+              (dailyMission.new_word_ids || []).length > 0 && (dailyMission.new_words_completed_ids || []).length >= (dailyMission.new_word_ids || []).length,
+              dailyMission.config_snapshot?.review_enabled === false || ((dailyMission.review_word_ids || []).length > 0 && (dailyMission.review_completed_ids || []).length >= (dailyMission.review_word_ids || []).length),
+              (dailyMission.matching_card_ids || []).length > 0 && (dailyMission.matching_completed_ids || []).length >= (dailyMission.matching_card_ids || []).length,
+            ][index] : false;
+            return (
+              <span key={index} className={`text-xl leading-none transition-all ${completed ? 'text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.95)]' : 'text-white/20 grayscale'}`}>
+                ★
+              </span>
+            );
+          })}
+        </button>
       </header>
 
       {/* Main — เว้นพื้นที่กลางให้รูปปกตัวละคร */}

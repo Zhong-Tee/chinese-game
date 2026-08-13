@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
+import { dailyMissionErrorMessage, DEFAULT_DAILY_MISSION_CONFIG, fetchDailyMissionConfig } from '../utils/dailyMissionStorage';
 import { getWrongWords, deleteWrongWord } from '../utils/wrongWordsStorage';
 import {
   SPEECH_RATE_MIN,
@@ -20,6 +22,9 @@ export default function Settings({
   const datesOfMonth = Array.from({ length: 30 }, (_, i) => i + 1);
   const [wrongWordsList, setWrongWordsList] = useState([]);
   const [speechRate, setSpeechRateState] = useState(getSpeechRate);
+  const [missionConfig, setMissionConfig] = useState(DEFAULT_DAILY_MISSION_CONFIG);
+  const [missionSaving, setMissionSaving] = useState(false);
+  const [missionSaved, setMissionSaved] = useState(false);
 
   const applySpeechRate = (rate, playPreview = true) => {
     const saved = setSpeechRate(rate);
@@ -33,6 +38,32 @@ export default function Settings({
       getWrongWords(user.id).then(setWrongWordsList);
     }
   }, [page, user?.id]);
+
+  useEffect(() => {
+    if (page === 'settings' && isAdmin) {
+      fetchDailyMissionConfig().then(setMissionConfig).catch((error) => console.error('load daily mission config:', error));
+    }
+  }, [page, isAdmin]);
+
+  const saveMissionConfig = async () => {
+    setMissionSaving(true);
+    setMissionSaved(false);
+    const normalized = {
+      ...missionConfig,
+      new_words_target: Math.max(1, Number(missionConfig.new_words_target) || 5),
+      match_words_target: Math.max(1, Number(missionConfig.match_words_target) || 10),
+    };
+    const { error } = await supabase.from('game_settings')
+      .update({ daily_mission_config: normalized, updated_at: new Date().toISOString() }).eq('id', 1);
+    setMissionSaving(false);
+    if (error) {
+      alert(`บันทึกภารกิจไม่สำเร็จ: ${dailyMissionErrorMessage(error)}`);
+      return;
+    }
+    setMissionConfig(normalized);
+    setMissionSaved(true);
+    setTimeout(() => setMissionSaved(false), 2000);
+  };
 
   // --- 1. หน้าตั้งค่าหลัก ---
   if (page === 'settings') {
@@ -182,6 +213,45 @@ export default function Settings({
           <button onClick={() => setPage('select-words')} className="w-full bg-orange-500 text-white p-4 rounded-3xl font-black uppercase italic shadow-lg shadow-orange-100">📂 Select Study Words</button>
           {isAdmin && (
             <button onClick={() => setPage('set-schedule')} className="w-full bg-white/10 border-2 border-white/15 text-white p-4 rounded-3xl font-black uppercase italic shadow-lg">📅 Set Level Schedule</button>
+          )}
+
+          {isAdmin && (
+            <div className="pt-5 border-t border-white/10 space-y-4">
+              <div className="text-center">
+                <h3 className="text-base sm:text-lg font-black text-amber-300 uppercase italic">🎯 ภารกิจประจำวัน</h3>
+                <p className="text-[11px] text-white/45 mt-1">ตั้งค่ากลางสำหรับผู้เล่นทุกคน · มีผลกับภารกิจวันถัดไป</p>
+              </div>
+              <label className="flex items-center justify-between bg-white/5 border border-white/10 rounded-2xl p-4">
+                <span className="font-bold text-white/80">เปิดใช้งานภารกิจ</span>
+                <input type="checkbox" checked={missionConfig.enabled !== false}
+                  onChange={(e) => setMissionConfig((prev) => ({ ...prev, enabled: e.target.checked }))}
+                  className="w-5 h-5 accent-orange-500" />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="bg-white/5 border border-white/10 rounded-2xl p-3 text-center">
+                  <span className="block text-xs font-bold text-white/60 mb-2">คำใหม่ไปถึง LV.3</span>
+                  <input type="number" min="1" max="100" value={missionConfig.new_words_target}
+                    onChange={(e) => setMissionConfig((prev) => ({ ...prev, new_words_target: e.target.value }))}
+                    className="w-full rounded-xl bg-white text-slate-900 p-2 text-center font-black" />
+                </label>
+                <label className="bg-white/5 border border-white/10 rounded-2xl p-3 text-center">
+                  <span className="block text-xs font-bold text-white/60 mb-2">เกมจับคู่ต่อวัน</span>
+                  <input type="number" min="1" max="100" value={missionConfig.match_words_target}
+                    onChange={(e) => setMissionConfig((prev) => ({ ...prev, match_words_target: e.target.value }))}
+                    className="w-full rounded-xl bg-white text-slate-900 p-2 text-center font-black" />
+                </label>
+              </div>
+              <label className="flex items-center justify-between bg-white/5 border border-white/10 rounded-2xl p-4">
+                <span><span className="block font-bold text-white/80">เล่นคำใน LV.3–6 ให้ครบ</span><span className="block text-[10px] text-white/40 mt-0.5">นับ Level แรกที่เปิดเล่นในวันนั้น</span></span>
+                <input type="checkbox" checked={missionConfig.review_enabled !== false}
+                  onChange={(e) => setMissionConfig((prev) => ({ ...prev, review_enabled: e.target.checked }))}
+                  className="w-5 h-5 accent-emerald-500" />
+              </label>
+              <button type="button" onClick={saveMissionConfig} disabled={missionSaving}
+                className="w-full bg-amber-400 text-slate-900 p-3.5 rounded-2xl font-black uppercase shadow-lg disabled:opacity-50">
+                {missionSaving ? 'กำลังบันทึก...' : missionSaved ? '✓ บันทึกแล้ว' : 'บันทึกการตั้งค่าภารกิจ'}
+              </button>
+            </div>
           )}
 
           {/* รายการคำผิด (จากมินิเกม กด WRONG) */}

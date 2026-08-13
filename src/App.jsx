@@ -23,6 +23,7 @@ import {
   consumeLevelKey,
 } from './utils/levelScheduleMeta';
 import AdminPanel from './components/AdminPanel';
+import { fetchDailyMissionConfig, fetchTodayMission, initializeTodayMission, localDateKey, recordDailyWordResult, startDailyReviewMission } from './utils/dailyMissionStorage';
 import { saveWrongWord } from './utils/wrongWordsStorage';
 import { createFlashcardSessionTracker, recordFlashcardWrongAnswer } from './utils/flashcardStatsStorage';
 import { getGameState, addCurrency, getExpForLevel, getStageProgress, saveStageProgress, getSfxMap } from './utils/gameStorage';
@@ -121,6 +122,7 @@ export default function App() {
 
   // Daily new-words popup
   const [dailyNewWords, setDailyNewWords] = useState(null);
+  const [dailyMissionNotice, setDailyMissionNotice] = useState(null);
   const [levelPlayPrompt, setLevelPlayPrompt] = useState(null);
 
   // UI States
@@ -166,6 +168,34 @@ export default function App() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // กรณีเพิ่มคำของวันนี้ไปแล้วก่อนอัปเดตแอป: ยังแสดง Popup ภารกิจให้ 1 ครั้งต่อวัน
+  useEffect(() => {
+    if (!user?.id || page !== 'dashboard' || dailyNewWords || dailyMissionNotice) return undefined;
+    const noticeKey = `daily-new-words-mission-notice:${user.id}:${localDateKey()}`;
+    if (sessionStorage.getItem(noticeKey) === 'shown') return undefined;
+    let alive = true;
+    const timerId = setTimeout(async () => {
+      try {
+        const mission = await fetchTodayMission(user.id).catch(() => null);
+        let addedCount = (mission?.new_word_ids || []).length;
+        if (addedCount <= 0) {
+          const { data: settings } = await supabase.from('user_settings')
+            .select('last_daily_words_date').eq('user_id', user.id).maybeSingle();
+          if (settings?.last_daily_words_date === localDateKey()) {
+            const config = await fetchDailyMissionConfig().catch(() => ({ new_words_target: 5 }));
+            addedCount = Math.max(1, Number(config.new_words_target) || 5);
+          }
+        }
+        if (!alive || addedCount <= 0) return;
+        sessionStorage.setItem(noticeKey, 'shown');
+        setDailyMissionNotice({ addedCount });
+      } catch (error) {
+        console.error('load daily mission notice:', error);
+      }
+    }, 700);
+    return () => { alive = false; clearTimeout(timerId); };
+  }, [user?.id, page, dailyNewWords, dailyMissionNotice]);
 
   // --- 1.5 ปุ่มย้อนกลับ (มือถือ/เบราว์เซอร์) ให้ย้อนหน้าภายในแอพ ---
   // ฟัง popstate: เมื่อกด back ให้เปลี่ยน page กลับไปหน้าที่บันทึกไว้ใน history
@@ -343,7 +373,10 @@ export default function App() {
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (settings?.last_daily_words_date === today) return null;
+      if (settings?.last_daily_words_date === today) {
+        initializeTodayMission(userId).catch(console.error);
+        return null;
+      }
 
       const { data: allCards } = await supabase
         .from('flashcards')
@@ -362,7 +395,10 @@ export default function App() {
 
       if (unselected.length === 0) return null;
 
-      const toAdd = unselected.slice(0, Math.min(5, unselected.length));
+      const missionConfig = await fetchDailyMissionConfig().catch(() => ({ enabled: true, new_words_target: 5 }));
+      if (missionConfig.enabled === false) return null;
+      const dailyTarget = Math.max(1, Number(missionConfig.new_words_target) || 5);
+      const toAdd = unselected.slice(0, Math.min(dailyTarget, unselected.length));
 
       const { error: insertError } = await supabase.from('user_progress').insert(
         toAdd.map(card => ({ user_id: userId, flashcard_id: card.id1, level: 1, wrong_count: 0 }))
@@ -376,6 +412,8 @@ export default function App() {
       await supabase
         .from('user_settings')
         .upsert({ user_id: userId, last_daily_words_date: today }, { onConflict: 'user_id' });
+
+      initializeTodayMission(userId, toAdd.map((card) => Number(card.id1))).catch(console.error);
 
       return toAdd;
     } catch (err) {
@@ -539,6 +577,9 @@ export default function App() {
         alert("ไม่มีคำศัพท์"); 
         return; 
       }
+      if ([3, 4, 5, 6].includes(Number(level))) {
+        await startDailyReviewMission(user.id, Number(level), progress.map((row) => Number(row.flashcard_id)));
+      }
       // แปลง flashcard_id เป็น number ก่อน query
       const flashcardIds = progress.map(p => Number(p.flashcard_id)).filter(id => !isNaN(id));
       console.log('Flashcard IDs for game:', flashcardIds);
@@ -663,6 +704,7 @@ export default function App() {
       setTimeout(() => setWrongWordToast?.(null), 4000);
     } else {
       console.log('[moveToNextCard] UPDATE ok:', updatedRows);
+      recordDailyWordResult(user.id, cardId, nextLevel, isCardPassed).catch(console.error);
     }
 
     // ตอบถูกครบ → ได้รับ Coin ตาม LV ของคำนั้น (ค่ามาจากตาราง exp_rewards)
@@ -981,8 +1023,16 @@ export default function App() {
   };
 
   const handleDailyWordsConfirm = useCallback(() => {
+    const addedCount = dailyNewWords?.length || 0;
     setDailyNewWords(null);
     if (user?.id) fetchInitialData(user.id);
+    if (user?.id) sessionStorage.setItem(`daily-new-words-mission-notice:${user.id}:${localDateKey()}`, 'shown');
+    setDailyMissionNotice({ addedCount });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, dailyNewWords]);
+
+  const handleDailyMissionNoticeConfirm = useCallback(() => {
+    setDailyMissionNotice(null);
     const playable = SCHEDULED_LEVEL_KEYS
       .map((key) => Number(key))
       .filter((lv) => checkLevelAvailable(lv));
@@ -1114,6 +1164,41 @@ export default function App() {
         </div>
       )}
 
+      {/* แจ้งภารกิจต่อจากการรับคำศัพท์ประจำวัน */}
+      {dailyMissionNotice && (
+        <div className="fixed inset-0 z-[109] flex items-center justify-center bg-slate-950/85 p-4">
+          <div className="w-full max-w-sm overflow-hidden rounded-3xl border-2 border-amber-300 bg-slate-900 text-white shadow-2xl">
+            <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-6 text-center">
+              <div className="mb-2 text-6xl drop-shadow-lg">⭐</div>
+              <h2 className="text-2xl font-black uppercase italic">ภารกิจประจำวัน</h2>
+            </div>
+            <div className="space-y-4 px-6 py-5 text-center">
+              <p className="text-base font-black text-amber-300">
+                เล่นคำศัพท์ใหม่ {dailyMissionNotice.addedCount} คำให้ไปถึง Level 3
+              </p>
+              <p className="text-sm leading-relaxed text-white/70">
+                เล่นคำใหม่ที่เพิ่งได้รับให้สำเร็จครบทุกคำ เมื่อคำทั้งหมดขึ้นถึง Level 3 จะได้รับดาวภารกิจดวงแรก
+              </p>
+              <div className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 py-3">
+                <span className="text-2xl text-white/20">★</span>
+                <span className="text-2xl text-white/20">★</span>
+                <span className="text-2xl text-white/20">★</span>
+                <span className="ml-2 text-xs font-black text-white/50">0 / 3 ดาว</span>
+              </div>
+            </div>
+            <div className="px-5 pb-5">
+              <button
+                type="button"
+                onClick={handleDailyMissionNoticeConfirm}
+                className="w-full rounded-2xl bg-amber-400 py-4 text-lg font-black uppercase italic text-slate-900 shadow-lg active:scale-95 transition-all"
+              >
+                รับภารกิจ!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {levelPlayPrompt && (
         <LevelPlayPrompt
           levels={levelPlayPrompt}
@@ -1191,7 +1276,7 @@ export default function App() {
           />
         )}
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}
-        {page === 'word-match' && <WordMatchGame setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} />}
+        {page === 'word-match' && <WordMatchGame user={user} setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} />}
         {page === 'score' && <Score user={user} selectedIds={selectedIds} levelCounts={levelCounts} setPage={setPage} />}
         {page === 'statistics' && <Statistics user={user} setPage={setPage} />}
         

@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
+import { dailyMissionErrorMessage, initializeTodayMission, recordDailyMatchComplete } from '../utils/dailyMissionStorage';
 
 // สีบ่งบอกคู่ที่จับ (6 สีต่างกันชัดเจน)
 const PALETTE = ['#f97316', '#2563eb', '#16a34a', '#db2777', '#7c3aed', '#0891b2'];
@@ -27,11 +28,14 @@ function highlightTarget(text, target, color) {
   ));
 }
 
-export default function WordMatchGame({ setPage, allMasterCards, selectedIds }) {
+export default function WordMatchGame({ user, setPage, allMasterCards, selectedIds }) {
   const [readyIds, setReadyIds] = useState(null);   // Set ของ flashcard_id ที่มีชุดคำ (>=2 คำ)
   const [picker, setPicker] = useState(true);        // true = หน้าเลือกตัวอักษร
   const [activeCard, setActiveCard] = useState(null); // { id1, cn, pinyin }
   const [loadingWords, setLoadingWords] = useState(false);
+  const [dailyMission, setDailyMission] = useState(null);
+  const [missionLoading, setMissionLoading] = useState(true);
+  const [missionError, setMissionError] = useState('');
 
   const [leftItems, setLeftItems] = useState([]);    // [{ rowId, vocabulary, pinyin_vocab }]
   const [rightItems, setRightItems] = useState([]);  // [{ rowId, th }]
@@ -75,14 +79,48 @@ export default function WordMatchGame({ setPage, allMasterCards, selectedIds }) 
     return () => { alive = false; };
   }, []);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    setMissionLoading(true);
+    setMissionError('');
+    initializeTodayMission(user.id)
+      .then((mission) => {
+        setDailyMission(mission);
+        if (!(mission?.matching_card_ids || []).length) setMissionError('ไม่พบคำศัพท์ที่พร้อมสำหรับสร้างภารกิจจับคู่');
+      })
+      .catch((error) => {
+        console.error('daily match mission:', error);
+        setMissionError(`สร้างชุดสุ่มไม่สำเร็จ: ${dailyMissionErrorMessage(error)}`);
+      })
+      .finally(() => setMissionLoading(false));
+  }, [user?.id]);
+
   // รายชื่อตัวอักษรที่พร้อมเล่น เรียงตาม id (ใช้ทั้งหน้าเลือก + ปุ่มคำถัดไป)
   const readyCards = useMemo(() => {
     if (!readyIds) return [];
-    return (allMasterCards || [])
+    const dailyIds = (dailyMission?.matching_card_ids || []).map(Number);
+    if (!dailyIds.length) return [];
+    const cardMap = new Map((allMasterCards || []).map((card) => [Number(card.id1 ?? card.id), card]));
+    const source = dailyIds.map((id) => cardMap.get(id)).filter(Boolean);
+    return source
       .filter(c => readyIds.has(Number(c.id1 ?? c.id)))
-      .sort((a, b) => Number(a.id1 ?? a.id) - Number(b.id1 ?? b.id))
       .map(c => ({ id1: Number(c.id1 ?? c.id), cn: c.cn, pinyin: c.pinyin }));
-  }, [allMasterCards, readyIds]);
+  }, [allMasterCards, readyIds, dailyMission?.matching_card_ids]);
+
+  const completedMatchIds = useMemo(
+    () => new Set((dailyMission?.matching_completed_ids || []).map(Number)),
+    [dailyMission?.matching_completed_ids],
+  );
+
+  const checkAnswers = async () => {
+    setChecked(true);
+    if (score !== leftItems.length || !activeCard?.id1 || !user?.id) return;
+    await recordDailyMatchComplete(user.id, activeCard.id1);
+    setDailyMission((prev) => prev ? ({
+      ...prev,
+      matching_completed_ids: [...new Set([...(prev.matching_completed_ids || []).map(Number), Number(activeCard.id1)])],
+    }) : prev);
+  };
 
   const colorOf = useCallback((leftRowId) => {
     const idx = leftItems.findIndex(i => i.rowId === leftRowId);
@@ -201,8 +239,10 @@ export default function WordMatchGame({ setPage, allMasterCards, selectedIds }) 
         </h2>
         <p className="text-center text-slate-500 text-sm mb-6">เลือกตัวอักษร แล้วจับคู่คำศัพท์กับคำแปล</p>
 
-        {readyIds == null ? (
-          <div className="text-center text-slate-400 py-10">กำลังโหลด...</div>
+        {readyIds == null || missionLoading ? (
+          <div className="text-center text-slate-400 py-10">กำลังสุ่มคำศัพท์ประจำวัน...</div>
+        ) : missionError ? (
+          <div className="text-center text-red-500 py-10 px-6 font-bold">{missionError}</div>
         ) : cards.length === 0 ? (
           <div className="text-center text-slate-500 py-10 px-6">
             ยังไม่มีชุดคำสำหรับเล่น<br />
@@ -216,7 +256,7 @@ export default function WordMatchGame({ setPage, allMasterCards, selectedIds }) 
                 <button
                   key={id1}
                   onClick={() => openCard({ id1, cn: card.cn, pinyin: card.pinyin })}
-                  className="relative aspect-square rounded-xl shadow-md border-2 border-white bg-white active:scale-95 transition flex flex-col items-center justify-center"
+                  className={`relative aspect-square rounded-xl shadow-md border-2 active:scale-95 transition flex flex-col items-center justify-center ${completedMatchIds.has(id1) ? 'border-emerald-500 bg-emerald-100' : 'border-white bg-white'}`}
                 >
                   <span
                     className="absolute right-3 top-3 text-slate-600 text-[11px] font-bold leading-none"
@@ -377,7 +417,7 @@ export default function WordMatchGame({ setPage, allMasterCards, selectedIds }) 
                 className="px-5 py-3 rounded-full font-black uppercase text-xs shadow bg-slate-200 text-slate-700 disabled:opacity-40">ย้อนกลับ</button>
               <button onClick={reset} disabled={connections.length === 0}
                 className="px-5 py-3 rounded-full font-black uppercase text-xs shadow bg-slate-200 text-slate-700 disabled:opacity-40">เริ่มใหม่</button>
-              <button onClick={() => setChecked(true)} disabled={!allMatched}
+              <button onClick={checkAnswers} disabled={!allMatched}
                 className="px-8 py-3 rounded-full font-black uppercase text-xs shadow-lg bg-orange-500 text-white disabled:opacity-40">ตรวจคำตอบ</button>
             </div>
           ) : (
