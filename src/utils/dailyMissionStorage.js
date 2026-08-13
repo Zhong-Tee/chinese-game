@@ -50,6 +50,22 @@ export async function fetchTodayMission(userId) {
   return data;
 }
 
+export const getDailyMissionCompletion = (mission) => {
+  if (!mission) return [false, false, false];
+  return [
+    (mission.new_word_ids || []).length > 0
+      && (mission.new_words_completed_ids || []).length >= (mission.new_word_ids || []).length,
+    (mission.review_word_ids || []).length > 0
+      && (mission.review_completed_ids || []).length >= (mission.review_word_ids || []).length,
+    (mission.matching_card_ids || []).length > 0
+      && (mission.matching_completed_ids || []).length >= (mission.matching_card_ids || []).length,
+  ];
+};
+
+const announceMissionUpdate = (mission) => {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('daily-mission-updated', { detail: mission }));
+};
+
 export async function initializeTodayMission(userId, newWordIds = []) {
   if (!userId) return null;
   const config = await fetchDailyMissionConfig();
@@ -108,14 +124,23 @@ export async function recordDailyWordResult(userId, cardId, nextLevel, passed) {
   if ((mission.review_word_ids || []).map(Number).includes(id)) {
     patch.review_completed_ids = [...new Set([...(mission.review_completed_ids || []).map(Number), id])];
   }
-  if (Object.keys(patch).length) await supabase.from('daily_mission_progress').update(patch)
-    .eq('user_id', userId).eq('mission_date', localDateKey());
+  if (Object.keys(patch).length) {
+    const { data, error } = await supabase.from('daily_mission_progress').update(patch)
+      .eq('user_id', userId).eq('mission_date', localDateKey()).select().single();
+    if (error) throw error;
+    announceMissionUpdate(data);
+    return data;
+  }
+  return mission;
 }
 
 export async function recordDailyMatchComplete(userId, cardId) {
   const mission = await fetchTodayMission(userId);
   if (!mission || !(mission.matching_card_ids || []).map(Number).includes(Number(cardId))) return;
   const ids = [...new Set([...(mission.matching_completed_ids || []).map(Number), Number(cardId)])];
-  await supabase.from('daily_mission_progress').update({ matching_completed_ids: ids })
-    .eq('user_id', userId).eq('mission_date', localDateKey());
+  const { data, error } = await supabase.from('daily_mission_progress').update({ matching_completed_ids: ids })
+    .eq('user_id', userId).eq('mission_date', localDateKey()).select().single();
+  if (error) throw error;
+  announceMissionUpdate(data);
+  return data;
 }

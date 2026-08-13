@@ -115,11 +115,12 @@ export default function WordMatchGame({ user, setPage, allMasterCards, selectedI
   const checkAnswers = async () => {
     setChecked(true);
     if (score !== leftItems.length || !activeCard?.id1 || !user?.id) return;
-    await recordDailyMatchComplete(user.id, activeCard.id1);
-    setDailyMission((prev) => prev ? ({
-      ...prev,
-      matching_completed_ids: [...new Set([...(prev.matching_completed_ids || []).map(Number), Number(activeCard.id1)])],
-    }) : prev);
+    try {
+      const updated = await recordDailyMatchComplete(user.id, activeCard.id1);
+      if (updated) setDailyMission(updated);
+    } catch (error) {
+      setMissionError(`บันทึกดาวไม่สำเร็จ: ${dailyMissionErrorMessage(error)}`);
+    }
   };
 
   const colorOf = useCallback((leftRowId) => {

@@ -10,7 +10,7 @@ import HubLevelScheduleBar from './HubLevelScheduleBar';
 import { HubNavIcon } from './HubNavIcons';
 import fightBtnImg from '../../game/icon/fight-btn.png';
 import gameLogoImg from '../../game/word fighter.png?v=3';
-import { fetchTodayMission, localDateKey } from '../utils/dailyMissionStorage';
+import { fetchTodayMission, getDailyMissionCompletion, localDateKey } from '../utils/dailyMissionStorage';
 
 const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️', add_time: '⏳', bomb: '💣' };
 
@@ -58,15 +58,11 @@ export default function Dashboard({
   useEffect(() => {
     if (!user?.id) return;
     let alive = true;
-    fetchTodayMission(user.id).then((mission) => {
+    const applyMission = (mission) => {
       if (!alive) return;
       setDailyMission(mission);
       if (!mission) return;
-      const completeStates = [
-        (mission.new_word_ids || []).length > 0 && (mission.new_words_completed_ids || []).length >= (mission.new_word_ids || []).length,
-        mission.config_snapshot?.review_enabled === false || ((mission.review_word_ids || []).length > 0 && (mission.review_completed_ids || []).length >= (mission.review_word_ids || []).length),
-        (mission.matching_card_ids || []).length > 0 && (mission.matching_completed_ids || []).length >= (mission.matching_card_ids || []).length,
-      ];
+      const completeStates = getDailyMissionCompletion(mission);
       const completed = completeStates.filter(Boolean).length;
       const storageKey = `daily-mission-stars:${user.id}:${localDateKey()}`;
       const previous = Number(sessionStorage.getItem(storageKey));
@@ -76,8 +72,19 @@ export default function Dashboard({
         setTimeout(() => setMissionToast(null), 3500);
       }
       sessionStorage.setItem(storageKey, String(completed));
-    }).catch((error) => console.error('dashboard daily mission:', error));
-    return () => { alive = false; };
+    };
+    const refresh = () => fetchTodayMission(user.id).then(applyMission).catch((error) => console.error('dashboard daily mission:', error));
+    const onMissionUpdated = (event) => applyMission(event.detail);
+    refresh();
+    window.addEventListener('daily-mission-updated', onMissionUpdated);
+    window.addEventListener('focus', refresh);
+    const intervalId = setInterval(refresh, 5000);
+    return () => {
+      alive = false;
+      clearInterval(intervalId);
+      window.removeEventListener('daily-mission-updated', onMissionUpdated);
+      window.removeEventListener('focus', refresh);
+    };
   }, [user?.id]);
 
   useEffect(() => {
@@ -274,11 +281,7 @@ export default function Dashboard({
         >
           <span className="text-[10px] font-black uppercase tracking-wide text-white/60">ภารกิจ</span>
           {[0, 1, 2].map((index) => {
-            const completed = dailyMission ? [
-              (dailyMission.new_word_ids || []).length > 0 && (dailyMission.new_words_completed_ids || []).length >= (dailyMission.new_word_ids || []).length,
-              dailyMission.config_snapshot?.review_enabled === false || ((dailyMission.review_word_ids || []).length > 0 && (dailyMission.review_completed_ids || []).length >= (dailyMission.review_word_ids || []).length),
-              (dailyMission.matching_card_ids || []).length > 0 && (dailyMission.matching_completed_ids || []).length >= (dailyMission.matching_card_ids || []).length,
-            ][index] : false;
+            const completed = getDailyMissionCompletion(dailyMission)[index];
             return (
               <span key={index} className={`text-xl leading-none transition-all ${completed ? 'text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.95)]' : 'text-white/20 grayscale'}`}>
                 ★
