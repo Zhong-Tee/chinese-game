@@ -10,7 +10,7 @@ import HubLevelScheduleBar from './HubLevelScheduleBar';
 import { HubNavIcon } from './HubNavIcons';
 import fightBtnImg from '../../game/icon/fight-btn.png';
 import gameLogoImg from '../../game/word fighter.png?v=3';
-import { fetchTodayMission, getDailyMissionCompletion, localDateKey } from '../utils/dailyMissionStorage';
+import { getDailyMissionCompletion, localDateKey, syncTodayMissionProgress } from '../utils/dailyMissionStorage';
 
 const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️', add_time: '⏳', bomb: '💣' };
 
@@ -73,7 +73,7 @@ export default function Dashboard({
       }
       sessionStorage.setItem(storageKey, String(completed));
     };
-    const refresh = () => fetchTodayMission(user.id).then(applyMission).catch((error) => console.error('dashboard daily mission:', error));
+    const refresh = () => syncTodayMissionProgress(user.id).then(applyMission).catch((error) => console.error('dashboard daily mission:', error));
     const onMissionUpdated = (event) => applyMission(event.detail);
     refresh();
     window.addEventListener('daily-mission-updated', onMissionUpdated);

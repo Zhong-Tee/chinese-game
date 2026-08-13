@@ -50,6 +50,60 @@ export async function fetchTodayMission(userId) {
   return data;
 }
 
+// ซ่อมความคืบหน้าจากสถานะจริง กรณี event ตอนเลื่อน Level บันทึกไม่ทัน/เครือข่ายหลุด
+export async function syncTodayMissionProgress(userId) {
+  let mission = await fetchTodayMission(userId);
+  if (!mission) return null;
+  let newWordIds = (mission.new_word_ids || []).map(Number);
+
+  // รองรับบัญชีที่เพิ่มคำประจำวันไปก่อนติดตั้ง migration ภารกิจ:
+  // ตอนนั้น last_daily_words_date ถูกบันทึกแล้ว แต่ ID คำใหม่ยังไม่ได้เก็บใน mission
+  if (!newWordIds.length) {
+    const { data: settings, error: settingsError } = await supabase.from('user_settings')
+      .select('last_daily_words_date').eq('user_id', userId).maybeSingle();
+    if (settingsError) throw settingsError;
+    if (settings?.last_daily_words_date !== localDateKey()) return mission;
+
+    const target = Math.max(1, Number(mission.config_snapshot?.new_words_target) || 5);
+    const { data: recovered, error: recoveredError } = await supabase.from('user_progress')
+      .select('flashcard_id, level').eq('user_id', userId)
+      .gte('level', 3).order('flashcard_id', { ascending: false }).limit(target);
+    if (recoveredError) throw recoveredError;
+    newWordIds = (recovered || []).map((row) => Number(row.flashcard_id));
+    if (!newWordIds.length) return mission;
+
+    const { data: repaired, error: repairError } = await supabase.from('daily_mission_progress')
+      .update({ new_word_ids: newWordIds, new_words_completed_ids: newWordIds })
+      .eq('user_id', userId).eq('mission_date', localDateKey()).select().single();
+    if (repairError) throw repairError;
+    mission = repaired;
+    announceMissionUpdate(mission);
+  }
+
+  const { data: progress, error: progressError } = await supabase
+    .from('user_progress')
+    .select('flashcard_id, level')
+    .eq('user_id', userId)
+    .in('flashcard_id', newWordIds);
+  if (progressError) throw progressError;
+
+  const reachedLevel3 = (progress || [])
+    .filter((row) => Number(row.level) >= 3)
+    .map((row) => Number(row.flashcard_id));
+  const completedIds = [...new Set([
+    ...(mission.new_words_completed_ids || []).map(Number),
+    ...reachedLevel3,
+  ])].filter((id) => newWordIds.includes(id));
+
+  if (completedIds.length === (mission.new_words_completed_ids || []).length) return mission;
+  const { data, error } = await supabase.from('daily_mission_progress')
+    .update({ new_words_completed_ids: completedIds })
+    .eq('user_id', userId).eq('mission_date', localDateKey()).select().single();
+  if (error) throw error;
+  announceMissionUpdate(data);
+  return data;
+}
+
 export const getDailyMissionCompletion = (mission) => {
   if (!mission) return [false, false, false];
   return [

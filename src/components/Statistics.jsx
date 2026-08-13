@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { fetchFlashcardStatistics } from '../utils/flashcardStatsStorage';
-import { fetchTodayMission } from '../utils/dailyMissionStorage';
+import { syncTodayMissionProgress } from '../utils/dailyMissionStorage';
 import {
   LEVEL_KEYS,
   LEVEL_SCHEDULE_META,
@@ -211,7 +211,7 @@ export default function Statistics({ user, setPage }) {
   useEffect(() => {
     const targetId = selectedUserId || (activeTab === 'personal' ? user?.id : null);
     if (!targetId) { setDailyMission(null); return; }
-    fetchTodayMission(targetId).then(setDailyMission).catch((err) => {
+    syncTodayMissionProgress(targetId).then(setDailyMission).catch((err) => {
       console.error('fetch daily mission:', err);
       setDailyMission(null);
     });
