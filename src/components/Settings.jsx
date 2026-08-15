@@ -25,6 +25,11 @@ export default function Settings({
   const [missionConfig, setMissionConfig] = useState(DEFAULT_DAILY_MISSION_CONFIG);
   const [missionSaving, setMissionSaving] = useState(false);
   const [missionSaved, setMissionSaved] = useState(false);
+  const [keyUsers, setKeyUsers] = useState([]);
+  const [keyUserId, setKeyUserId] = useState('');
+  const [keyLevel, setKeyLevel] = useState('3');
+  const [keyGrantLoading, setKeyGrantLoading] = useState(false);
+  const [keyGrantMessage, setKeyGrantMessage] = useState('');
 
   const applySpeechRate = (rate, playPreview = true) => {
     const saved = setSpeechRate(rate);
@@ -42,8 +47,34 @@ export default function Settings({
   useEffect(() => {
     if (page === 'settings' && isAdmin) {
       fetchDailyMissionConfig().then(setMissionConfig).catch((error) => console.error('load daily mission config:', error));
+      supabase.rpc('list_key_grant_users').then(({ data, error }) => {
+        if (error) {
+          console.error('load key grant users:', error);
+          return;
+        }
+        const users = data || [];
+        setKeyUsers(users);
+        setKeyUserId((current) => current || users[0]?.user_id || '');
+      });
     }
   }, [page, isAdmin]);
+
+  const grantLevelKey = async () => {
+    if (!keyUserId) return;
+    setKeyGrantLoading(true);
+    setKeyGrantMessage('');
+    const { error } = await supabase.rpc('admin_grant_level_key', {
+      target_user_id: keyUserId,
+      target_level: Number(keyLevel),
+    });
+    setKeyGrantLoading(false);
+    if (error) {
+      setKeyGrantMessage(`ให้กุญแจไม่สำเร็จ: ${error.message}`);
+      return;
+    }
+    const selectedUser = keyUsers.find((item) => item.user_id === keyUserId);
+    setKeyGrantMessage(`✓ ให้กุญแจ LV.${keyLevel} แก่ ${selectedUser?.display_name || 'ผู้ใช้'} แล้ว`);
+  };
 
   const saveMissionConfig = async () => {
     setMissionSaving(true);
@@ -213,6 +244,29 @@ export default function Settings({
           <button onClick={() => setPage('select-words')} className="w-full bg-orange-500 text-white p-4 rounded-3xl font-black uppercase italic shadow-lg shadow-orange-100">📂 Select Study Words</button>
           {isAdmin && (
             <button onClick={() => setPage('set-schedule')} className="w-full bg-white/10 border-2 border-white/15 text-white p-4 rounded-3xl font-black uppercase italic shadow-lg">📅 Set Level Schedule</button>
+          )}
+
+          {isAdmin && (
+            <div className="pt-5 border-t border-white/10 space-y-3">
+              <div className="text-center">
+                <h3 className="text-base sm:text-lg font-black text-amber-300 uppercase italic">🔑 ให้กุญแจปลดล็อก LV</h3>
+                <p className="mt-1 text-[11px] text-white/45">เลือกผู้ใช้และด่านที่ต้องการให้กุญแจ 1 ดอก</p>
+              </div>
+              <select value={keyUserId} onChange={(e) => { setKeyUserId(e.target.value); setKeyGrantMessage(''); }}
+                className="w-full rounded-2xl bg-white p-3 text-slate-900 font-bold">
+                {keyUsers.length === 0 && <option value="">ไม่พบผู้ใช้</option>}
+                {keyUsers.map((item) => <option key={item.user_id} value={item.user_id}>{item.display_name}</option>)}
+              </select>
+              <select value={keyLevel} onChange={(e) => { setKeyLevel(e.target.value); setKeyGrantMessage(''); }}
+                className="w-full rounded-2xl bg-white p-3 text-slate-900 font-bold">
+                {[3, 4, 5, 6].map((level) => <option key={level} value={level}>LV.{level}</option>)}
+              </select>
+              <button type="button" onClick={grantLevelKey} disabled={!keyUserId || keyGrantLoading}
+                className="w-full rounded-2xl bg-amber-400 p-3.5 font-black text-slate-900 shadow-lg disabled:opacity-50">
+                {keyGrantLoading ? 'กำลังให้กุญแจ...' : '🔑 ให้กุญแจ 1 ดอก'}
+              </button>
+              {keyGrantMessage && <p className={`text-center text-xs font-bold ${keyGrantMessage.startsWith('✓') ? 'text-emerald-300' : 'text-red-300'}`}>{keyGrantMessage}</p>}
+            </div>
           )}
 
           {isAdmin && (

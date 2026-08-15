@@ -133,6 +133,9 @@ export default function Login({ setPage, setUser, fetchInitialData, fetchUserSet
         >
           {loading ? 'กำลังสมัคร...' : 'สมัคร'}
         </button>
+        <p className="px-3 text-xs font-bold leading-relaxed text-slate-500">
+          ต้องกรอกชื่อและรหัสผ่าน แล้วกดปุ่ม สมัคร
+        </p>
       </form>
     </div>
   );
