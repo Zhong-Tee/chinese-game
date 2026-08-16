@@ -465,9 +465,14 @@ export default function Statistics({ user, setPage }) {
                   total: (dailyMission.new_word_ids || []).length || Number(dailyMission.config_snapshot?.new_words_target) || 5,
                 },
                 {
-                  icon: '🔁', title: dailyMission.review_level ? `เล่นคำ LV.${dailyMission.review_level} ให้ครบ` : 'เล่นคำ LV.3–6 ให้ครบ',
+                  icon: '🔁', title: dailyMission.review_level ? `ผ่านคำ LV.${dailyMission.review_level} ไป Level ถัดไป` : 'ผ่านคำใน LV.3–6 ไป Level ถัดไป',
                   done: (dailyMission.review_completed_ids || []).length,
-                  total: (dailyMission.review_word_ids || []).length,
+                  total: dailyMission.config_snapshot?.review_mode === 'count'
+                    ? Math.min(
+                      (dailyMission.review_word_ids || []).length,
+                      Math.max(1, Number(dailyMission.config_snapshot?.review_words_target) || 20),
+                    )
+                    : (dailyMission.review_word_ids || []).length,
                   waiting: !(dailyMission.review_word_ids || []).length,
                 },
                 {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { dailyMissionErrorMessage, DEFAULT_DAILY_MISSION_CONFIG, fetchDailyMissionConfig } from '../utils/dailyMissionStorage';
+import { dailyMissionErrorMessage, DEFAULT_DAILY_MISSION_CONFIG, fetchDailyMissionConfig, localDateKey } from '../utils/dailyMissionStorage';
 import { getWrongWords, deleteWrongWord } from '../utils/wrongWordsStorage';
 import {
   SPEECH_RATE_MIN,
@@ -10,6 +10,50 @@ import {
   setSpeechRate,
   speakChinese,
 } from '../utils/chineseSpeech';
+
+function NumericSettingInput({ value, onCommit, min, max, step = 1, suffix, className, decimals }) {
+  const displayValue = (nextValue) => (
+    decimals === undefined ? String(nextValue) : Number(nextValue).toFixed(decimals)
+  );
+  const [draft, setDraft] = useState(() => displayValue(value));
+
+  const commit = () => {
+    const parsed = Number(draft);
+    if (!Number.isFinite(parsed)) {
+      setDraft(displayValue(value));
+      return;
+    }
+    const bounded = Math.min(max ?? Infinity, Math.max(min ?? -Infinity, parsed));
+    setDraft(displayValue(bounded));
+    onCommit(bounded);
+  };
+
+  return (
+    <div className={`relative w-20 ${className || ''}`}>
+      <input
+        type="number"
+        inputMode="decimal"
+        min={min}
+        max={max}
+        step={step}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur();
+          if (event.key === 'Escape') {
+            setDraft(displayValue(value));
+            event.currentTarget.blur();
+          }
+        }}
+        onFocus={(event) => event.currentTarget.select()}
+        aria-label={`กรอกค่า ${suffix}`}
+        className="w-full appearance-none rounded-xl border border-white/15 bg-white/10 py-1.5 pl-2 pr-6 text-center text-xl font-black italic outline-none transition focus:border-current focus:bg-white/15 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      />
+      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sm font-black">{suffix}</span>
+    </div>
+  );
+}
 
 export default function Settings({
   page, setPage, user, isAdmin = false, allMasterCards,
@@ -25,6 +69,9 @@ export default function Settings({
   const [missionConfig, setMissionConfig] = useState(DEFAULT_DAILY_MISSION_CONFIG);
   const [missionSaving, setMissionSaving] = useState(false);
   const [missionSaved, setMissionSaved] = useState(false);
+  const [missionApplyUserId, setMissionApplyUserId] = useState('');
+  const [missionApplying, setMissionApplying] = useState(false);
+  const [missionApplyMessage, setMissionApplyMessage] = useState('');
   const [keyUsers, setKeyUsers] = useState([]);
   const [keyUserId, setKeyUserId] = useState('');
   const [keyLevel, setKeyLevel] = useState('3');
@@ -82,6 +129,8 @@ export default function Settings({
     const normalized = {
       ...missionConfig,
       new_words_target: Math.max(1, Number(missionConfig.new_words_target) || 5),
+      review_mode: missionConfig.review_mode === 'count' ? 'count' : 'all',
+      review_words_target: Math.max(1, Number(missionConfig.review_words_target) || 20),
       match_words_target: Math.max(1, Number(missionConfig.match_words_target) || 10),
     };
     const { error } = await supabase.from('game_settings')
@@ -94,6 +143,69 @@ export default function Settings({
     setMissionConfig(normalized);
     setMissionSaved(true);
     setTimeout(() => setMissionSaved(false), 2000);
+  };
+
+  const applyMissionConfigToday = async () => {
+    if (!missionApplyUserId) return;
+    setMissionApplying(true);
+    setMissionApplyMessage('');
+    const normalized = {
+      ...missionConfig,
+      new_words_target: Math.max(1, Number(missionConfig.new_words_target) || 5),
+      review_mode: missionConfig.review_mode === 'count' ? 'count' : 'all',
+      review_words_target: Math.max(1, Number(missionConfig.review_words_target) || 20),
+      match_words_target: Math.max(1, Number(missionConfig.match_words_target) || 10),
+    };
+
+    try {
+      const { error: configError } = await supabase.from('game_settings')
+        .update({ daily_mission_config: normalized, updated_at: new Date().toISOString() }).eq('id', 1);
+      if (configError) throw configError;
+
+      const { data: mission, error: missionError } = await supabase.from('daily_mission_progress')
+        .select('*')
+        .eq('user_id', missionApplyUserId)
+        .eq('mission_date', localDateKey())
+        .maybeSingle();
+      if (missionError) throw missionError;
+      if (!mission) throw new Error('ผู้ใช้นี้ยังไม่มีภารกิจของวันนี้');
+
+      const patch = {
+        config_snapshot: { ...(mission.config_snapshot || {}), ...normalized },
+      };
+
+      if (mission.review_level && normalized.review_enabled !== false) {
+        const completedIds = [...new Set((mission.review_completed_ids || []).map(Number))];
+        const { data: currentLevelRows, error: progressError } = await supabase.from('user_progress')
+          .select('flashcard_id')
+          .eq('user_id', missionApplyUserId)
+          .eq('level', Number(mission.review_level))
+          .lt('wrong_count', 3);
+        if (progressError) throw progressError;
+
+        const availableIds = [...new Set([
+          ...(mission.review_word_ids || []).map(Number),
+          ...(currentLevelRows || []).map((row) => Number(row.flashcard_id)),
+        ])].filter(Number.isFinite);
+
+        patch.review_word_ids = [...new Set([...completedIds, ...availableIds])];
+        patch.review_completed_ids = completedIds.filter((id) => patch.review_word_ids.includes(id));
+      }
+
+      const { error: updateError } = await supabase.from('daily_mission_progress')
+        .update(patch)
+        .eq('user_id', missionApplyUserId)
+        .eq('mission_date', localDateKey());
+      if (updateError) throw updateError;
+
+      setMissionConfig(normalized);
+      const selectedUser = keyUsers.find((item) => item.user_id === missionApplyUserId);
+      setMissionApplyMessage(`✓ อัปเดตภารกิจวันนี้ของ ${selectedUser?.display_name || 'ผู้ใช้'} แล้ว`);
+    } catch (error) {
+      setMissionApplyMessage(`อัปเดตไม่สำเร็จ: ${dailyMissionErrorMessage(error)}`);
+    } finally {
+      setMissionApplying(false);
+    }
   };
 
   // --- 1. หน้าตั้งค่าหลัก ---
@@ -121,7 +233,17 @@ export default function Settings({
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >-</button>
 
-              <div className="text-2xl font-black text-sky-300 italic w-16">{speechRate.toFixed(2)}x</div>
+              <NumericSettingInput
+                key={speechRate}
+                value={speechRate}
+                min={SPEECH_RATE_MIN}
+                max={SPEECH_RATE_MAX}
+                step={SPEECH_RATE_STEP}
+                decimals={2}
+                suffix="x"
+                onCommit={(value) => applySpeechRate(value)}
+                className="text-sky-300"
+              />
 
               <button
                 type="button"
@@ -171,7 +293,18 @@ export default function Settings({
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >-</button>
               
-              <div className="text-2xl font-black text-orange-400 italic w-12">{timerSetting}s</div>
+              <NumericSettingInput
+                key={timerSetting}
+                value={timerSetting}
+                min={1}
+                suffix="s"
+                onCommit={(value) => {
+                  const val = Math.round(value);
+                  setTimerSetting(val);
+                  saveSettings(val, gameTimerSetting, typeTimerSetting, schedules);
+                }}
+                className="text-orange-400"
+              />
               
               <button 
                 onClick={() => {
@@ -199,7 +332,18 @@ export default function Settings({
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >-</button>
               
-              <div className="text-2xl font-black text-emerald-400 italic w-12">{gameTimerSetting}s</div>
+              <NumericSettingInput
+                key={gameTimerSetting}
+                value={gameTimerSetting}
+                min={1}
+                suffix="s"
+                onCommit={(value) => {
+                  const val = Math.round(value);
+                  setGameTimerSetting(val);
+                  saveSettings(timerSetting, val, typeTimerSetting, schedules);
+                }}
+                className="text-emerald-400"
+              />
               
               <button 
                 onClick={() => {
@@ -227,7 +371,18 @@ export default function Settings({
                 style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
               >-</button>
               
-              <div className="text-2xl font-black text-indigo-300 italic w-12">{typeTimerSetting}s</div>
+              <NumericSettingInput
+                key={typeTimerSetting}
+                value={typeTimerSetting}
+                min={1}
+                suffix="s"
+                onCommit={(value) => {
+                  const val = Math.round(value);
+                  setTypeTimerSetting(val);
+                  saveSettings(timerSetting, gameTimerSetting, val, schedules);
+                }}
+                className="text-indigo-300"
+              />
               
               <button 
                 onClick={() => {
@@ -301,10 +456,84 @@ export default function Settings({
                   onChange={(e) => setMissionConfig((prev) => ({ ...prev, review_enabled: e.target.checked }))}
                   className="w-5 h-5 accent-emerald-500" />
               </label>
+              {missionConfig.review_enabled !== false && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
+                  <span className="block text-xs font-bold text-white/60">รูปแบบภารกิจทบทวน LV.3–6</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setMissionConfig((prev) => ({ ...prev, review_mode: 'count' }))}
+                      className={`rounded-xl border-2 px-3 py-2.5 text-sm font-black transition ${missionConfig.review_mode === 'count' ? 'border-emerald-400 bg-emerald-400 text-slate-900' : 'border-white/10 bg-white/5 text-white/60'}`}
+                    >
+                      กำหนดจำนวนคำ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMissionConfig((prev) => ({ ...prev, review_mode: 'all' }))}
+                      className={`rounded-xl border-2 px-3 py-2.5 text-sm font-black transition ${missionConfig.review_mode !== 'count' ? 'border-emerald-400 bg-emerald-400 text-slate-900' : 'border-white/10 bg-white/5 text-white/60'}`}
+                    >
+                      ทั้งหมดใน Level
+                    </button>
+                  </div>
+                  {missionConfig.review_mode === 'count' && (
+                    <label className="block">
+                      <span className="mb-2 block text-center text-xs font-bold text-white/60">จำนวนคำที่ต้องผ่านไป Level ถัดไป</span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min="1"
+                        max="1000"
+                        value={missionConfig.review_words_target}
+                        onChange={(e) => setMissionConfig((prev) => ({ ...prev, review_words_target: e.target.value }))}
+                        className="w-full appearance-none rounded-xl bg-white p-2 text-center font-black text-slate-900 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      />
+                    </label>
+                  )}
+                  <p className="text-center text-[10px] text-white/40">
+                    {missionConfig.review_mode === 'count'
+                      ? 'เล่นคำใดก็ได้ใน Level แรกที่เปิด และนับเฉพาะคำที่ผ่านไป Level ถัดไป'
+                      : 'ต้องตอบผ่านทุกคำที่อยู่ใน Level ตอนเริ่มภารกิจ'}
+                  </p>
+                </div>
+              )}
               <button type="button" onClick={saveMissionConfig} disabled={missionSaving}
                 className="w-full bg-amber-400 text-slate-900 p-3.5 rounded-2xl font-black uppercase shadow-lg disabled:opacity-50">
                 {missionSaving ? 'กำลังบันทึก...' : missionSaved ? '✓ บันทึกแล้ว' : 'บันทึกการตั้งค่าภารกิจ'}
               </button>
+              <div className="rounded-2xl border border-cyan-400/25 bg-cyan-400/5 p-4 space-y-3">
+                <div>
+                  <div className="text-sm font-black text-cyan-300">อัปเดตภารกิจของวันนี้</div>
+                  <p className="mt-1 text-[10px] leading-relaxed text-white/45">
+                    ใช้การตั้งค่าด้านบนกับผู้ใช้ที่เลือก โดยรักษาคำที่ทำสำเร็จแล้วไว้
+                  </p>
+                </div>
+                <select
+                  value={missionApplyUserId}
+                  onChange={(event) => {
+                    setMissionApplyUserId(event.target.value);
+                    setMissionApplyMessage('');
+                  }}
+                  className="w-full rounded-xl bg-white p-2.5 text-sm font-bold text-slate-900"
+                >
+                  <option value="">เลือกผู้ใช้</option>
+                  {keyUsers.map((item) => (
+                    <option key={item.user_id} value={item.user_id}>{item.display_name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={applyMissionConfigToday}
+                  disabled={!missionApplyUserId || missionApplying}
+                  className="w-full rounded-xl bg-cyan-400 p-3 text-sm font-black text-slate-950 shadow-lg disabled:opacity-40"
+                >
+                  {missionApplying ? 'กำลังอัปเดต...' : 'ใช้การตั้งค่ากับภารกิจวันนี้'}
+                </button>
+                {missionApplyMessage && (
+                  <p className={`text-center text-xs font-bold ${missionApplyMessage.startsWith('✓') ? 'text-emerald-300' : 'text-red-300'}`}>
+                    {missionApplyMessage}
+                  </p>
+                )}
+              </div>
             </div>
           )}
 

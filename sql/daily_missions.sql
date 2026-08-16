@@ -1,6 +1,6 @@
 -- Daily missions (run once in Supabase SQL Editor)
 alter table public.game_settings add column if not exists daily_mission_config jsonb not null default
-  '{"enabled":true,"new_words_target":5,"review_enabled":true,"match_words_target":10}'::jsonb;
+  '{"enabled":true,"new_words_target":5,"review_enabled":true,"review_mode":"all","review_words_target":20,"match_words_target":10}'::jsonb;
 
 create table if not exists public.daily_mission_progress (
   user_id uuid not null references auth.users(id) on delete cascade,

@@ -54,6 +54,7 @@ export default function Dashboard({
   const [luckyPending, setLuckyPending] = useState(false);
   const [dailyMission, setDailyMission] = useState(null);
   const [missionToast, setMissionToast] = useState(null);
+  const [missionCollapsed, setMissionCollapsed] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -189,6 +190,61 @@ export default function Dashboard({
   const xpInLevel = exp % 100;
   const xpPct = Math.min(100, xpInLevel || (exp > 0 ? 100 : 8));
 
+  const missionConfig = dailyMission?.config_snapshot || {};
+  const reviewWordsAvailable = [3, 4, 5, 6]
+    .reduce((total, level) => total + Number(levelCounts?.[level] || 0), 0);
+  const missionRows = [];
+  const addMissionRow = ({ star, label, done, total, waiting = false }) => {
+    const safeDone = Math.max(0, Number(done) || 0);
+    const safeTotal = Math.max(0, Number(total) || 0);
+    const completed = safeTotal > 0 && safeDone >= safeTotal;
+    missionRows.push({
+      star,
+      label,
+      done: safeDone,
+      total: safeTotal,
+      waiting,
+      completed,
+      percent: safeTotal > 0 ? Math.min(100, Math.round((safeDone / safeTotal) * 100)) : 0,
+    });
+  };
+
+  if ((dailyMission?.new_word_ids || []).length > 0) {
+    addMissionRow({
+      star: 1,
+      label: 'คำใหม่ถึง LV3',
+      done: (dailyMission.new_words_completed_ids || []).length,
+      total: dailyMission.new_word_ids.length,
+    });
+  }
+
+  const reviewIds = dailyMission?.review_word_ids || [];
+  if (missionConfig.review_enabled !== false && (reviewIds.length > 0 || reviewWordsAvailable > 0)) {
+    const waitingForLevel = reviewIds.length === 0;
+    const estimatedTotal = missionConfig.review_mode === 'count'
+      ? Math.min(reviewWordsAvailable, Math.max(1, Number(missionConfig.review_words_target) || 20))
+      : 0;
+    const activeTotal = missionConfig.review_mode === 'count'
+      ? Math.min(reviewIds.length, Math.max(1, Number(missionConfig.review_words_target) || 20))
+      : reviewIds.length;
+    addMissionRow({
+      star: 2,
+      label: dailyMission?.review_level ? `ทบทวน LV${dailyMission.review_level}` : 'ทบทวน LV3–6',
+      done: (dailyMission?.review_completed_ids || []).length,
+      total: waitingForLevel ? estimatedTotal : activeTotal,
+      waiting: waitingForLevel && estimatedTotal === 0,
+    });
+  }
+
+  if ((dailyMission?.matching_card_ids || []).length > 0) {
+    addMissionRow({
+      star: 3,
+      label: 'เกมจับคู่ประจำวัน',
+      done: (dailyMission.matching_completed_ids || []).length,
+      total: dailyMission.matching_card_ids.length,
+    });
+  }
+
   const handleBottomNav = (action) => {
     if (action === 'home') return;
     if (action === 'hero') { openCharModal(); return; }
@@ -272,23 +328,73 @@ export default function Dashboard({
             )}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setPage('statistics')}
-          className="mt-2 ml-auto flex w-fit items-center gap-2 rounded-2xl border border-amber-300/25 bg-slate-950/55 px-3 py-1.5 shadow-lg backdrop-blur-sm active:scale-95 transition-transform"
-          title="ดูภารกิจประจำวัน"
-          aria-label="ภารกิจประจำวัน 3 ภารกิจ"
-        >
-          <span className="text-[10px] font-black uppercase tracking-wide text-white/60">ภารกิจ</span>
-          {[0, 1, 2].map((index) => {
-            const completed = getDailyMissionCompletion(dailyMission)[index];
-            return (
-              <span key={index} className={`text-xl leading-none transition-all ${completed ? 'text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.95)]' : 'text-white/20 grayscale'}`}>
-                ★
+        {missionRows.length > 0 && (
+          <div
+            className="mt-2 ml-auto block w-full max-w-[170px] rounded-2xl border border-amber-300/25 bg-slate-950/65 p-1.5 shadow-lg backdrop-blur-sm active:scale-[0.98] transition-transform"
+          >
+            <button
+              type="button"
+              onClick={() => setMissionCollapsed((current) => !current)}
+              className={`flex w-full items-center justify-between gap-2 px-1 py-0.5 text-left ${missionCollapsed ? '' : 'mb-1'}`}
+              aria-expanded={!missionCollapsed}
+              aria-controls="daily-mission-progress"
+            >
+              <span className="text-[9px] font-black uppercase tracking-wider text-white/45">ภารกิจวันนี้</span>
+              <span className="flex items-center gap-1.5">
+                {missionCollapsed && (
+                  <span className="flex items-center gap-0.5" aria-label="สถานะดาวภารกิจ 3 ดวง">
+                    {getDailyMissionCompletion(dailyMission).map((completed, index) => (
+                      <span
+                        key={index}
+                        className={`text-base leading-none ${completed ? 'text-amber-300 drop-shadow-[0_0_5px_rgba(251,191,36,0.9)]' : 'text-white/20 grayscale'}`}
+                      >
+                        ★
+                      </span>
+                    ))}
+                  </span>
+                )}
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-xs font-black text-white/60">
+                  {missionCollapsed ? '⌄' : '⌃'}
+                </span>
               </span>
-            );
-          })}
-        </button>
+            </button>
+            {!missionCollapsed && (
+              <button
+                id="daily-mission-progress"
+                type="button"
+                onClick={() => setPage('statistics')}
+                className="block w-full space-y-1.5 text-left"
+                title="ดูภารกิจประจำวัน"
+                aria-label="ดูความคืบหน้าภารกิจประจำวัน"
+              >
+                {missionRows.map((mission) => (
+                  <span key={mission.star} className="flex items-center gap-1 rounded-xl bg-white/[0.06] px-1 py-1.5">
+                    <span
+                      className={`w-5 shrink-0 text-lg leading-none ${mission.completed ? 'text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.95)]' : 'text-white/20 grayscale'}`}
+                      aria-label={`ดาวดวงที่ ${mission.star}${mission.completed ? ' สำเร็จแล้ว' : ''}`}
+                    >
+                      ★
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2 text-[10px] font-black leading-none">
+                        <span className="truncate text-white/75">{mission.label}</span>
+                        <span className={mission.completed ? 'text-amber-300' : 'text-white/50'}>
+                          {mission.waiting ? 'รอเปิด Level' : `${mission.done}/${mission.total}`}
+                        </span>
+                      </span>
+                      <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-white/10">
+                        <span
+                          className={`block h-full rounded-full transition-all duration-500 ${mission.completed ? 'bg-amber-300' : 'bg-cyan-400'}`}
+                          style={{ width: `${mission.percent}%` }}
+                        />
+                      </span>
+                    </span>
+                  </span>
+                ))}
+              </button>
+            )}
+          </div>
+        )}
       </header>
 
       {/* Main — เว้นพื้นที่กลางให้รูปปกตัวละคร */}

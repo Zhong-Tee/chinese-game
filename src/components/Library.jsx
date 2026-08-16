@@ -11,6 +11,25 @@ export default function Library({
   setLibFlipped 
 }) {
   const [libView, setLibView] = useState('front'); // 'front' | 'sentence'
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const libraryCards = (allMasterCards || [])
+    .filter((card) => {
+      const cardId = Number(card?.id1 || card?.id);
+      return selectedIds.includes(cardId);
+    })
+    .filter((card) => {
+      const query = searchQuery.trim().toLocaleLowerCase();
+      if (!query) return true;
+
+      return [card?.cn, card?.vocabulary]
+        .some((value) => String(value ?? '').toLocaleLowerCase().includes(query));
+    })
+    .sort((a, b) => {
+      const idA = Number(a?.id1 || a?.id || 0);
+      const idB = Number(b?.id1 || b?.id || 0);
+      return idA - idB;
+    });
 
   useEffect(() => {
     if (libraryDetail) setLibView('front');
@@ -30,19 +49,37 @@ export default function Library({
         <button onClick={() => setPage('dashboard')} className="text-orange-600 font-black italic underline uppercase text-xs">← Back to Menu</button>
       </div>
       <h2 className="text-2xl font-black italic uppercase text-center mb-6 text-slate-800">Your Library ({selectedIds.length})</h2>
+      <div className="relative mb-5">
+        <span
+          aria-hidden="true"
+          className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+        >
+          &#128269;
+        </span>
+        <input
+          type="text"
+          inputMode="search"
+          enterKeyHint="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="ค้นหาคำศัพท์..."
+          aria-label="ค้นหาใน Library"
+          className="w-full rounded-2xl border-2 border-white bg-white py-3 pl-11 pr-11 text-base font-bold text-slate-800 shadow-md outline-none transition placeholder:font-medium placeholder:text-slate-400 focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            aria-label="ล้างคำค้นหา"
+            className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-xl font-bold text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          >
+            &times;
+          </button>
+        )}
+      </div>
       <div className="grid grid-cols-3 gap-2">
         {allMasterCards && allMasterCards.length > 0 ? (
-          allMasterCards
-            .filter(c => {
-              const cardId = Number(c?.id1 || c?.id);
-              return selectedIds.includes(cardId);
-            })
-            .sort((a, b) => {
-              const idA = Number(a?.id1 || a?.id || 0);
-              const idB = Number(b?.id1 || b?.id || 0);
-              return idA - idB;
-            })
-            .map(card => (
+          libraryCards.length > 0 ? libraryCards.map(card => (
           <div
             key={card?.id1 || card?.id}
             onClick={() => { setLibraryDetail(card); setLibFlipped(false); }}
@@ -58,7 +95,19 @@ export default function Library({
               <div className="text-xs font-bold text-slate-700 mt-0.5 break-words">{card?.pinyin_vocab || '—'}</div>
             </div>
           </div>
-            ))
+            )) : (
+              <div className="col-span-3 py-12 text-center">
+                <div className="mb-2 text-3xl" aria-hidden="true">&#128269;</div>
+                <p className="font-bold text-slate-500">ไม่พบคำศัพท์ที่ค้นหา</p>
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="mt-3 text-sm font-black text-orange-600 underline"
+                >
+                  ล้างคำค้นหา
+                </button>
+              </div>
+            )
         ) : (
           <div className="col-span-3 text-center text-slate-400 py-8">กำลังโหลดข้อมูล...</div>
         )}

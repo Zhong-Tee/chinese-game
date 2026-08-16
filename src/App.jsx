@@ -23,7 +23,7 @@ import {
   consumeLevelKey,
 } from './utils/levelScheduleMeta';
 import AdminPanel from './components/AdminPanel';
-import { fetchDailyMissionConfig, fetchTodayMission, initializeTodayMission, localDateKey, recordDailyWordResult, startDailyReviewMission } from './utils/dailyMissionStorage';
+import { fetchDailyMissionConfig, fetchTodayMission, initializeTodayMission, localDateKey, recordDailyWordResult, startDailyReviewMission, syncTodayMissionProgress } from './utils/dailyMissionStorage';
 import { saveWrongWord } from './utils/wrongWordsStorage';
 import { createFlashcardSessionTracker, recordFlashcardWrongAnswer } from './utils/flashcardStatsStorage';
 import { getGameState, addCurrency, getExpForLevel, getStageProgress, saveStageProgress, getSfxMap } from './utils/gameStorage';
@@ -127,6 +127,8 @@ export default function App() {
 
   // UI States
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showTrainingCompleteModal, setShowTrainingCompleteModal] = useState(false);
+  const [appNoticeModal, setAppNoticeModal] = useState(null);
 
   const [libraryDetail, setLibraryDetail] = useState(null);
   const [libFlipped, setLibFlipped] = useState(false);
@@ -365,7 +367,9 @@ export default function App() {
 
   const checkAndAddDailyWords = async (userId) => {
     try {
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      // ใช้วันตามเวลาท้องถิ่นให้ตรงกับ daily_mission_progress
+      // (toISOString เป็น UTC และจะเป็นคนละวันกับไทยในช่วงก่อน 07:00 น.)
+      const today = localDateKey();
 
       const { data: settings } = await supabase
         .from('user_settings')
@@ -374,7 +378,9 @@ export default function App() {
         .maybeSingle();
 
       if (settings?.last_daily_words_date === today) {
-        initializeTodayMission(userId).catch(console.error);
+        // รอให้แถวภารกิจพร้อมก่อนโหลดข้อมูลหน้าเกม ป้องกัน Dashboard
+        // อ่านเร็วกว่าการสร้างภารกิจแล้วแสดงดาวเป็นศูนย์ตลอดทั้งวัน
+        await initializeTodayMission(userId).catch(console.error);
         return null;
       }
 
@@ -413,7 +419,8 @@ export default function App() {
         .from('user_settings')
         .upsert({ user_id: userId, last_daily_words_date: today }, { onConflict: 'user_id' });
 
-      initializeTodayMission(userId, toAdd.map((card) => Number(card.id1))).catch(console.error);
+      // ต้องบันทึก ID ของคำใหม่ให้เสร็จก่อน ผู้เล่นจึงเริ่มเล่นและสะสมดาวได้
+      await initializeTodayMission(userId, toAdd.map((card) => Number(card.id1))).catch(console.error);
 
       return toAdd;
     } catch (err) {
@@ -574,7 +581,11 @@ export default function App() {
         return;
       }
       if (!progress || progress.length === 0) { 
-        alert("ไม่มีคำศัพท์"); 
+        setAppNoticeModal({
+          title: 'ไม่พบคำศัพท์',
+          message: 'ยังไม่มีคำศัพท์ใน Level นี้สำหรับเล่น',
+          icon: '📭',
+        });
         return; 
       }
       if ([3, 4, 5, 6].includes(Number(level))) {
@@ -590,7 +601,11 @@ export default function App() {
         return;
       }
       if (!cards || cards.length === 0) {
-        alert("ไม่พบคำศัพท์");
+        setAppNoticeModal({
+          title: 'ไม่พบคำศัพท์',
+          message: 'ไม่พบข้อมูลคำศัพท์สำหรับ Level นี้ กรุณาลองใหม่อีกครั้ง',
+          icon: '📭',
+        });
         return;
       }
       // ใช้ลูกกุญแจของด่านนี้ครั้งแรกของวัน — การเข้าเล่นด่านเดิมซ้ำจะไม่หักเพิ่ม
@@ -704,7 +719,13 @@ export default function App() {
       setTimeout(() => setWrongWordToast?.(null), 4000);
     } else {
       console.log('[moveToNextCard] UPDATE ok:', updatedRows);
-      recordDailyWordResult(user.id, cardId, nextLevel, isCardPassed).catch(console.error);
+      // รอให้ภารกิจบันทึกสำเร็จก่อนนำคำถัดไปขึ้น ป้องกันคำสุดท้าย
+      // เลื่อน Level แล้วแต่ความคืบหน้าดาวยังค้างจากคำสั่งที่ทำงานเบื้องหลัง
+      try {
+        await recordDailyWordResult(user.id, cardId, nextLevel, isCardPassed);
+      } catch (error) {
+        console.error('record daily word result:', error);
+      }
     }
 
     // ตอบถูกครบ → ได้รับ Coin ตาม LV ของคำนั้น (ค่ามาจากตาราง exp_rewards)
@@ -950,13 +971,21 @@ export default function App() {
       setFlashcardTimedOut(false);
       resetStageState();
     } else if (gameActive && gameQueue.length === 0 && !currentCard) {
-      endFlashcardSession().then(() => {
-        alert("🎉 จบช่วงการฝึกแล้ว!");
-        setPage('fc-chars');
+      endFlashcardSession().then(async () => {
+        // ตรวจซ้ำจาก Level จริงก่อนแจ้งว่าจบรอบ เพื่อซ่อมข้อมูลภารกิจ
+        // กรณีเครือข่ายช้าหรือ event ของคำสุดท้ายบันทึกไม่ทัน
+        if (user?.id) {
+          try {
+            await syncTodayMissionProgress(user.id);
+          } catch (error) {
+            console.error('sync mission after training:', error);
+          }
+        }
         setGameActive(false);
+        setShowTrainingCompleteModal(true);
       });
     }
-  }, [buildChoices, currentCard, endFlashcardSession, gameActive, gameQueue, resetStageState, timerSetting]);
+  }, [buildChoices, currentCard, endFlashcardSession, gameActive, gameQueue, resetStageState, timerSetting, user?.id]);
 
   // ออกจากหน้าเกมกลางคันโดยไม่ผ่านปุ่ม Cancel (เช่น ปุ่ม back ของมือถือ/เบราว์เซอร์) → ปิดเกมให้เรียบร้อย
   // ถ้าตอบช่วงแรกไปแล้ว คำถูกหักลง LV1 ไว้ก่อนแล้ว จึงหนีโทษไม่ได้เช่นกัน
@@ -1129,6 +1158,68 @@ export default function App() {
           </header>
           {isMenuOpen && <MenuOverlay />}
         </>
+      )}
+
+      {showTrainingCompleteModal && (
+        <div
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/80 p-5 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="training-complete-title"
+        >
+          <div className="w-full max-w-sm overflow-hidden rounded-[2rem] border-2 border-orange-300 bg-white text-center shadow-2xl">
+            <div className="bg-gradient-to-br from-orange-400 to-orange-600 px-6 py-7 text-white">
+              <div className="mb-2 text-6xl drop-shadow-lg" aria-hidden="true">🎉</div>
+              <h2 id="training-complete-title" className="text-2xl font-black uppercase italic tracking-tight">
+                ฝึกครบแล้ว!
+              </h2>
+            </div>
+            <div className="px-6 py-6">
+              <p className="text-base font-bold text-slate-700">จบช่วงการฝึกเรียบร้อยแล้ว</p>
+              <p className="mt-1 text-sm text-slate-400">ความคืบหน้าของคำศัพท์ถูกบันทึกแล้ว</p>
+              <button
+                type="button"
+                autoFocus
+                onClick={() => {
+                  setShowTrainingCompleteModal(false);
+                  setPage('fc-chars');
+                }}
+                className="mt-6 w-full rounded-2xl bg-orange-500 py-3.5 text-lg font-black uppercase italic text-white shadow-lg shadow-orange-200 active:scale-95 transition-transform"
+              >
+                ตกลง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {appNoticeModal && (
+        <div
+          className="fixed inset-0 z-[135] flex items-center justify-center bg-slate-950/80 p-5 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="app-notice-title"
+        >
+          <div className="w-full max-w-sm overflow-hidden rounded-[2rem] border-2 border-orange-300 bg-white text-center shadow-2xl">
+            <div className="bg-gradient-to-br from-slate-800 to-slate-950 px-6 py-7 text-white">
+              <div className="mb-2 text-6xl drop-shadow-lg" aria-hidden="true">{appNoticeModal.icon}</div>
+              <h2 id="app-notice-title" className="text-2xl font-black uppercase italic tracking-tight">
+                {appNoticeModal.title}
+              </h2>
+            </div>
+            <div className="px-6 py-6">
+              <p className="text-base font-bold text-slate-700">{appNoticeModal.message}</p>
+              <button
+                type="button"
+                autoFocus
+                onClick={() => setAppNoticeModal(null)}
+                className="mt-6 w-full rounded-2xl bg-orange-500 py-3.5 text-lg font-black uppercase italic text-white shadow-lg shadow-orange-200 active:scale-95 transition-transform"
+              >
+                ตกลง
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Daily new-words popup — mandatory, cannot be dismissed without confirming */}
