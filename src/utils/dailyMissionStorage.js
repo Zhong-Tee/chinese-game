@@ -195,22 +195,20 @@ export async function initializeTodayMission(userId, newWordIds = []) {
   const readyIds = [...new Set((readyRows || [])
     .map((row) => Number(row.flashcard_id))
     .filter((id) => learnedIds.has(id)))];
-  for (let i = readyIds.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [readyIds[i], readyIds[j]] = [readyIds[j], readyIds[i]];
-  }
+  const readySet = new Set(readyIds);
+  const missionNewWordIds = [...new Set([
+    ...(existing?.new_word_ids || []).map(Number),
+    ...newWordIds.map(Number),
+  ])].filter(Number.isFinite);
+  // เกมจับคู่ใช้คำใหม่ชุดเดียวกับภารกิจดาวดวงแรก เพื่อให้ผู้เรียน
+  // ทบทวนคำที่เพิ่งได้รับในวันนั้น ไม่ดึงคำที่ยังไม่เคยเรียนจากคลังทั้งหมด
+  const matchingCandidates = missionNewWordIds
+    .filter((id) => learnedIds.has(id) && readySet.has(id));
   if (existing) {
     const patch = {};
     if (newWordIds.length && !(existing.new_word_ids || []).length) patch.new_word_ids = newWordIds;
     const matchTarget = Math.max(0, Number(existing.config_snapshot?.match_words_target) || 10);
-    const readySet = new Set(readyIds);
-    const currentEligibleIds = [...new Set((existing.matching_card_ids || []).map(Number))]
-      .filter((id) => readySet.has(id));
-    const currentSet = new Set(currentEligibleIds);
-    const repairedMatchIds = [
-      ...currentEligibleIds,
-      ...readyIds.filter((id) => !currentSet.has(id)),
-    ].slice(0, matchTarget);
+    const repairedMatchIds = matchingCandidates.slice(0, matchTarget);
     const existingMatchIds = (existing.matching_card_ids || []).map(Number);
     const matchingSetChanged = repairedMatchIds.length !== existingMatchIds.length
       || repairedMatchIds.some((id) => !existingMatchIds.includes(id));
@@ -228,7 +226,7 @@ export async function initializeTodayMission(userId, newWordIds = []) {
     return data;
   }
 
-  const matchIds = readyIds.slice(0, Math.max(0, Number(config.match_words_target) || 10));
+  const matchIds = matchingCandidates.slice(0, Math.max(0, Number(config.match_words_target) || 10));
   const { data, error } = await supabase.from('daily_mission_progress').insert({
     user_id: userId,
     mission_date: today,
@@ -298,9 +296,15 @@ export async function recordDailyWordResult(userId, cardId, nextLevel, passed) {
 
 export async function recordDailyMatchComplete(userId, cardId) {
   const mission = await fetchTodayMission(userId);
-  if (!mission || !(mission.matching_card_ids || []).map(Number).includes(Number(cardId))) return;
-  const ids = [...new Set([...(mission.matching_completed_ids || []).map(Number), Number(cardId)])];
-  const { data, error } = await supabase.from('daily_mission_progress').update({ matching_completed_ids: ids })
+  if (!mission) return;
+  const id = Number(cardId);
+  const patch = {
+    matching_passed_ids: [...new Set([...(mission.matching_passed_ids || []).map(Number), id])],
+  };
+  if ((mission.matching_card_ids || []).map(Number).includes(id)) {
+    patch.matching_completed_ids = [...new Set([...(mission.matching_completed_ids || []).map(Number), id])];
+  }
+  const { data, error } = await supabase.from('daily_mission_progress').update(patch)
     .eq('user_id', userId).eq('mission_date', localDateKey()).select().single();
   if (error) throw error;
   announceMissionUpdate(data);

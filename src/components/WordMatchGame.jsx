@@ -14,6 +14,21 @@ function shuffle(arr) {
   return a;
 }
 
+function uniqueMatchRows(rows) {
+  const seenVocabulary = new Set();
+  const seenThai = new Set();
+  return [...rows]
+    .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
+    .filter((row) => {
+      const vocabularyKey = String(row.vocabulary || '').normalize('NFKC').trim().toLocaleLowerCase();
+      const thaiKey = String(row.th || '').normalize('NFKC').trim().toLocaleLowerCase();
+      if (!vocabularyKey || !thaiKey || seenVocabulary.has(vocabularyKey) || seenThai.has(thaiKey)) return false;
+      seenVocabulary.add(vocabularyKey);
+      seenThai.add(thaiKey);
+      return true;
+    });
+}
+
 // ไฮไลต์ตัวอักษรเป้าหมายในคำศัพท์ เช่น target=火 -> 火|车
 function highlightTarget(text, target, color) {
   if (!target || !text) return text;
@@ -36,6 +51,9 @@ export default function WordMatchGame({ user, setPage, allMasterCards, selectedI
   const [dailyMission, setDailyMission] = useState(null);
   const [missionLoading, setMissionLoading] = useState(true);
   const [missionError, setMissionError] = useState('');
+  const [viewMode, setViewMode] = useState('mission'); // mission | passed | all
+  const [passedMatchIds, setPassedMatchIds] = useState(new Set());
+  const [passedLoading, setPassedLoading] = useState(true);
 
   const [leftItems, setLeftItems] = useState([]);    // [{ rowId, vocabulary, pinyin_vocab }]
   const [rightItems, setRightItems] = useState([]);  // [{ rowId, th }]
@@ -95,21 +113,60 @@ export default function WordMatchGame({ user, setPage, allMasterCards, selectedI
       .finally(() => setMissionLoading(false));
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    let alive = true;
+    setPassedLoading(true);
+    supabase.from('daily_mission_progress')
+      .select('matching_completed_ids, matching_passed_ids')
+      .eq('user_id', user.id)
+      .then(({ data, error }) => {
+        if (!alive) return;
+        if (error) {
+          console.error('load passed matching words:', error);
+          setPassedMatchIds(new Set());
+          return;
+        }
+        setPassedMatchIds(new Set(
+          (data || []).flatMap((row) => [
+            ...(row.matching_completed_ids || []),
+            ...(row.matching_passed_ids || []),
+          ]).map(Number),
+        ));
+      })
+      .finally(() => {
+        if (alive) setPassedLoading(false);
+      });
+    return () => { alive = false; };
+  }, [user?.id, dailyMission?.matching_completed_ids]);
+
   // รายชื่อตัวอักษรที่พร้อมเล่น เรียงตาม id (ใช้ทั้งหน้าเลือก + ปุ่มคำถัดไป)
   const readyCards = useMemo(() => {
     if (!readyIds) return [];
-    const dailyIds = (dailyMission?.matching_card_ids || []).map(Number);
-    if (!dailyIds.length) return [];
     const learnedIds = new Set((selectedIds || []).map(Number));
     const cardMap = new Map((allMasterCards || []).map((card) => [Number(card.id1 ?? card.id), card]));
-    const source = dailyIds.map((id) => cardMap.get(id)).filter(Boolean);
+    const learnedReadyCards = (allMasterCards || []).filter((card) => {
+      const id = Number(card.id1 ?? card.id);
+      return readyIds.has(id) && learnedIds.has(id);
+    });
+    let source;
+    if (viewMode === 'mission') {
+      source = (dailyMission?.matching_card_ids || [])
+        .map(Number)
+        .map((id) => cardMap.get(id))
+        .filter(Boolean);
+    } else if (viewMode === 'passed') {
+      source = learnedReadyCards.filter((card) => passedMatchIds.has(Number(card.id1 ?? card.id)));
+    } else {
+      source = learnedReadyCards;
+    }
     return source
       .filter((card) => {
         const id = Number(card.id1 ?? card.id);
         return readyIds.has(id) && learnedIds.has(id);
       })
       .map(c => ({ id1: Number(c.id1 ?? c.id), cn: c.cn, pinyin: c.pinyin }));
-  }, [allMasterCards, readyIds, selectedIds, dailyMission?.matching_card_ids]);
+  }, [allMasterCards, readyIds, selectedIds, dailyMission?.matching_card_ids, passedMatchIds, viewMode]);
 
   const completedMatchIds = useMemo(
     () => new Set((dailyMission?.matching_completed_ids || []).map(Number)),
@@ -121,7 +178,10 @@ export default function WordMatchGame({ user, setPage, allMasterCards, selectedI
     if (score !== leftItems.length || !activeCard?.id1 || !user?.id) return;
     try {
       const updated = await recordDailyMatchComplete(user.id, activeCard.id1);
-      if (updated) setDailyMission(updated);
+      if (updated) {
+        setDailyMission(updated);
+        setPassedMatchIds((current) => new Set([...current, Number(activeCard.id1)]));
+      }
     } catch (error) {
       setMissionError(`บันทึกดาวไม่สำเร็จ: ${dailyMissionErrorMessage(error)}`);
     }
@@ -147,7 +207,9 @@ export default function WordMatchGame({ user, setPage, allMasterCards, selectedI
       .order('sort_order', { ascending: true });
     setLoadingWords(false);
     if (error) { console.error('load words error:', error); setLeftItems([]); setRightItems([]); return; }
-    const rows = data || [];
+    // ตัดคำจีนหรือคำแปลไทยที่ซ้ำภายในชุดเดียวกัน เพื่อไม่ให้มีตัวเลือก
+    // หน้าตาเหมือนกันแต่ผูกกับ rowId คนละค่า ซึ่งผู้เล่นไม่สามารถแยกได้
+    const rows = uniqueMatchRows(data || []);
     setLeftItems(shuffle(rows.map(r => ({ rowId: r.id, vocabulary: r.vocabulary, pinyin_vocab: r.pinyin_vocab }))));
     setRightItems(shuffle(rows.map(r => ({ rowId: r.id, th: r.th }))));
   }, []);
@@ -234,6 +296,12 @@ export default function WordMatchGame({ user, setPage, allMasterCards, selectedI
   // ================= หน้าเลือกตัวอักษร =================
   if (picker) {
     const cards = readyCards;
+    const modeLabels = {
+      mission: 'ภารกิจ',
+      passed: 'คำที่ผ่าน',
+      all: 'คำทั้งหมด',
+    };
+    const isModeLoading = readyIds == null || missionLoading || (viewMode === 'passed' && passedLoading);
     return (
       <div className="pb-10 select-none" style={{ userSelect: 'none' }}>
         <div className="flex items-center mb-4">
@@ -244,24 +312,41 @@ export default function WordMatchGame({ user, setPage, allMasterCards, selectedI
         </h2>
         <p className="text-center text-slate-500 text-sm mb-6">เลือกตัวอักษร แล้วจับคู่คำศัพท์กับคำแปล</p>
 
-        {readyIds == null || missionLoading ? (
-          <div className="text-center text-slate-400 py-10">กำลังสุ่มคำศัพท์ประจำวัน...</div>
-        ) : missionError ? (
+        <div className="mb-5 grid grid-cols-3 gap-2 rounded-2xl bg-white/70 p-1.5 shadow-sm border border-orange-100">
+          {Object.entries(modeLabels).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setViewMode(mode)}
+              className={`rounded-xl px-2 py-2.5 text-xs font-black transition ${viewMode === mode ? 'bg-orange-500 text-white shadow-md' : 'text-slate-500 hover:bg-orange-50'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {isModeLoading ? (
+          <div className="text-center text-slate-400 py-10">กำลังโหลดคำศัพท์...</div>
+        ) : viewMode === 'mission' && missionError ? (
           <div className="text-center text-red-500 py-10 px-6 font-bold">{missionError}</div>
         ) : cards.length === 0 ? (
           <div className="text-center text-slate-500 py-10 px-6">
-            ยังไม่มีชุดคำสำหรับเล่น<br />
-            <span className="text-xs text-slate-400">(รันไฟล์ SQL character_words ก่อน)</span>
+            {viewMode === 'mission' && 'วันนี้ยังไม่มีคำใหม่ที่พร้อมสำหรับภารกิจจับคู่'}
+            {viewMode === 'passed' && 'ยังไม่มีคำที่เคยจับคู่ผ่าน'}
+            {viewMode === 'all' && 'ยังไม่มีคำที่ได้รับและพร้อมสำหรับเกมจับคู่'}
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-2">
             {cards.map((card, index) => {
               const id1 = Number(card.id1 ?? card.id);
+              const isCompleted = viewMode === 'mission'
+                ? completedMatchIds.has(id1)
+                : passedMatchIds.has(id1);
               return (
                 <button
                   key={id1}
                   onClick={() => openCard({ id1, cn: card.cn, pinyin: card.pinyin })}
-                  className={`relative aspect-square rounded-xl shadow-md border-2 active:scale-95 transition flex flex-col items-center justify-center ${completedMatchIds.has(id1) ? 'border-emerald-500 bg-emerald-100' : 'border-white bg-white'}`}
+                  className={`relative aspect-square rounded-xl shadow-md border-2 active:scale-95 transition flex flex-col items-center justify-center ${isCompleted ? 'border-emerald-500 bg-emerald-100' : 'border-white bg-white'}`}
                 >
                   <span
                     className="absolute right-3 top-3 text-slate-600 text-[11px] font-bold leading-none"
