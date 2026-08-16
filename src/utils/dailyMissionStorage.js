@@ -187,16 +187,40 @@ export async function initializeTodayMission(userId, newWordIds = []) {
   const { data: readyRows, error: readyError } = await supabase
     .from('character_words').select('flashcard_id').eq('sort_order', 2);
   if (readyError) throw readyError;
-  const readyIds = [...new Set((readyRows || []).map((r) => Number(r.flashcard_id)))];
+  const { data: learnedRows, error: learnedError } = await supabase
+    .from('user_progress').select('flashcard_id').eq('user_id', userId);
+  if (learnedError) throw learnedError;
+
+  const learnedIds = new Set((learnedRows || []).map((row) => Number(row.flashcard_id)));
+  const readyIds = [...new Set((readyRows || [])
+    .map((row) => Number(row.flashcard_id))
+    .filter((id) => learnedIds.has(id)))];
   for (let i = readyIds.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
     [readyIds[i], readyIds[j]] = [readyIds[j], readyIds[i]];
   }
-  const matchIds = readyIds.slice(0, Math.max(0, Number(config.match_words_target) || 10));
   if (existing) {
     const patch = {};
     if (newWordIds.length && !(existing.new_word_ids || []).length) patch.new_word_ids = newWordIds;
-    if (!(existing.matching_card_ids || []).length && matchIds.length) patch.matching_card_ids = matchIds;
+    const matchTarget = Math.max(0, Number(existing.config_snapshot?.match_words_target) || 10);
+    const readySet = new Set(readyIds);
+    const currentEligibleIds = [...new Set((existing.matching_card_ids || []).map(Number))]
+      .filter((id) => readySet.has(id));
+    const currentSet = new Set(currentEligibleIds);
+    const repairedMatchIds = [
+      ...currentEligibleIds,
+      ...readyIds.filter((id) => !currentSet.has(id)),
+    ].slice(0, matchTarget);
+    const existingMatchIds = (existing.matching_card_ids || []).map(Number);
+    const matchingSetChanged = repairedMatchIds.length !== existingMatchIds.length
+      || repairedMatchIds.some((id) => !existingMatchIds.includes(id));
+    if (matchingSetChanged) {
+      patch.matching_card_ids = repairedMatchIds;
+      const repairedSet = new Set(repairedMatchIds);
+      patch.matching_completed_ids = (existing.matching_completed_ids || [])
+        .map(Number)
+        .filter((id) => repairedSet.has(id));
+    }
     if (!Object.keys(patch).length) return existing;
     const { data, error } = await supabase.from('daily_mission_progress')
       .update(patch).eq('user_id', userId).eq('mission_date', today).select().single();
@@ -204,6 +228,7 @@ export async function initializeTodayMission(userId, newWordIds = []) {
     return data;
   }
 
+  const matchIds = readyIds.slice(0, Math.max(0, Number(config.match_words_target) || 10));
   const { data, error } = await supabase.from('daily_mission_progress').insert({
     user_id: userId,
     mission_date: today,

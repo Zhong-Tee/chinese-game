@@ -100,12 +100,16 @@ export default function WordMatchGame({ user, setPage, allMasterCards, selectedI
     if (!readyIds) return [];
     const dailyIds = (dailyMission?.matching_card_ids || []).map(Number);
     if (!dailyIds.length) return [];
+    const learnedIds = new Set((selectedIds || []).map(Number));
     const cardMap = new Map((allMasterCards || []).map((card) => [Number(card.id1 ?? card.id), card]));
     const source = dailyIds.map((id) => cardMap.get(id)).filter(Boolean);
     return source
-      .filter(c => readyIds.has(Number(c.id1 ?? c.id)))
+      .filter((card) => {
+        const id = Number(card.id1 ?? card.id);
+        return readyIds.has(id) && learnedIds.has(id);
+      })
       .map(c => ({ id1: Number(c.id1 ?? c.id), cn: c.cn, pinyin: c.pinyin }));
-  }, [allMasterCards, readyIds, dailyMission?.matching_card_ids]);
+  }, [allMasterCards, readyIds, selectedIds, dailyMission?.matching_card_ids]);
 
   const completedMatchIds = useMemo(
     () => new Set((dailyMission?.matching_completed_ids || []).map(Number)),

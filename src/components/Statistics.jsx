@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { fetchFlashcardStatistics } from '../utils/flashcardStatsStorage';
-import { syncTodayMissionProgress } from '../utils/dailyMissionStorage';
+import { fetchTodayMission, syncTodayMissionProgress } from '../utils/dailyMissionStorage';
 import {
   LEVEL_KEYS,
   LEVEL_SCHEDULE_META,
@@ -211,7 +211,11 @@ export default function Statistics({ user, setPage }) {
   useEffect(() => {
     const targetId = selectedUserId || (activeTab === 'personal' ? user?.id : null);
     if (!targetId) { setDailyMission(null); return; }
-    syncTodayMissionProgress(targetId).then(setDailyMission).catch((err) => {
+    // ข้อมูลตัวเองซิงก์และซ่อมได้ ส่วนข้อมูลผู้อื่นเปิดดูแบบ read-only
+    const missionRequest = targetId === user?.id
+      ? syncTodayMissionProgress(targetId)
+      : fetchTodayMission(targetId);
+    missionRequest.then(setDailyMission).catch((err) => {
       console.error('fetch daily mission:', err);
       setDailyMission(null);
     });

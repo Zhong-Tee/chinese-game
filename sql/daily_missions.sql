@@ -20,7 +20,22 @@ create table if not exists public.daily_mission_progress (
 
 alter table public.daily_mission_progress enable row level security;
 drop policy if exists daily_mission_own on public.daily_mission_progress;
-create policy daily_mission_own on public.daily_mission_progress for all to authenticated
+drop policy if exists daily_mission_read_all on public.daily_mission_progress;
+drop policy if exists daily_mission_insert_own on public.daily_mission_progress;
+drop policy if exists daily_mission_update_own on public.daily_mission_progress;
+
+-- ผู้ใช้ที่ล็อกอินทุกคนดูความคืบหน้าภารกิจของกันและกันได้ในหน้า Statistics
+create policy daily_mission_read_all on public.daily_mission_progress
+  for select to authenticated
+  using (true);
+
+-- การสร้างและแก้ไขยังจำกัดเฉพาะเจ้าของข้อมูลหรือแอดมิน
+create policy daily_mission_insert_own on public.daily_mission_progress
+  for insert to authenticated
+  with check (user_id = auth.uid() or public.is_admin());
+
+create policy daily_mission_update_own on public.daily_mission_progress
+  for update to authenticated
   using (user_id = auth.uid() or public.is_admin())
   with check (user_id = auth.uid() or public.is_admin());
 grant select, insert, update on public.daily_mission_progress to authenticated;
