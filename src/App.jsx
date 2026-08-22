@@ -7,6 +7,7 @@ import Settings from './components/Settings';
 import FlashcardGame from './components/FlashcardGame';
 import Library from './components/Library';
 import WordMatchGame from './components/WordMatchGame';
+import ClassSchedule from './components/ClassSchedule';
 import Score from './components/Score';
 import Statistics from './components/Statistics';
 import GamesHub from './components/GamesHub';
@@ -1135,10 +1136,10 @@ export default function App() {
       </div>
     );
   }
-  const shouldShowTopBar = page !== 'fc-play' && page !== 'dashboard' && page !== 'lucky-draw' && page !== 'battle';
+  const shouldShowTopBar = page !== 'fc-play' && page !== 'dashboard' && page !== 'lucky-draw' && page !== 'battle' && page !== 'class-schedule';
   const isSelectWordsPage = page === 'select-words';
   const isHubPage = page === 'dashboard' || page === 'lucky-draw';
-  const isCreamPage = page === 'fc-play' || page === 'fc-chars' || page === 'library' || page === 'statistics' || page === 'word-match';
+  const isCreamPage = page === 'fc-play' || page === 'fc-chars' || page === 'library' || page === 'statistics' || page === 'word-match' || page === 'class-schedule';
 
   return (
     <div
@@ -1330,7 +1331,7 @@ export default function App() {
         </div>
       )}
 
-      <main className={`app-main ${isHubPage ? 'app-main--hub' : isSelectWordsPage ? 'overflow-hidden flex flex-col' : 'overflow-y-auto'} ${page === 'admin' ? 'mx-auto max-w-5xl p-4' : isHubPage ? 'p-0' : 'mx-auto max-w-md p-4 pb-10'}`} style={{ touchAction: 'pan-y' }}>
+      <main className={`app-main ${isHubPage ? 'app-main--hub' : isSelectWordsPage ? 'overflow-hidden flex flex-col' : 'overflow-y-auto'} ${page === 'admin' ? 'mx-auto max-w-5xl p-4' : isHubPage ? 'p-0' : page === 'class-schedule' ? 'mx-auto w-full max-w-3xl p-4 pb-10' : 'mx-auto max-w-md p-4 pb-10'}`} style={{ touchAction: 'pan-y' }}>
         {page === 'dashboard' && (
           <Dashboard
             setPage={setPage}
@@ -1385,6 +1386,7 @@ export default function App() {
         )}
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}
         {page === 'word-match' && <WordMatchGame user={user} setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} />}
+        {page === 'class-schedule' && <ClassSchedule user={user} setPage={setPage} />}
         {page === 'score' && <Score user={user} selectedIds={selectedIds} levelCounts={levelCounts} setPage={setPage} />}
         {page === 'statistics' && <Statistics user={user} setPage={setPage} />}
         

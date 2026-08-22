@@ -444,13 +444,23 @@ export default function Dashboard({
             Version {packageInfo.version}
           </div>
           {/* เมนูใหม่: เกมจับคู่คำศัพท์ — อยู่เหนือกริดเมนู (เหนือ Library) */}
+          <div className="grid grid-cols-2 gap-2 mb-2">
+          <button
+            onClick={() => setPage('class-schedule')}
+            className="hub-mode-btn bg-gradient-to-br from-indigo-500 to-violet-700 flex flex-col items-center justify-center gap-1 py-2 active:scale-[0.97]"
+            aria-label="ตารางเรียน"
+          >
+            <span className="hub-mode-icon drop-shadow-md">🗓️</span>
+            <span className="hub-mode-label drop-shadow">ตารางเรียน</span>
+          </button>
           <button
             onClick={() => setPage('word-match')}
-            className="hub-mode-btn bg-gradient-to-r from-orange-500 to-pink-500 flex items-center justify-center gap-2 py-2.5 mb-2 active:scale-[0.97]"
+            className="hub-mode-btn bg-gradient-to-br from-orange-500 to-pink-500 flex flex-col items-center justify-center gap-1 py-2 active:scale-[0.97]"
           >
             <span className="hub-mode-icon drop-shadow-md">🔗</span>
             <span className="hub-mode-label drop-shadow">จับคู่คำศัพท์</span>
           </button>
+          </div>
           <div className="hub-mode-grid">
             {MODE_BUTTONS.map(btn => (
               <button
