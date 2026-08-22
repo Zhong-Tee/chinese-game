@@ -1331,7 +1331,7 @@ export default function App() {
         </div>
       )}
 
-      <main className={`app-main ${isHubPage ? 'app-main--hub' : isSelectWordsPage ? 'overflow-hidden flex flex-col' : 'overflow-y-auto'} ${page === 'admin' ? 'mx-auto max-w-5xl p-4' : isHubPage ? 'p-0' : page === 'class-schedule' ? 'mx-auto w-full max-w-3xl p-4 pb-10' : 'mx-auto max-w-md p-4 pb-10'}`} style={{ touchAction: 'pan-y' }}>
+      <main className={`app-main ${isHubPage ? 'app-main--hub' : isSelectWordsPage ? 'overflow-hidden flex flex-col' : 'overflow-y-auto'} ${page === 'admin' ? 'mx-auto max-w-5xl p-4' : isHubPage ? 'p-0' : page === 'class-schedule' ? 'mx-auto w-full max-w-3xl bg-[#f5f7ff] px-4 pt-4 pb-0' : 'mx-auto max-w-md p-4 pb-10'}`} style={{ touchAction: 'pan-y' }}>
         {page === 'dashboard' && (
           <Dashboard
             setPage={setPage}
