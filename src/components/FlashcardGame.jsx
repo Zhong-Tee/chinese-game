@@ -99,7 +99,7 @@ export default function FlashcardGame({
 
   return (
     <div
-      className="flex flex-col items-center select-none w-full"
+      className="flex w-full flex-col items-center select-none pt-[calc(env(safe-area-inset-top)+2rem)]"
       style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
       onDragStart={(e) => e.preventDefault()}
     >

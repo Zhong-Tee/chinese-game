@@ -31,7 +31,8 @@ export function canTypingCard(card) {
   return Boolean(norm(card?.vocabulary));
 }
 
-export const FLASHCARD_EXTENDED_LEVELS = new Set([1, 2, 3, 4, 5, 6, 7]);
+// โหมดคำผิดบ่อยต้องฝึกครบทุกช่วงเช่นเดียวกับการเล่น Level ปกติ
+export const FLASHCARD_EXTENDED_LEVELS = new Set([1, 2, 3, 4, 5, 6, 7, 'mistakes']);
 
 export function shouldFlashcardRearrange(level, card) {
   return FLASHCARD_EXTENDED_LEVELS.has(level) && canRearrangeCard(card);

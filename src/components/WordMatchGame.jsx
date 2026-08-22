@@ -355,7 +355,7 @@ export default function WordMatchGame({ user, setPage, allMasterCards, selectedI
                     {index + 1}
                   </span>
                   <div className="text-4xl font-black text-slate-900 leading-none">{card.cn}</div>
-                  <div className="text-xs font-bold text-slate-500 mt-1">{card.pinyin}</div>
+                  <div className="mt-5 text-2xl font-extrabold leading-none text-black">{card.pinyin}</div>
                 </button>
               );
             })}

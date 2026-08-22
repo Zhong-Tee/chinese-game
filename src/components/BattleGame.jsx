@@ -758,7 +758,7 @@ export default function BattleGame({ user, stageNo, difficulty = 'easy', already
 
       {/* คอนเทนต์เต็มความสูง จัดเป็นคอลัมน์ */}
       <div
-        className="relative h-full flex flex-col max-w-md mx-auto px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]"
+        className="relative h-full flex flex-col max-w-md mx-auto px-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-[max(1rem,env(safe-area-inset-bottom))]"
         style={{ animation: screenFx === 'bad' ? 'battleShake .42s ease-in-out' : undefined }}
       >
         {/* แถบบน: ออก / เวลา */}

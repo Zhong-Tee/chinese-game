@@ -98,7 +98,7 @@ export default function LuckyDraw({ setPage, user, gameState = { exp: 0, coin: 0
         <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[80] hub-glass text-white px-5 py-2 rounded-full shadow-xl font-black text-sm text-center max-w-[90%]">{toast}</div>
       )}
 
-      <div className="relative z-10 px-4 pt-[max(1rem,env(safe-area-inset-top))] flex items-center justify-between">
+      <div className="relative z-10 px-4 pt-[calc(env(safe-area-inset-top)+1rem)] flex items-center justify-between">
         <button onClick={() => setPage('dashboard')} className="hub-glass text-amber-300 font-black text-xs uppercase px-3 py-1.5 rounded-full active:scale-95">← Home</button>
         <div className="flex gap-2">
           <span className="hub-resource-pill text-emerald-300">⭐ {gameState.exp ?? 0}</span>

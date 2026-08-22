@@ -74,7 +74,7 @@ export default function Login({ setPage, setUser, fetchInitialData, fetchUserSet
   };
 
   return (
-    <div className="flex flex-1 w-full flex-col items-center justify-center p-6 text-center font-sans pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+    <div className="flex flex-1 w-full flex-col items-center justify-center p-6 text-center font-sans pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       {messageModal && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/80 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="login-message-title">
           <div className="w-full max-w-sm overflow-hidden rounded-3xl border-2 border-white/10 bg-slate-900 text-white shadow-2xl">

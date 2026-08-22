@@ -10,6 +10,7 @@ import HubLevelScheduleBar from './HubLevelScheduleBar';
 import { HubNavIcon } from './HubNavIcons';
 import fightBtnImg from '../../game/icon/fight-btn.png';
 import gameLogoImg from '../../game/word fighter.png?v=3';
+import packageInfo from '../../package.json';
 import { getDailyMissionCompletion, localDateKey, syncTodayMissionProgress } from '../utils/dailyMissionStorage';
 
 const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️', add_time: '⏳', bomb: '💣' };
@@ -266,7 +267,7 @@ export default function Dashboard({
       )}
 
       {/* Top HUD */}
-      <header className="relative z-20 px-3 sm:px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 shrink-0">
+      <header className="relative z-20 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-2 shrink-0">
         <div className="flex items-center gap-2 sm:gap-3">
           <button onClick={openCharModal} className="relative shrink-0 active:scale-95 transition-transform">
             <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full border-2 border-amber-400/80 overflow-hidden bg-slate-800 shadow-lg shadow-amber-500/20">
@@ -439,6 +440,9 @@ export default function Dashboard({
 
         {/* ปุ่มโหมด — ขวากึ่งกลางลงล่าง */}
         <div className="hub-action-rail pointer-events-auto">
+          <div className="mb-1 text-center text-[10px] font-black uppercase tracking-widest text-white/55">
+            Version {packageInfo.version}
+          </div>
           {/* เมนูใหม่: เกมจับคู่คำศัพท์ — อยู่เหนือกริดเมนู (เหนือ Library) */}
           <button
             onClick={() => setPage('word-match')}

@@ -175,7 +175,7 @@ export default function App() {
   useEffect(() => {
     if (!user?.id || page !== 'dashboard' || dailyNewWords || dailyMissionNotice) return undefined;
     const noticeKey = `daily-new-words-mission-notice:${user.id}:${localDateKey()}`;
-    if (sessionStorage.getItem(noticeKey) === 'shown') return undefined;
+    if (localStorage.getItem(noticeKey) === 'shown') return undefined;
     let alive = true;
     const timerId = setTimeout(async () => {
       try {
@@ -190,7 +190,7 @@ export default function App() {
           }
         }
         if (!alive || addedCount <= 0) return;
-        sessionStorage.setItem(noticeKey, 'shown');
+        localStorage.setItem(noticeKey, 'shown');
         setDailyMissionNotice({ addedCount });
       } catch (error) {
         console.error('load daily mission notice:', error);
@@ -1051,23 +1051,40 @@ export default function App() {
     return isKeyLevelPlayableToday(lv, levelKeys);
   };
 
+  const showLevelPlayPromptOnce = useCallback(() => {
+    if (!user?.id) return;
+    const noticeKey = `daily-unlocked-level-notice:${user.id}:${localDateKey()}`;
+    if (localStorage.getItem(noticeKey) === 'shown') return;
+
+    const playable = SCHEDULED_LEVEL_KEYS
+      .map((key) => Number(key))
+      .filter((lv) => checkLevelAvailable(lv));
+    if (playable.length === 0) return;
+
+    // บันทึกทันทีที่แสดง เพื่อไม่ให้เปิดแอปใหม่แล้ว Popup เด้งซ้ำในวันเดียวกัน
+    localStorage.setItem(noticeKey, 'shown');
+    setLevelPlayPrompt(playable);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, levelKeys]);
+
   const handleDailyWordsConfirm = useCallback(() => {
     const addedCount = dailyNewWords?.length || 0;
     setDailyNewWords(null);
     if (user?.id) fetchInitialData(user.id);
-    if (user?.id) sessionStorage.setItem(`daily-new-words-mission-notice:${user.id}:${localDateKey()}`, 'shown');
-    setDailyMissionNotice({ addedCount });
+    const noticeKey = user?.id
+      ? `daily-new-words-mission-notice:${user.id}:${localDateKey()}`
+      : '';
+    const alreadyShown = noticeKey && localStorage.getItem(noticeKey) === 'shown';
+    if (noticeKey) localStorage.setItem(noticeKey, 'shown');
+    if (alreadyShown) showLevelPlayPromptOnce();
+    else setDailyMissionNotice({ addedCount });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, dailyNewWords]);
+  }, [user?.id, dailyNewWords, showLevelPlayPromptOnce]);
 
   const handleDailyMissionNoticeConfirm = useCallback(() => {
     setDailyMissionNotice(null);
-    const playable = SCHEDULED_LEVEL_KEYS
-      .map((key) => Number(key))
-      .filter((lv) => checkLevelAvailable(lv));
-    if (playable.length > 0) setLevelPlayPrompt(playable);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, schedules]);
+    showLevelPlayPromptOnce();
+  }, [showLevelPlayPromptOnce]);
 
   const handlePlayLevelFromPrompt = useCallback(async (level) => {
     setLevelPlayPrompt(null);
@@ -1099,7 +1116,7 @@ export default function App() {
     >
       <button
         onClick={() => setIsMenuOpen(false)}
-        className="absolute top-[max(1.5rem,env(safe-area-inset-top))] right-[max(1.5rem,env(safe-area-inset-right))] text-white text-4xl min-w-[44px] min-h-[44px] flex items-center justify-center"
+        className="absolute top-[calc(env(safe-area-inset-top)+1.5rem)] right-[max(1.5rem,env(safe-area-inset-right))] text-white text-4xl min-w-[44px] min-h-[44px] flex items-center justify-center"
         style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
       >&times;</button>
       <div className="flex flex-col space-y-8 text-center text-white font-black italic text-2xl uppercase">
@@ -1145,7 +1162,7 @@ export default function App() {
     >
       {shouldShowTopBar && (
         <>
-          <header className="px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4 bg-[#0a0e1a]/90 backdrop-blur-md shadow-lg border-b-4 border-orange-500 flex justify-between items-center sticky top-0 z-40">
+          <header className="px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4 bg-[#0a0e1a]/90 backdrop-blur-md shadow-lg border-b-4 border-orange-500 flex justify-between items-center sticky top-0 z-40">
             <div className="flex flex-col min-w-0">
               <h1 className="font-black text-orange-600 text-xl uppercase italic tracking-tighter">Nihao Game</h1>
             </div>
