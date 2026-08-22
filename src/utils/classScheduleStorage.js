@@ -3,11 +3,14 @@ import { supabase } from '../supabaseClient';
 const LEGACY_PREFIX = 'class-schedule:v1';
 export const WEEK_DAYS = [
   ['monday', 'จ.', 'วันจันทร์'], ['tuesday', 'อ.', 'วันอังคาร'], ['wednesday', 'พ.', 'วันพุธ'],
-  ['thursday', 'พฤ.', 'วันพฤหัสบดี'], ['friday', 'ศ.', 'วันศุกร์'], ['saturday', 'ส.', 'วันเสาร์'], ['sunday', 'อา.', 'วันอาทิตย์'],
+  ['thursday', 'พฤ.', 'วันพฤหัสบดี'], ['friday', 'ศ.', 'วันศุกร์'],
 ].map(([id, short, label]) => ({ id, short, label }));
 
 export const createEmptyClassSchedule = () => Object.fromEntries(WEEK_DAYS.map(({ id }) => [id, []]));
-const normalize = (data = {}) => Object.fromEntries(WEEK_DAYS.map(({ id }) => [id, Array.isArray(data[id]) ? data[id] : []]));
+const normalize = (data = {}) => ({
+  ...data,
+  ...Object.fromEntries(WEEK_DAYS.map(({ id }) => [id, Array.isArray(data[id]) ? data[id] : []])),
+});
 
 function loadLegacySchedule(userId) {
   try { return normalize(JSON.parse(localStorage.getItem(`${LEGACY_PREFIX}:${userId}`) || '{}')); }
