@@ -1,15 +1,36 @@
 import { supabase } from '../supabaseClient';
 
 const LEGACY_PREFIX = 'class-schedule:v1';
+const OUTFIT_RENAMES = {
+  'ชุดนักเรียน': 'ชุดนักเรียน กางเกงนักเรียน',
+  'ชุดพละ': 'ชุดพละ กางเกงพละ',
+  'ชุด STEM สีชมพู': 'ชุด stem สีชมพู กางเกงพละ',
+  'เสื้อสี': 'เสื้อสี กางเกงพละ',
+};
+const normalizeOutfit = (outfit) => OUTFIT_RENAMES[outfit] || outfit;
 export const WEEK_DAYS = [
   ['monday', 'จ.', 'วันจันทร์'], ['tuesday', 'อ.', 'วันอังคาร'], ['wednesday', 'พ.', 'วันพุธ'],
   ['thursday', 'พฤ.', 'วันพฤหัสบดี'], ['friday', 'ศ.', 'วันศุกร์'],
 ].map(([id, short, label]) => ({ id, short, label }));
 
-export const createEmptyClassSchedule = () => Object.fromEntries(WEEK_DAYS.map(({ id }) => [id, []]));
+export const createEmptyClassSchedule = () => ({
+  ...Object.fromEntries(WEEK_DAYS.map(({ id }) => [id, []])),
+  outfits: Object.fromEntries(WEEK_DAYS.map(({ id }) => [id, ''])),
+  specialOutfits: Object.fromEntries(WEEK_DAYS.map(({ id }) => [id, null])),
+});
 const normalize = (data = {}) => ({
   ...data,
   ...Object.fromEntries(WEEK_DAYS.map(({ id }) => [id, Array.isArray(data[id]) ? data[id] : []])),
+  outfits: Object.fromEntries(WEEK_DAYS.map(({ id }) => {
+    const outfit = typeof data.outfits?.[id] === 'string' ? data.outfits[id] : '';
+    return [id, outfit.startsWith('special:') ? '' : normalizeOutfit(outfit)];
+  })),
+  specialOutfits: Object.fromEntries(WEEK_DAYS.map(({ id }) => {
+    const special = data.specialOutfits?.[id];
+    return [id, special && typeof special.outfit === 'string' && typeof special.date === 'string'
+      ? { ...special, outfit: normalizeOutfit(special.outfit) }
+      : null];
+  })),
 });
 
 function loadLegacySchedule(userId) {
