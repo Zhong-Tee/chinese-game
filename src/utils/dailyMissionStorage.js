@@ -16,6 +16,9 @@ export const localDateKey = (date = new Date()) => {
 
 export const dailyMissionErrorMessage = (error) => {
   const raw = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+  if (error?.code === '42501' || raw.includes('row-level security')) {
+    return 'ไม่มีสิทธิ์บันทึกภารกิจรายวัน กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่ หากยังพบปัญหาให้รันไฟล์ sql/daily_missions_rls_hotfix.sql ใน Supabase SQL Editor';
+  }
   if (
     raw.includes('daily_mission_config')
     || raw.includes('daily_mission_progress')
@@ -180,6 +183,13 @@ const announceMissionUpdate = (mission) => {
 
 export async function initializeTodayMission(userId, newWordIds = []) {
   if (!userId) return null;
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData?.user) {
+    throw new Error('เซสชันหมดอายุ กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่');
+  }
+  if (authData.user.id !== userId) {
+    throw new Error('บัญชีผู้ใช้ในแอปไม่ตรงกับเซสชัน กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่');
+  }
   const config = await fetchDailyMissionConfig();
   if (!config.enabled) return null;
   const today = localDateKey();

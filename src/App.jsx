@@ -590,7 +590,17 @@ export default function App() {
         return; 
       }
       if ([3, 4, 5, 6].includes(Number(level))) {
-        await startDailyReviewMission(user.id, Number(level), progress.map((row) => Number(row.flashcard_id)));
+        // Daily-mission tracking is supplementary. A missing/outdated RLS policy must
+        // not prevent the player from opening the flashcard level itself.
+        try {
+          await startDailyReviewMission(
+            user.id,
+            Number(level),
+            progress.map((row) => Number(row.flashcard_id)),
+          );
+        } catch (missionError) {
+          console.error('Unable to start daily review mission:', missionError);
+        }
       }
       // แปลง flashcard_id เป็น number ก่อน query
       const flashcardIds = progress.map(p => Number(p.flashcard_id)).filter(id => !isNaN(id));

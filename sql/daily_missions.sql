@@ -27,19 +27,31 @@ drop policy if exists daily_mission_own on public.daily_mission_progress;
 drop policy if exists daily_mission_read_all on public.daily_mission_progress;
 drop policy if exists daily_mission_insert_own on public.daily_mission_progress;
 drop policy if exists daily_mission_update_own on public.daily_mission_progress;
+drop policy if exists daily_mission_insert_admin on public.daily_mission_progress;
+drop policy if exists daily_mission_update_admin on public.daily_mission_progress;
 
 -- ผู้ใช้ที่ล็อกอินทุกคนดูความคืบหน้าภารกิจของกันและกันได้ในหน้า Statistics
 create policy daily_mission_read_all on public.daily_mission_progress
   for select to authenticated
   using (true);
 
--- การสร้างและแก้ไขยังจำกัดเฉพาะเจ้าของข้อมูลหรือแอดมิน
+-- สร้าง policy เจ้าของแยกจาก policy แอดมิน เพื่อให้ผู้ใช้ทั่วไปเขียนแถวของตัวเองได้
+-- แม้ระบบแอดมินจะยังไม่ได้ติดตั้ง
 create policy daily_mission_insert_own on public.daily_mission_progress
   for insert to authenticated
-  with check (user_id = auth.uid() or public.is_admin());
+  with check (user_id = (select auth.uid()));
 
 create policy daily_mission_update_own on public.daily_mission_progress
   for update to authenticated
-  using (user_id = auth.uid() or public.is_admin())
-  with check (user_id = auth.uid() or public.is_admin());
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+
+-- ถ้ามีฟังก์ชัน is_admin จาก games_schema.sql แล้ว จึงเพิ่มสิทธิ์แก้ไขของผู้ใช้อื่นให้แอดมิน
+do $$
+begin
+  if to_regprocedure('public.is_admin()') is not null then
+    execute 'create policy daily_mission_insert_admin on public.daily_mission_progress for insert to authenticated with check (public.is_admin())';
+    execute 'create policy daily_mission_update_admin on public.daily_mission_progress for update to authenticated using (public.is_admin()) with check (public.is_admin())';
+  end if;
+end $$;
 grant select, insert, update on public.daily_mission_progress to authenticated;
