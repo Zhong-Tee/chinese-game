@@ -872,7 +872,10 @@ export default function App() {
 
   const handleRearrangeSubmit = useCallback(() => {
     if (!currentCard || flashcardStageAnswered || flashcardStage !== 'rearrange') return;
-    if (flashcardRearrangeAssembled.length === 0) return;
+    if (
+      flashcardRearrangeTokens.length === 0
+      || flashcardRearrangeAssembled.length !== flashcardRearrangeTokens.length
+    ) return;
 
     const text = flashcardRearrangeAssembled
       .map((id) => flashcardRearrangeTokens.find((t) => t.id === id)?.text || '')

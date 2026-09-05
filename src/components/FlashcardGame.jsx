@@ -46,6 +46,8 @@ export default function FlashcardGame({
   const isRearrange = stage === 'rearrange';
   const isTyping = stage === 'typing';
   const hasRearrange = shouldFlashcardRearrange(activeLevel, currentCard);
+  const hasSelectedAllRearrangeTokens = rearrangeTokens.length > 0
+    && rearrangeAssembled.length === rearrangeTokens.length;
 
   const typingStageNo = 3;
   const rearrangeStageNo = 4;
@@ -308,8 +310,9 @@ export default function FlashcardGame({
                   <button
                     type="button"
                     onClick={() => onSubmitRearrange?.()}
-                    disabled={rearrangeAssembled.length === 0}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-orange-500 border-2 border-orange-600 text-white font-black text-lg active:scale-95 disabled:opacity-40"
+                    disabled={!hasSelectedAllRearrangeTokens}
+                    title={hasSelectedAllRearrangeTokens ? 'ส่งคำตอบ' : 'กรุณาเลือกคำให้ครบก่อนส่งคำตอบ'}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-orange-500 border-2 border-orange-600 text-white font-black text-lg active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                     ส่งคำตอบ
