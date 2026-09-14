@@ -293,8 +293,11 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
   const visibleBooks = tabBooks.filter((book) => categoryFilter === 'all' || book.category === categoryFilter);
 
   return (
-    <div className="min-h-full pb-8">
-      <div className="mb-5 flex items-center justify-between gap-3"><button type="button" onClick={() => setPage('dashboard')} className="text-xs font-black uppercase italic text-orange-600 underline">← กลับหน้าหลัก</button><button type="button" onClick={() => setShowCreate(true)} className="rounded-2xl bg-orange-500 px-4 py-2.5 text-sm font-black text-white shadow-lg active:scale-95">＋ สร้างหนังสือ</button></div>
+    <div className="min-h-full pb-8 pt-[max(3.5rem,env(safe-area-inset-top))] sm:pt-0">
+      <div className="relative z-20 mb-5 flex items-center justify-between gap-3">
+        <button type="button" onClick={() => setPage('dashboard')} className="min-h-11 touch-manipulation rounded-xl px-2 text-xs font-black uppercase italic text-orange-600 underline [-webkit-tap-highlight-color:transparent]">← กลับหน้าหลัก</button>
+        <button type="button" onClick={() => setShowCreate(true)} className="min-h-11 shrink-0 touch-manipulation whitespace-nowrap rounded-2xl bg-orange-500 px-4 py-2.5 text-sm font-black text-white shadow-lg active:scale-95 [-webkit-tap-highlight-color:transparent]">＋ สร้างหนังสือ</button>
+      </div>
       <section className="mb-5 overflow-hidden rounded-[2rem] bg-gradient-to-br from-slate-900 via-indigo-950 to-violet-950 p-5 text-white shadow-xl">
         <div className="flex items-center gap-4"><div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-4xl shadow-inner">📖</div><div><p className="text-xs font-black uppercase tracking-[0.2em] text-orange-300">Nihao Books</p><h1 className="text-2xl font-black">หนังสือจีนจาก AI</h1><p className="mt-1 text-xs text-white/60">สร้าง แบ่งปัน และอ่านหนังสือของเพื่อน ๆ</p></div></div>
         {summary && <div className="mt-4 grid grid-cols-2 gap-2 border-t border-white/10 pt-4 text-center"><div className="rounded-xl bg-white/5 p-2"><div className="text-[10px] font-bold text-white/50">{isAdmin ? 'ค่าใช้จ่ายรวมระบบ' : 'ค่าใช้จ่ายของฉัน'}</div><div className="text-base font-black text-emerald-300">{money(summary.total_thb, 'THB')}</div></div><div className="rounded-xl bg-white/5 p-2"><div className="text-[10px] font-bold text-white/50">หนังสือที่สร้าง</div><div className="text-base font-black text-amber-300">{summary.book_count || 0} เล่ม</div></div></div>}
