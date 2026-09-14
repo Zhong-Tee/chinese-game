@@ -361,7 +361,7 @@ export default function Dashboard({
         </div>
         {missionRows.length > 0 && (
           <div
-            className="mt-2 ml-auto block w-full max-w-[170px] rounded-2xl border border-amber-300/25 bg-slate-950/65 p-1.5 shadow-lg backdrop-blur-sm active:scale-[0.98] transition-transform"
+            className="mt-2 ml-auto block w-full max-w-[195px] rounded-2xl border border-amber-300/25 bg-slate-950/65 p-1.5 shadow-lg backdrop-blur-sm active:scale-[0.98] transition-transform"
           >
             <button
               type="button"
@@ -370,7 +370,7 @@ export default function Dashboard({
               aria-expanded={!missionCollapsed}
               aria-controls="daily-mission-progress"
             >
-              <span className="text-[9px] font-black uppercase tracking-wider text-white/45">ภารกิจวันนี้</span>
+              <span className="shrink-0 whitespace-nowrap text-[9px] font-black uppercase tracking-normal text-white/45">ภารกิจวันนี้</span>
               <span className="flex items-center gap-1.5">
                 {missionCollapsed && (
                   <span className="flex items-center gap-0.5" aria-label="สถานะดาวภารกิจประจำวัน">
@@ -384,8 +384,10 @@ export default function Dashboard({
                     ))}
                   </span>
                 )}
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-xs font-black text-white/60">
-                  {missionCollapsed ? '⌄' : '⌃'}
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/60">
+                  <svg viewBox="0 0 20 20" className={`h-3 w-3 transition-transform ${missionCollapsed ? '' : 'rotate-180'}`} aria-hidden="true">
+                    <path d="M5 7.5 10 12.5 15 7.5" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </span>
               </span>
             </button>
