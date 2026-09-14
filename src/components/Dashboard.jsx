@@ -444,7 +444,7 @@ export default function Dashboard({
             Version {packageInfo.version}
           </div>
           {/* เมนูใหม่: เกมจับคู่คำศัพท์ — อยู่เหนือกริดเมนู (เหนือ Library) */}
-          <div className="grid grid-cols-2 gap-2 mb-2">
+          <div className="grid grid-cols-3 gap-2 mb-2">
           <button
             onClick={() => setPage('class-schedule')}
             className="hub-mode-btn bg-gradient-to-br from-indigo-500 to-violet-700 flex flex-col items-center justify-center gap-1 py-2 active:scale-[0.97]"
@@ -459,6 +459,14 @@ export default function Dashboard({
           >
             <span className="hub-mode-icon drop-shadow-md">🔗</span>
             <span className="hub-mode-label drop-shadow">จับคู่คำศัพท์</span>
+          </button>
+          <button
+            onClick={() => setPage('books')}
+            className="hub-mode-btn bg-gradient-to-br from-amber-400 to-yellow-600 flex flex-col items-center justify-center gap-1 py-2 active:scale-[0.97]"
+            aria-label="หนังสือ AI"
+          >
+            <span className="hub-mode-icon drop-shadow-md">📖</span>
+            <span className="hub-mode-label drop-shadow">Books</span>
           </button>
           </div>
           <div className="hub-mode-grid">

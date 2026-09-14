@@ -56,3 +56,22 @@ If you are developing a production application, we recommend using TypeScript wi
 
 1. เปิด Supabase Dashboard → SQL Editor
 2. รัน SQL จากไฟล์ `supabase_migration_user_wrong_words.sql` ในโปรเจกต์นี้
+# AI Books setup
+
+ฟีเจอร์ Books ใช้ Supabase Edge Function เพื่อไม่เปิดเผย OpenAI API key ในเบราว์เซอร์
+
+1. รัน `sql/ai_books.sql` ใน Supabase SQL Editor
+2. ตั้งค่า secrets ของ Edge Function:
+
+```powershell
+supabase secrets set OPENAI_API_KEY=sk-...
+supabase secrets set OPENAI_TEXT_MODEL=gpt-5.6-terra OPENAI_IMAGE_MODEL=gpt-image-2.5-flare USD_THB_RATE=34
+```
+
+3. Deploy ฟังก์ชัน:
+
+```powershell
+supabase functions deploy generate-book
+```
+
+ราคาต่อ token ตั้งค่าแยกได้ตามตัวอย่างใน `supabase/functions/generate-book/.env.example` เพื่ออัปเดตราคาโดยไม่ต้องแก้โค้ด การสร้างหนังสือจะบันทึก raw usage และค่าใช้จ่ายของข้อความ ภาพปก และภาพประกอบแยกกัน

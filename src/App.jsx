@@ -6,6 +6,7 @@ import Flashcards from './components/Flashcards';
 import Settings from './components/Settings';
 import FlashcardGame from './components/FlashcardGame';
 import Library from './components/Library';
+import Books from './components/Books';
 import WordMatchGame from './components/WordMatchGame';
 import ClassSchedule from './components/ClassSchedule';
 import Score from './components/Score';
@@ -1152,7 +1153,7 @@ export default function App() {
   const shouldShowTopBar = page !== 'fc-play' && page !== 'dashboard' && page !== 'lucky-draw' && page !== 'battle' && page !== 'class-schedule';
   const isSelectWordsPage = page === 'select-words';
   const isHubPage = page === 'dashboard' || page === 'lucky-draw';
-  const isCreamPage = page === 'fc-play' || page === 'fc-chars' || page === 'library' || page === 'statistics' || page === 'word-match' || page === 'class-schedule';
+  const isCreamPage = page === 'fc-play' || page === 'fc-chars' || page === 'library' || page === 'books' || page === 'statistics' || page === 'word-match' || page === 'class-schedule';
 
   return (
     <div
@@ -1398,6 +1399,7 @@ export default function App() {
           />
         )}
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}
+        {page === 'books' && <Books user={user} isAdmin={isAdmin} setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} />}
         {page === 'word-match' && <WordMatchGame user={user} setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} />}
         {page === 'class-schedule' && <ClassSchedule user={user} setPage={setPage} />}
         {page === 'score' && <Score user={user} selectedIds={selectedIds} levelCounts={levelCounts} setPage={setPage} />}
