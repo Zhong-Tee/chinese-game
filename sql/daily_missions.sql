@@ -14,6 +14,10 @@ create table if not exists public.daily_mission_progress (
   matching_card_ids bigint[] not null default '{}',
   matching_completed_ids bigint[] not null default '{}',
   matching_passed_ids bigint[] not null default '{}',
+  mistakes_required boolean not null default false,
+  mistakes_remaining integer not null default 0,
+  mistakes_completed boolean not null default false,
+  books_read_ids uuid[] not null default '{}',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (user_id, mission_date)
@@ -21,6 +25,12 @@ create table if not exists public.daily_mission_progress (
 
 alter table public.daily_mission_progress
   add column if not exists matching_passed_ids bigint[] not null default '{}';
+
+alter table public.daily_mission_progress
+  add column if not exists mistakes_required boolean not null default false,
+  add column if not exists mistakes_remaining integer not null default 0,
+  add column if not exists mistakes_completed boolean not null default false,
+  add column if not exists books_read_ids uuid[] not null default '{}';
 
 alter table public.daily_mission_progress enable row level security;
 drop policy if exists daily_mission_own on public.daily_mission_progress;

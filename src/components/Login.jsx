@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient'; // ต้องใช้ ../ เพราะถอยหลัง 1 step ไปหาไฟล์ข้างนอก
 
-export default function Login({ setPage, setUser, fetchInitialData, fetchUserSettings, checkAndAddDailyWords, setDailyNewWords }) {
+export default function Login({ setPage, setUser, fetchInitialData, fetchUserSettings }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -60,14 +60,6 @@ export default function Login({ setPage, setUser, fetchInitialData, fetchUserSet
         await supabase.from('user_logins').insert({ user_id: data.user.id });
       } catch (err) {
         console.error('Error logging login:', err);
-      }
-
-      // เช็คและเพิ่มคำศัพท์ประจำวัน
-      try {
-        const newWords = await checkAndAddDailyWords(data.user.id);
-        if (newWords && newWords.length > 0) setDailyNewWords(newWords);
-      } catch (err) {
-        console.error('Error checking daily words:', err);
       }
     }
     setLoading(false);

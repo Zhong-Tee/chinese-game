@@ -55,10 +55,35 @@ export async function fetchTodayMission(userId) {
   return data;
 }
 
+async function syncExtraMissionProgress(userId, mission) {
+  if (!mission) return mission;
+  const { count, error: mistakesError } = await supabase.from('user_progress')
+    .select('flashcard_id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('wrong_count', 3);
+  if (mistakesError) throw mistakesError;
+
+  const remaining = Number(count || 0);
+  const required = mission.mistakes_required || remaining > 0;
+  const completed = required && remaining === 0;
+  if (
+    required === !!mission.mistakes_required
+    && remaining === Number(mission.mistakes_remaining || 0)
+    && completed === !!mission.mistakes_completed
+  ) return mission;
+
+  const { data, error } = await supabase.from('daily_mission_progress')
+    .update({ mistakes_required: required, mistakes_remaining: remaining, mistakes_completed: completed })
+    .eq('user_id', userId).eq('mission_date', localDateKey()).select().single();
+  if (error) throw error;
+  announceMissionUpdate(data);
+  return data;
+}
+
 async function syncReviewMissionProgress(userId, mission) {
   const reviewIds = (mission?.review_word_ids || []).map(Number);
   const reviewLevel = Number(mission?.review_level);
-  if (!reviewIds.length || ![3, 4, 5, 6].includes(reviewLevel)) return mission;
+  if (!reviewIds.length || ![3, 4, 5, 6].includes(reviewLevel)) return syncExtraMissionProgress(userId, mission);
 
   const { data: rows, error: progressError } = await supabase.from('user_progress')
     .select('flashcard_id, level')
@@ -77,14 +102,14 @@ async function syncReviewMissionProgress(userId, mission) {
   const previousIds = (mission.review_completed_ids || []).map(Number);
   const unchanged = completedIds.length === previousIds.length
     && completedIds.every((id) => previousIds.includes(id));
-  if (unchanged) return mission;
+  if (unchanged) return syncExtraMissionProgress(userId, mission);
 
   const { data, error } = await supabase.from('daily_mission_progress')
     .update({ review_completed_ids: completedIds })
     .eq('user_id', userId).eq('mission_date', localDateKey()).select().single();
   if (error) throw error;
   announceMissionUpdate(data);
-  return data;
+  return syncExtraMissionProgress(userId, data);
 }
 
 // ซ่อมความคืบหน้าจากสถานะจริง กรณี event ตอนเลื่อน Level บันทึกไม่ทัน/เครือข่ายหลุด
@@ -160,7 +185,7 @@ export async function syncTodayMissionProgress(userId) {
 }
 
 export const getDailyMissionCompletion = (mission) => {
-  if (!mission) return [false, false, false];
+  if (!mission) return [false, false, false, false, false];
   const reviewTotal = mission.config_snapshot?.review_mode === 'count'
     ? Math.min(
       (mission.review_word_ids || []).length,
@@ -174,6 +199,8 @@ export const getDailyMissionCompletion = (mission) => {
       && (mission.review_completed_ids || []).length >= reviewTotal,
     (mission.matching_card_ids || []).length > 0
       && (mission.matching_completed_ids || []).length >= (mission.matching_card_ids || []).length,
+    !!mission.mistakes_required && !!mission.mistakes_completed,
+    (mission.books_read_ids || []).length > 0,
   ];
 };
 
@@ -315,6 +342,19 @@ export async function recordDailyMatchComplete(userId, cardId) {
     patch.matching_completed_ids = [...new Set([...(mission.matching_completed_ids || []).map(Number), id])];
   }
   const { data, error } = await supabase.from('daily_mission_progress').update(patch)
+    .eq('user_id', userId).eq('mission_date', localDateKey()).select().single();
+  if (error) throw error;
+  announceMissionUpdate(data);
+  return data;
+}
+
+export async function recordDailyBookRead(userId, bookId) {
+  if (!userId || !bookId) return null;
+  const mission = await initializeTodayMission(userId);
+  if (!mission) return null;
+  const bookIds = [...new Set([...(mission.books_read_ids || []).map(String), String(bookId)])];
+  const { data, error } = await supabase.from('daily_mission_progress')
+    .update({ books_read_ids: bookIds })
     .eq('user_id', userId).eq('mission_date', localDateKey()).select().single();
   if (error) throw error;
   announceMissionUpdate(data);

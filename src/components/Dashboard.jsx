@@ -12,6 +12,7 @@ import fightBtnImg from '../../game/icon/fight-btn.png';
 import gameLogoImg from '../../game/word fighter.png?v=3';
 import packageInfo from '../../package.json';
 import { getDailyMissionCompletion, localDateKey, syncTodayMissionProgress } from '../utils/dailyMissionStorage';
+import { SCHEDULED_LEVEL_KEYS, isKeyLevelPlayableToday } from '../utils/levelScheduleMeta';
 
 const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️', add_time: '⏳', bomb: '💣' };
 
@@ -194,17 +195,20 @@ export default function Dashboard({
   const missionConfig = dailyMission?.config_snapshot || {};
   const reviewWordsAvailable = [3, 4, 5, 6]
     .reduce((total, level) => total + Number(levelCounts?.[level] || 0), 0);
+  const hasPlayableReviewKey = SCHEDULED_LEVEL_KEYS.some((level) => isKeyLevelPlayableToday(level, levelKeys));
   const missionRows = [];
-  const addMissionRow = ({ star, label, done, total, waiting = false }) => {
+  const addMissionRow = ({ star, label, done, total, waiting = false, unavailable = false, statusText = '' }) => {
     const safeDone = Math.max(0, Number(done) || 0);
     const safeTotal = Math.max(0, Number(total) || 0);
-    const completed = safeTotal > 0 && safeDone >= safeTotal;
+    const completed = !unavailable && safeTotal > 0 && safeDone >= safeTotal;
     missionRows.push({
       star,
       label,
       done: safeDone,
       total: safeTotal,
       waiting,
+      unavailable,
+      statusText,
       completed,
       percent: safeTotal > 0 ? Math.min(100, Math.round((safeDone / safeTotal) * 100)) : 0,
     });
@@ -220,7 +224,7 @@ export default function Dashboard({
   }
 
   const reviewIds = dailyMission?.review_word_ids || [];
-  if (missionConfig.review_enabled !== false && (reviewIds.length > 0 || reviewWordsAvailable > 0)) {
+  if (dailyMission && missionConfig.review_enabled !== false) {
     const waitingForLevel = reviewIds.length === 0;
     const estimatedTotal = missionConfig.review_mode === 'count'
       ? Math.min(reviewWordsAvailable, Math.max(1, Number(missionConfig.review_words_target) || 20))
@@ -234,6 +238,7 @@ export default function Dashboard({
       done: (dailyMission?.review_completed_ids || []).length,
       total: waitingForLevel ? estimatedTotal : activeTotal,
       waiting: waitingForLevel && estimatedTotal === 0,
+      unavailable: !hasPlayableReviewKey,
     });
   }
 
@@ -244,6 +249,21 @@ export default function Dashboard({
       done: (dailyMission.matching_completed_ids || []).length,
       total: dailyMission.matching_card_ids.length,
     });
+  }
+
+  if (dailyMission?.mistakes_required) {
+    const mistakesRemaining = Math.max(0, Number(dailyMission.mistakes_remaining) || 0);
+    addMissionRow({
+      star: 4,
+      label: 'เคลียร์คำผิดบ่อย',
+      done: mistakesRemaining === 0 ? 1 : 0,
+      total: 1,
+    });
+  }
+
+  const booksRead = (dailyMission?.books_read_ids || []).length;
+  if (dailyMission) {
+    addMissionRow({ star: 5, label: 'อ่านหนังสือ 1 เล่ม', done: Math.min(1, booksRead), total: 1 });
   }
 
   const handleBottomNav = (action) => {
@@ -343,11 +363,11 @@ export default function Dashboard({
               <span className="text-[9px] font-black uppercase tracking-wider text-white/45">ภารกิจวันนี้</span>
               <span className="flex items-center gap-1.5">
                 {missionCollapsed && (
-                  <span className="flex items-center gap-0.5" aria-label="สถานะดาวภารกิจ 3 ดวง">
-                    {getDailyMissionCompletion(dailyMission).map((completed, index) => (
+                  <span className="flex items-center gap-0.5" aria-label="สถานะดาวภารกิจประจำวัน">
+                    {missionRows.map((mission) => (
                       <span
-                        key={index}
-                        className={`text-base leading-none ${completed ? 'text-amber-300 drop-shadow-[0_0_5px_rgba(251,191,36,0.9)]' : 'text-white/20 grayscale'}`}
+                        key={mission.star}
+                        className={`text-base leading-none ${mission.unavailable ? 'text-white/15 line-through grayscale' : mission.completed ? 'text-amber-300 drop-shadow-[0_0_5px_rgba(251,191,36,0.9)]' : 'text-white/20 grayscale'}`}
                       >
                         ★
                       </span>
@@ -371,16 +391,16 @@ export default function Dashboard({
                 {missionRows.map((mission) => (
                   <span key={mission.star} className="flex items-center gap-1 rounded-xl bg-white/[0.06] px-1 py-1.5">
                     <span
-                      className={`w-5 shrink-0 text-lg leading-none ${mission.completed ? 'text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.95)]' : 'text-white/20 grayscale'}`}
+                      className={`w-5 shrink-0 text-lg leading-none ${mission.unavailable ? 'text-white/15 line-through grayscale' : mission.completed ? 'text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.95)]' : 'text-white/20 grayscale'}`}
                       aria-label={`ดาวดวงที่ ${mission.star}${mission.completed ? ' สำเร็จแล้ว' : ''}`}
                     >
                       ★
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center justify-between gap-2 text-[10px] font-black leading-none">
-                        <span className="truncate text-white/75">{mission.label}</span>
+                        <span className={`truncate text-white/75 ${mission.unavailable ? 'line-through opacity-50' : ''}`}>{mission.label}</span>
                         <span className={mission.completed ? 'text-amber-300' : 'text-white/50'}>
-                          {mission.waiting ? 'รอเปิด Level' : `${mission.done}/${mission.total}`}
+                          {mission.unavailable ? 'ไม่มีกุญแจ' : mission.statusText || (mission.waiting ? 'รอเปิด Level' : `${mission.done}/${mission.total}`)}
                         </span>
                       </span>
                       <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-white/10">

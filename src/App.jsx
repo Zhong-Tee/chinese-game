@@ -16,7 +16,6 @@ import DifficultySelect from './components/DifficultySelect';
 import BattleGame from './components/BattleGame';
 import Shop from './components/Shop';
 import LuckyDraw from './components/LuckyDraw';
-import LevelPlayPrompt from './components/LevelPlayPrompt';
 import {
   SCHEDULED_LEVEL_KEYS,
   EMPTY_LEVEL_KEYS,
@@ -25,7 +24,7 @@ import {
   consumeLevelKey,
 } from './utils/levelScheduleMeta';
 import AdminPanel from './components/AdminPanel';
-import { fetchDailyMissionConfig, fetchTodayMission, initializeTodayMission, localDateKey, recordDailyWordResult, startDailyReviewMission, syncTodayMissionProgress } from './utils/dailyMissionStorage';
+import { fetchDailyMissionConfig, initializeTodayMission, localDateKey, recordDailyWordResult, startDailyReviewMission, syncTodayMissionProgress } from './utils/dailyMissionStorage';
 import { saveWrongWord } from './utils/wrongWordsStorage';
 import { createFlashcardSessionTracker, recordFlashcardWrongAnswer } from './utils/flashcardStatsStorage';
 import { getGameState, addCurrency, getExpForLevel, getStageProgress, saveStageProgress, getSfxMap } from './utils/gameStorage';
@@ -124,8 +123,6 @@ export default function App() {
 
   // Daily new-words popup
   const [dailyNewWords, setDailyNewWords] = useState(null);
-  const [dailyMissionNotice, setDailyMissionNotice] = useState(null);
-  const [levelPlayPrompt, setLevelPlayPrompt] = useState(null);
 
   // UI States
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -166,40 +163,10 @@ export default function App() {
         setPage('dashboard');
         fetchInitialData(session.user.id);
         fetchUserSettings(session.user.id);
-        const newWords = await checkAndAddDailyWords(session.user.id);
-        if (newWords && newWords.length > 0) setDailyNewWords(newWords);
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // กรณีเพิ่มคำของวันนี้ไปแล้วก่อนอัปเดตแอป: ยังแสดง Popup ภารกิจให้ 1 ครั้งต่อวัน
-  useEffect(() => {
-    if (!user?.id || page !== 'dashboard' || dailyNewWords || dailyMissionNotice) return undefined;
-    const noticeKey = `daily-new-words-mission-notice:${user.id}:${localDateKey()}`;
-    if (localStorage.getItem(noticeKey) === 'shown') return undefined;
-    let alive = true;
-    const timerId = setTimeout(async () => {
-      try {
-        const mission = await fetchTodayMission(user.id).catch(() => null);
-        let addedCount = (mission?.new_word_ids || []).length;
-        if (addedCount <= 0) {
-          const { data: settings } = await supabase.from('user_settings')
-            .select('last_daily_words_date').eq('user_id', user.id).maybeSingle();
-          if (settings?.last_daily_words_date === localDateKey()) {
-            const config = await fetchDailyMissionConfig().catch(() => ({ new_words_target: 5 }));
-            addedCount = Math.max(1, Number(config.new_words_target) || 5);
-          }
-        }
-        if (!alive || addedCount <= 0) return;
-        localStorage.setItem(noticeKey, 'shown');
-        setDailyMissionNotice({ addedCount });
-      } catch (error) {
-        console.error('load daily mission notice:', error);
-      }
-    }, 700);
-    return () => { alive = false; clearTimeout(timerId); };
-  }, [user?.id, page, dailyNewWords, dailyMissionNotice]);
 
   // --- 1.5 ปุ่มย้อนกลับ (มือถือ/เบราว์เซอร์) ให้ย้อนหน้าภายในแอพ ---
   // ฟัง popstate: เมื่อกด back ให้เปลี่ยน page กลับไปหน้าที่บันทึกไว้ใน history
@@ -430,6 +397,17 @@ export default function App() {
       return null;
     }
   };
+
+  // เพิ่มคำใหม่และแสดง Popup เฉพาะเมื่อผู้ใช้ตั้งใจเข้าเมนู Flash Cards
+  useEffect(() => {
+    if (!user?.id || page !== 'fc-chars') return undefined;
+    let alive = true;
+    checkAndAddDailyWords(user.id).then((newWords) => {
+      if (alive && newWords?.length) setDailyNewWords(newWords);
+    });
+    return () => { alive = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, user?.id]);
 
   const toggleWordSelection = async (cardId) => {
     const isAlreadySelected = selectedIds.includes(cardId);
@@ -1066,46 +1044,11 @@ export default function App() {
     return isKeyLevelPlayableToday(lv, levelKeys);
   };
 
-  const showLevelPlayPromptOnce = useCallback(() => {
-    if (!user?.id) return;
-    const noticeKey = `daily-unlocked-level-notice:${user.id}:${localDateKey()}`;
-    if (localStorage.getItem(noticeKey) === 'shown') return;
-
-    const playable = SCHEDULED_LEVEL_KEYS
-      .map((key) => Number(key))
-      .filter((lv) => checkLevelAvailable(lv));
-    if (playable.length === 0) return;
-
-    // บันทึกทันทีที่แสดง เพื่อไม่ให้เปิดแอปใหม่แล้ว Popup เด้งซ้ำในวันเดียวกัน
-    localStorage.setItem(noticeKey, 'shown');
-    setLevelPlayPrompt(playable);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, levelKeys]);
-
   const handleDailyWordsConfirm = useCallback(() => {
-    const addedCount = dailyNewWords?.length || 0;
     setDailyNewWords(null);
     if (user?.id) fetchInitialData(user.id);
-    const noticeKey = user?.id
-      ? `daily-new-words-mission-notice:${user.id}:${localDateKey()}`
-      : '';
-    const alreadyShown = noticeKey && localStorage.getItem(noticeKey) === 'shown';
-    if (noticeKey) localStorage.setItem(noticeKey, 'shown');
-    if (alreadyShown) showLevelPlayPromptOnce();
-    else setDailyMissionNotice({ addedCount });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, dailyNewWords, showLevelPlayPromptOnce]);
-
-  const handleDailyMissionNoticeConfirm = useCallback(() => {
-    setDailyMissionNotice(null);
-    showLevelPlayPromptOnce();
-  }, [showLevelPlayPromptOnce]);
-
-  const handlePlayLevelFromPrompt = useCallback(async (level) => {
-    setLevelPlayPrompt(null);
-    await startLevelGame(level);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.id]);
 
   const handleLogout = async () => {
     try {
@@ -1146,7 +1089,7 @@ export default function App() {
   if (page === 'login') {
     return (
       <div className="app-shell app-shell--scroll bg-slate-100">
-        <Login setPage={setPage} setUser={setUser} fetchInitialData={fetchInitialData} fetchUserSettings={fetchUserSettings} checkAndAddDailyWords={checkAndAddDailyWords} setDailyNewWords={setDailyNewWords} />
+        <Login setPage={setPage} setUser={setUser} fetchInitialData={fetchInitialData} fetchUserSettings={fetchUserSettings} />
       </div>
     );
   }
@@ -1280,55 +1223,11 @@ export default function App() {
                 onClick={handleDailyWordsConfirm}
                 className="w-full bg-orange-600 text-white py-4 rounded-2xl font-black text-lg uppercase italic shadow-lg active:scale-95 transition-all"
               >
-                ยืนยันเข้าเกม!
+                เริ่มเรียน
               </button>
             </div>
           </div>
         </div>
-      )}
-
-      {/* แจ้งภารกิจต่อจากการรับคำศัพท์ประจำวัน */}
-      {dailyMissionNotice && (
-        <div className="fixed inset-0 z-[109] flex items-center justify-center bg-slate-950/85 p-4">
-          <div className="w-full max-w-sm overflow-hidden rounded-3xl border-2 border-amber-300 bg-slate-900 text-white shadow-2xl">
-            <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-6 text-center">
-              <div className="mb-2 text-6xl drop-shadow-lg">⭐</div>
-              <h2 className="text-2xl font-black uppercase italic">ภารกิจประจำวัน</h2>
-            </div>
-            <div className="space-y-4 px-6 py-5 text-center">
-              <p className="text-base font-black text-amber-300">
-                เล่นคำศัพท์ใหม่ {dailyMissionNotice.addedCount} คำให้ไปถึง Level 3
-              </p>
-              <p className="text-sm leading-relaxed text-white/70">
-                เล่นคำใหม่ที่เพิ่งได้รับให้สำเร็จครบทุกคำ เมื่อคำทั้งหมดขึ้นถึง Level 3 จะได้รับดาวภารกิจดวงแรก
-              </p>
-              <div className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 py-3">
-                <span className="text-2xl text-white/20">★</span>
-                <span className="text-2xl text-white/20">★</span>
-                <span className="text-2xl text-white/20">★</span>
-                <span className="ml-2 text-xs font-black text-white/50">0 / 3 ดาว</span>
-              </div>
-            </div>
-            <div className="px-5 pb-5">
-              <button
-                type="button"
-                onClick={handleDailyMissionNoticeConfirm}
-                className="w-full rounded-2xl bg-amber-400 py-4 text-lg font-black uppercase italic text-slate-900 shadow-lg active:scale-95 transition-all"
-              >
-                รับภารกิจ!
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {levelPlayPrompt && (
-        <LevelPlayPrompt
-          levels={levelPlayPrompt}
-          levelCounts={levelCounts}
-          onPlayLevel={handlePlayLevelFromPrompt}
-          onDismiss={() => setLevelPlayPrompt(null)}
-        />
       )}
 
       {/* Toast: ได้รับ Coin */}

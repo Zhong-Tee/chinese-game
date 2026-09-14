@@ -484,7 +484,17 @@ export default function Statistics({ user, setPage }) {
                   done: (dailyMission.matching_completed_ids || []).length,
                   total: (dailyMission.matching_card_ids || []).length || Number(dailyMission.config_snapshot?.match_words_target) || 10,
                 },
-              ].map((mission) => {
+                dailyMission.mistakes_required ? {
+                  icon: '🧹', title: 'เคลียร์คำผิดบ่อยให้เหลือ 0',
+                  done: Number(dailyMission.mistakes_remaining || 0) === 0 ? 1 : 0,
+                  total: 1,
+                } : null,
+                {
+                  icon: '📖', title: 'อ่านหนังสือให้จบ 1 เล่ม',
+                  done: Math.min(1, (dailyMission.books_read_ids || []).length),
+                  total: 1,
+                },
+              ].filter(Boolean).map((mission) => {
                 const complete = mission.total > 0 && mission.done >= mission.total;
                 const percent = mission.total > 0 ? Math.min(100, Math.round((mission.done / mission.total) * 100)) : 0;
                 return (
@@ -492,7 +502,7 @@ export default function Statistics({ user, setPage }) {
                     <div className="flex items-center justify-between gap-3">
                       <div className="font-black text-slate-800"><span className="mr-2">{mission.icon}</span>{mission.title}</div>
                       <div className={`font-black whitespace-nowrap ${complete ? 'text-emerald-600' : 'text-orange-500'}`}>
-                        {mission.waiting ? 'รอเปิด Level' : `${mission.done}/${mission.total}`}
+                        {mission.statusText || (mission.waiting ? 'รอเปิด Level' : `${mission.done}/${mission.total}`)}
                       </div>
                     </div>
                     <div className="h-2 rounded-full bg-slate-200 overflow-hidden mt-3">
