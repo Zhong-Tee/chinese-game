@@ -98,12 +98,17 @@ function Reader({ book, onClose, canSeeCost }) {
 
   return (
     <div className="fixed inset-0 z-[120] flex flex-col bg-[#FBF4E6] text-slate-800">
-      <header className="flex items-center gap-2 border-b border-orange-200 bg-white/95 px-3 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] shadow-sm backdrop-blur">
-        <button type="button" onClick={onClose} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-2xl font-black" aria-label="ปิดหนังสือ">×</button>
-        <div className="min-w-0 flex-1"><div className="truncate text-sm font-black text-slate-900">{book.title_cn}</div><div className="text-[10px] font-bold text-slate-400">หน้า {pageIndex + 1} / {pages.length}</div></div>
-        <button type="button" onClick={() => saveToggle('book-reader-pinyin', setShowPinyin)} className={`h-10 rounded-xl px-3 text-xs font-black ${showPinyin ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-500'}`}>拼 Pinyin</button>
-        <button type="button" onClick={() => changeFont(-1)} disabled={fontIndex === 0} className="h-10 w-10 rounded-xl bg-slate-100 font-black disabled:opacity-30">A−</button>
-        <button type="button" onClick={() => changeFont(1)} disabled={fontIndex === FONT_SIZES.length - 1} className="h-10 w-10 rounded-xl bg-slate-100 text-lg font-black disabled:opacity-30">A+</button>
+      <header className="flex flex-col gap-2 border-b border-orange-200 bg-white/95 px-3 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] shadow-sm backdrop-blur sm:flex-row sm:items-center">
+        <div className="flex w-full min-w-0 items-center gap-2">
+          <button type="button" onClick={onClose} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-2xl font-black" aria-label="ปิดหนังสือ">×</button>
+          <div className="min-w-0 flex-1"><div className="truncate text-sm font-black text-slate-900">{book.title_cn}</div><div className="text-[10px] font-bold text-slate-400">หน้า {pageIndex + 1} / {pages.length}</div></div>
+        </div>
+        <div className="grid w-full shrink-0 grid-cols-4 gap-2 sm:w-auto">
+          <button type="button" onClick={() => saveToggle('book-reader-pinyin', setShowPinyin)} aria-pressed={showPinyin} className={`h-10 rounded-xl px-2 text-xs font-black ${showPinyin ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-500'}`}>拼 Pinyin</button>
+          <button type="button" onClick={() => saveToggle('book-reader-thai', setShowThai)} aria-pressed={showThai} className={`h-10 rounded-xl px-2 text-xs font-black ${showThai ? 'bg-cyan-500 text-white' : 'bg-slate-100 text-slate-500'}`}>ไทย</button>
+          <button type="button" onClick={() => changeFont(-1)} disabled={fontIndex === 0} className="h-10 rounded-xl bg-slate-100 font-black disabled:opacity-30" aria-label="ลดขนาดอักษร">A−</button>
+          <button type="button" onClick={() => changeFont(1)} disabled={fontIndex === FONT_SIZES.length - 1} className="h-10 rounded-xl bg-slate-100 text-lg font-black disabled:opacity-30" aria-label="เพิ่มขนาดอักษร">A+</button>
+        </div>
       </header>
       <main className="flex-1 overflow-y-auto px-5 py-6">
         <article className="mx-auto max-w-2xl rounded-[2rem] border border-orange-100 bg-white p-5 shadow-xl sm:p-8">
@@ -119,7 +124,6 @@ function Reader({ book, onClose, canSeeCost }) {
               </div>
             ))}
           </div>
-          <button type="button" onClick={() => saveToggle('book-reader-thai', setShowThai)} className="mt-6 text-xs font-black text-orange-600 underline">{showThai ? 'ซ่อนคำแปลไทย' : 'แสดงคำแปลไทย'}</button>
           {pageIndex === pages.length - 1 && canSeeCost && <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm"><div className="font-black text-emerald-800">ค่าใช้จ่ายในการสร้างเล่มนี้</div><div className="mt-1 font-bold text-emerald-700">{money(book.generation_cost_usd)} · ประมาณ {money(book.generation_cost_thb, 'THB')}</div></div>}
         </article>
       </main>

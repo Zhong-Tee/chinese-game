@@ -1150,7 +1150,7 @@ export default function App() {
       </div>
     );
   }
-  const shouldShowTopBar = page !== 'fc-play' && page !== 'dashboard' && page !== 'lucky-draw' && page !== 'battle' && page !== 'class-schedule';
+  const shouldShowTopBar = page !== 'fc-play' && page !== 'dashboard' && page !== 'lucky-draw' && page !== 'battle' && page !== 'class-schedule' && page !== 'books';
   const isSelectWordsPage = page === 'select-words';
   const isHubPage = page === 'dashboard' || page === 'lucky-draw';
   const isCreamPage = page === 'fc-play' || page === 'fc-chars' || page === 'library' || page === 'books' || page === 'statistics' || page === 'word-match' || page === 'class-schedule';
