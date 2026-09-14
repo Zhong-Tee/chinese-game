@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import SpeakerButton from './SpeakerButton';
+import { cancelChineseSpeech, speakChinese } from '../utils/chineseSpeech';
 
 const CATEGORIES = [
   { id: 'daily-life', label: 'ชีวิตประจำวัน', icon: '🏡' },
@@ -83,8 +83,12 @@ function Reader({ book, onClose, canSeeCost }) {
     return Number.isInteger(stored) && stored >= 0 && stored < FONT_SIZES.length ? stored : 2;
   });
   const [pageIndex, setPageIndex] = useState(0);
+  const [audioMode, setAudioMode] = useState(() => localStorage.getItem('book-reader-audio-mode') || 'manual');
   const pages = Array.isArray(book.pages) ? book.pages : [];
   const page = pages[pageIndex];
+  const speechText = useMemo(() => (page?.paragraphs || [])
+    .map((paragraph) => (paragraph.segments || []).map((segment) => segment.hanzi).join(''))
+    .join(' '), [page]);
   const saveToggle = (key, setter) => setter((value) => { localStorage.setItem(key, String(!value)); return !value; });
   const changeFont = (delta) => setFontIndex((value) => {
     const next = Math.max(0, Math.min(FONT_SIZES.length - 1, value + delta));
@@ -92,8 +96,21 @@ function Reader({ book, onClose, canSeeCost }) {
     return next;
   });
 
+  useEffect(() => {
+    if (audioMode !== 'auto' || !speechText) return undefined;
+    speakChinese(speechText);
+    return undefined;
+  }, [audioMode, pageIndex, speechText]);
+
+  useEffect(() => () => cancelChineseSpeech(), []);
+
+  const selectAudioMode = (mode) => {
+    localStorage.setItem('book-reader-audio-mode', mode);
+    setAudioMode(mode);
+    if (mode === 'manual') speakChinese(speechText);
+  };
+
   if (!page) return null;
-  const speechText = (page.paragraphs || []).map((paragraph) => (paragraph.segments || []).map((segment) => segment.hanzi).join('')).join(' ');
   const showContentImage = book.content_image_url && pageIndex === Number(book.content_image_page ?? Math.floor(pages.length / 2));
 
   return (
@@ -112,7 +129,13 @@ function Reader({ book, onClose, canSeeCost }) {
       </header>
       <main className="flex-1 overflow-y-auto px-5 py-6">
         <article className="mx-auto max-w-2xl rounded-[2rem] border border-orange-100 bg-white p-5 shadow-xl sm:p-8">
-          <div className="mb-5 flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-wider text-orange-500">บทที่ {pageIndex + 1}</p><h2 className="mt-1 text-2xl font-black text-slate-900">{page.heading || book.title_cn}</h2></div><SpeakerButton text={speechText} label="ฟังเนื้อหาหน้านี้" className="h-11 w-11 shrink-0" /></div>
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0"><p className="text-xs font-black uppercase tracking-wider text-orange-500">บทที่ {pageIndex + 1}</p><h2 className="mt-1 text-2xl font-black text-slate-900">{page.heading || book.title_cn}</h2></div>
+            <div className="grid shrink-0 grid-cols-2 gap-2" role="group" aria-label="โหมดเสียงอ่าน">
+              <button type="button" onClick={() => selectAudioMode('manual')} aria-pressed={audioMode === 'manual'} className={`h-11 rounded-xl border-2 px-3 text-xs font-black transition active:scale-95 ${audioMode === 'manual' ? 'border-orange-500 bg-orange-500 text-white' : 'border-orange-200 bg-white text-orange-600'}`}>🔊 เล่น</button>
+              <button type="button" onClick={() => selectAudioMode('auto')} aria-pressed={audioMode === 'auto'} className={`h-11 rounded-xl border-2 px-3 text-xs font-black transition active:scale-95 ${audioMode === 'auto' ? 'border-cyan-500 bg-cyan-500 text-white' : 'border-cyan-200 bg-white text-cyan-700'}`}>▶️ เล่นอัตโนมัติ</button>
+            </div>
+          </div>
           {showContentImage && <img src={book.content_image_url} alt="ภาพประกอบเนื้อหา" className="mb-6 aspect-[4/3] w-full rounded-2xl object-cover shadow-md" />}
           <div className="space-y-6">
             {(page.paragraphs || []).map((paragraph, paragraphIndex) => (

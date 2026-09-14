@@ -83,6 +83,11 @@ export function preloadChineseSpeech() {
   return getVoicesPromise();
 }
 
+export function cancelChineseSpeech() {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+}
+
 export async function speakChinese(text) {
   const trimmed = text?.trim();
   if (!trimmed || typeof window === 'undefined' || !window.speechSynthesis) return;
@@ -95,6 +100,6 @@ export async function speakChinese(text) {
   const voice = pickChineseVoice(voices);
   if (voice) utterance.voice = voice;
 
-  window.speechSynthesis.cancel();
+  cancelChineseSpeech();
   window.speechSynthesis.speak(utterance);
 }
