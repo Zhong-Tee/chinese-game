@@ -503,14 +503,20 @@ function SfxTab({ notify }) {
   const [sfxRows, setSfxRows] = useState({});
   const [uploading, setUploading] = useState(null);
   const [toggling, setToggling] = useState(null);
+  const [logoEnabled, setLogoEnabled] = useState(true);
+  const [togglingLogo, setTogglingLogo] = useState(false);
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('game_sfx').select('key, audio_url, active');
+    const [{ data }, { data: settings }] = await Promise.all([
+      supabase.from('game_sfx').select('key, audio_url, active'),
+      supabase.from('game_settings').select('word_fighter_logo_enabled').eq('id', 1).maybeSingle(),
+    ]);
     const map = {};
     (data || []).forEach((r) => {
       map[r.key] = { audio_url: r.audio_url, active: r.active !== false };
     });
     setSfxRows(map);
+    setLogoEnabled(settings?.word_fighter_logo_enabled !== false);
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -551,11 +557,40 @@ function SfxTab({ notify }) {
     notify(nextActive ? 'เปิดใช้งานเสียงแล้ว' : 'ปิดใช้งานเสียงแล้ว');
   };
 
+  const toggleLogo = async () => {
+    const nextEnabled = !logoEnabled;
+    setTogglingLogo(true);
+    const { error } = await supabase.from('game_settings')
+      .update({ word_fighter_logo_enabled: nextEnabled, updated_at: new Date().toISOString() })
+      .eq('id', 1);
+    setTogglingLogo(false);
+    if (error) {
+      notify(`บันทึกล้มเหลว: ${error.message}`);
+      return;
+    }
+    setLogoEnabled(nextEnabled);
+    notify(nextEnabled ? 'เปิดโลโก้ Word Fighter แล้ว' : 'ปิดโลโก้ Word Fighter แล้ว');
+  };
+
   return (
     <Section title="เสียง Sound Effects">
       <p className="text-[11px] font-bold text-slate-400 -mt-1">
         ปิดใช้งานแล้วเสียงนั้นจะไม่เล่นในเกม (ต้องอัปโหลดไฟล์ก่อนจึงจะสลับได้)
       </p>
+      <div className="flex items-center justify-between gap-3 rounded-2xl border-2 border-slate-100 bg-slate-50 px-4 py-3">
+        <div>
+          <div className="text-sm font-black text-slate-700">โลโก้ Word Fighter</div>
+          <div className="mt-0.5 text-[10px] font-bold text-slate-400">แสดงบริเวณด้านล่างของหน้า Home</div>
+        </div>
+        <button
+          type="button"
+          onClick={toggleLogo}
+          disabled={togglingLogo}
+          className={`shrink-0 rounded-xl px-4 py-2 text-xs font-black text-white transition active:scale-95 disabled:opacity-50 ${logoEnabled ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-slate-500 hover:bg-slate-600'}`}
+        >
+          {togglingLogo ? '...' : logoEnabled ? 'ใช้งาน' : 'ปิดใช้งาน'}
+        </button>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6">
         {SFX_KEYS.map(({ key, label }) => {
           const row = sfxRows[key];

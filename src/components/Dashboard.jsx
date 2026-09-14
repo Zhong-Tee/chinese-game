@@ -56,7 +56,17 @@ export default function Dashboard({
   const [luckyPending, setLuckyPending] = useState(false);
   const [dailyMission, setDailyMission] = useState(null);
   const [missionToast, setMissionToast] = useState(null);
-  const [missionCollapsed, setMissionCollapsed] = useState(false);
+  const [missionCollapsed, setMissionCollapsed] = useState(true);
+  const [showWordFighterLogo, setShowWordFighterLogo] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    supabase.from('game_settings').select('word_fighter_logo_enabled').eq('id', 1).maybeSingle()
+      .then(({ data }) => {
+        if (alive) setShowWordFighterLogo(data?.word_fighter_logo_enabled !== false);
+      });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -422,12 +432,14 @@ export default function Dashboard({
       <div className="hub-main-stage relative z-10 flex-1 min-h-0">
         {/* Lucky Draw + โลโก้ — มุมซ้ายล่าง ไม่บังตัวละครกลางจอ */}
         <div className="hub-lucky-anchor pointer-events-auto">
-          <img
-            src={gameLogoImg}
-            alt="Word Fighter"
-            className="hub-lucky-logo pointer-events-none select-none"
-            draggable={false}
-          />
+          {showWordFighterLogo && (
+            <img
+              src={gameLogoImg}
+              alt="Word Fighter"
+              className="hub-lucky-logo pointer-events-none select-none"
+              draggable={false}
+            />
+          )}
           <HubLevelScheduleBar
             schedules={schedules}
             levelKeys={levelKeys}
