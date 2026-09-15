@@ -79,21 +79,14 @@ export function generateStage2(level = 1, rng = Math.random) {
   const second = int(rng, Math.max(3, toTen + 1), 9);
   const rest = second - toTen;
   if (level === 1) {
-    const bridgeFirst = int(rng, 5, 9);
-    const bridgeToTen = 10 - bridgeFirst;
-    // ใช้จำนวนตั้งแต่ 8 และไม่ต่ำกว่าสองเท่าของส่วนแรก เพื่อให้มีคู่ไม่กลับด้านอย่างน้อย 4 คู่
-    const bridgeSecond = int(rng, Math.max(8, bridgeToTen * 2), 10);
-    const splitOptions = Array.from({ length: Math.floor(bridgeSecond / 2) }, (_, index) => index + 1)
-      .filter(value => value !== bridgeToTen)
-      .sort(() => rng() - 0.5)
-      .slice(0, 3);
-    const choices = [bridgeToTen, ...splitOptions].sort(() => rng() - 0.5);
-    const choiceLabels = Object.fromEntries(choices.map(value => [value, `${bridgeSecond} = ${value} + ${bridgeSecond - value}`]));
-    return question({ stage: 2, level, skill: 'addition.chooseSplit', prompt: `เลือกวิธีแยก ${bridgeSecond} โดยให้ส่วนแรกช่วยให้ ${bridgeFirst} ครบ 10`, answer: bridgeToTen, rng,
-      customChoices: choices,
-      choiceLabels,
-      visual: { type: 'additionBridge', first: bridgeFirst, second: bridgeSecond },
-      explanation: [`${bridgeFirst} ต้องการอีก ${bridgeToTen} เพื่อให้ครบ 10`, `จึงเลือกแยก ${bridgeSecond} เป็น ${bridgeToTen} กับ ${bridgeSecond - bridgeToTen}`, `${bridgeFirst} + ${bridgeToTen} = 10`, `10 + ${bridgeSecond - bridgeToTen} = ${bridgeFirst + bridgeSecond}`] });
+    const bondFirst = int(rng, 5, 9);
+    const bondToTen = 10 - bondFirst;
+    // ตัวที่สองต้องมากกว่าส่วนที่ใช้เติมให้ครบ 10 เพื่อให้แยกได้สองส่วนที่เป็นจำนวนบวกทั้งคู่
+    const bondSecond = int(rng, bondToTen + 1, 9);
+    const bondRest = bondSecond - bondToTen;
+    return question({ stage: 2, level, skill: 'addition.makeTenBond', prompt: `${bondFirst} + ${bondSecond} = ?\nแยก ${bondSecond} ออกเป็น 2 ส่วน`, answer: bondToTen, rng,
+      visual: { type: 'makeTenBond', first: bondFirst, second: bondSecond, toTen: bondToTen },
+      explanation: [`กรอบ 10 ช่องมี ${bondFirst} แล้ว ว่างอีก ${bondToTen} ช่อง`, `จึงแยก ${bondSecond} เป็น ${bondToTen} กับ ${bondRest}`, `${bondFirst} + ${bondToTen} = 10`, `10 + ${bondRest} = ${bondFirst + bondSecond}`], inputMode: 'bond-split' });
   }
   if (level === 2) {
     return question({ stage: 2, level, skill: 'addition.splitNumber', prompt: `แยก ${second} ออกเป็น 2 ส่วน`, answer: rest, rng,

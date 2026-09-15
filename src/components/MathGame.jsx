@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import MathVisual from './MathVisual';
 import MathSplitAnswer from './MathSplitAnswer';
+import MathMakeTenBond from './MathMakeTenBond';
 import MathSubtractionSplit from './MathSubtractionSplit';
 import MathBorrowingSplit from './MathBorrowingSplit';
 import { buildDailyTraining } from '../utils/math/dailyTraining';
@@ -105,7 +106,10 @@ export default function MathGame({ user, config, onExit, onReward }) {
 
       <section className="mt-4 rounded-[2rem] bg-white p-5 shadow-xl">
         <h1 className="whitespace-pre-line text-center text-2xl font-black leading-snug text-slate-800">{question.prompt}</h1>
-        {!['split-two', 'subtraction-split', 'borrowing-split'].includes(question.inputMode) && <MathVisual visual={question.visual} />}
+        {!['bond-split', 'split-two', 'subtraction-split', 'borrowing-split'].includes(question.inputMode) && <MathVisual visual={question.visual} />}
+        {!feedback && question.inputMode === 'bond-split' && (
+          <MathMakeTenBond key={question.id} visual={question.visual} answer={question.answer} onSubmit={submit} />
+        )}
         {!feedback && question.inputMode === 'split-two' && (
           <MathSplitAnswer
             key={question.id}
@@ -172,7 +176,9 @@ export default function MathGame({ user, config, onExit, onReward }) {
             <h2 className="text-center text-xl font-black">{feedback.title}</h2>
             {feedback.type === 'wrong' && <div className="mt-4 space-y-2">{question.explanation.map((step, stepIndex) => <div key={step} className="flex items-center gap-3 rounded-xl bg-white/80 p-3 font-bold"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400 text-white">{stepIndex + 1}</span>{step}</div>)}</div>}
             {feedback.type === 'correct' && (
-              question.inputMode === 'split-two'
+              question.inputMode === 'bond-split'
+                ? <div className="mt-2 text-center font-bold">{question.visual.second} = {question.answer} + {question.visual.second - question.answer}<br />ดังนั้น {question.visual.first} + {question.visual.second} = {question.visual.first + question.visual.second}</div>
+                : question.inputMode === 'split-two'
                 ? <div className="mt-2 text-center font-bold">{question.visual.target ?? 10} + {question.answer} = {question.visual.first + question.visual.second}<br />ดังนั้น {question.visual.first} + {question.visual.second} = {question.visual.first + question.visual.second}</div>
                 : question.inputMode === 'subtraction-split'
                   ? <div className="mt-2 text-center font-bold">{question.visual.base} − {question.visual.subtract} = {question.answer}<br />{question.visual.remainder} + {question.answer} = {question.visual.finalAnswer}</div>

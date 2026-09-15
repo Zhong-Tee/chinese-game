@@ -90,21 +90,6 @@ function MakeTenSplit({ first, second, toTen }) {
   );
 }
 
-function AdditionBridge({ first, second }) {
-  return (
-    <div className="mx-auto max-w-xs text-center">
-      <div className="flex items-center justify-center gap-3 text-3xl font-black">
-        <span className="flex h-20 w-20 items-center justify-center rounded-3xl bg-sky-500 text-white shadow-lg">{first}</span>
-        <span className="text-sky-500">+</span>
-        <span className="flex h-20 w-20 items-center justify-center rounded-3xl bg-violet-500 text-white shadow-lg">{second}</span>
-      </div>
-      <div className="mt-4 rounded-2xl bg-white px-3 py-2 text-sm font-bold text-slate-600">
-        ส่วนแรกต้องนำไปบวกกับ {first} แล้วได้ 10
-      </div>
-    </div>
-  );
-}
-
 function SubtractionBridge({ whole, subtract }) {
   return (
     <div className="mx-auto max-w-xs text-center">
@@ -143,7 +128,6 @@ export default function MathVisual({ visual }) {
       {visual.type === 'sharing' && <Sharing {...visual} />}
       {visual.type === 'numberPair' && <NumberPair {...visual} />}
       {visual.type === 'makeTenSplit' && <MakeTenSplit {...visual} />}
-      {visual.type === 'additionBridge' && <AdditionBridge {...visual} />}
       {visual.type === 'subtractionBridge' && <SubtractionBridge {...visual} />}
       {visual.type === 'borrowingIntro' && <BorrowingIntro {...visual} />}
     </div>

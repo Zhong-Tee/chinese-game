@@ -87,29 +87,25 @@ test('การบวกระดับ 2 แสดงต้นไม้แย�
   }
 });
 
-test('การบวกระดับ 1 ให้เลือกวิธีแยกที่ทำให้ครบ 10 เพียงคำตอบเดียว', () => {
-  const rng = createSeededRandom('addition-bridge');
+test('การบวกระดับ 1 ให้เด็กกรอกการแยกจำนวนเอง และแยกได้สองส่วนเป็นบวกเสมอ', () => {
+  const rng = createSeededRandom('addition-bond');
   for (let index = 0; index < 100; index += 1) {
     const item = generateQuestion(2, 1, rng);
-    assert.equal(item.skill, 'addition.chooseSplit');
-    assert.equal(item.visual.type, 'additionBridge');
-    assert.equal(item.choices.length, 4);
-    assert.equal(item.choices.filter(value => item.visual.first + value === 10).length, 1);
-    assert.equal(new Set(item.choices.map(value => [value, item.visual.second - value].sort((a, b) => a - b).join('+'))).size, 4);
-    assert.ok(!item.choices.includes(item.visual.second - item.answer) || item.visual.second - item.answer === item.answer);
-    item.choices.forEach(value => {
-      assert.equal(value + (item.visual.second - value), item.visual.second);
-      assert.equal(item.choiceLabels[String(value)], `${item.visual.second} = ${value} + ${item.visual.second - value}`);
-    });
+    assert.equal(item.skill, 'addition.makeTenBond');
+    assert.equal(item.inputMode, 'bond-split');
+    assert.equal(item.visual.type, 'makeTenBond');
+    assert.ok(item.visual.first >= 5 && item.visual.first <= 9);
+    assert.equal(item.visual.first + item.visual.toTen, 10);
+    assert.equal(item.answer, item.visual.toTen);
+    assert.ok(item.visual.second - item.visual.toTen > 0);
+    assert.ok(item.visual.first + item.visual.second > 10);
   }
 });
 
-test('การบวกระดับ 1 มีโจทย์ไม่กำกวมครบ 10 ข้อ', () => {
-  const items = generateQuestionSet({ stage: 2, level: 1, count: 10, seed: 'addition-choice-set' });
+test('การบวกระดับ 1 มีโจทย์ไม่ซ้ำครบ 10 ข้อ', () => {
+  const items = generateQuestionSet({ stage: 2, level: 1, count: 10, seed: 'addition-bond-set' });
   assert.equal(items.length, 10);
-  items.forEach(item => {
-    assert.equal(new Set(item.choices.map(value => [value, item.visual.second - value].sort((a, b) => a - b).join('+'))).size, 4);
-  });
+  assert.equal(new Set(items.map(item => `${item.visual.first}+${item.visual.second}`)).size, 10);
 });
 
 test('การลบทั้ง 4 ระดับเรียงจากเลือกวิธี สิบกว่า ยี่สิบกว่า และคิดในใจ', () => {
