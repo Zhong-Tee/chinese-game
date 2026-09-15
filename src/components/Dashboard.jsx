@@ -19,10 +19,10 @@ const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shie
 const MODE_BUTTONS = [
   { page: 'games', label: 'Battle', icon: '⚔️', grad: 'from-red-500 to-red-700' },
   { page: 'library', label: 'Library', icon: '📚', grad: 'from-orange-400 to-orange-600' },
+  { page: 'maths', label: 'Maths', icon: '🧮', grad: 'from-blue-500 to-indigo-700' },
   { page: 'fc-chars', label: 'Flashcards', icon: '🎴', grad: 'from-emerald-400 to-emerald-600' },
   { page: 'statistics', label: 'Stats', icon: '📈', grad: 'from-cyan-400 to-cyan-600' },
   { page: 'shop', label: 'Shop', icon: '🛒', grad: 'from-pink-400 to-pink-600' },
-  { page: 'lucky-draw', label: 'Lucky', icon: '🎁', grad: 'from-purple-400 to-purple-600' },
 ];
 
 const BOTTOM_NAV = [
@@ -512,9 +512,6 @@ export default function Dashboard({
               >
                 <span className="hub-mode-icon drop-shadow-md">{btn.icon}</span>
                 <span className="hub-mode-label drop-shadow">{btn.label}</span>
-                {btn.page === 'lucky-draw' && luckyPending && (
-                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 border border-white animate-pulse" />
-                )}
               </button>
             ))}
           </div>

@@ -16,6 +16,8 @@ import DifficultySelect from './components/DifficultySelect';
 import BattleGame from './components/BattleGame';
 import Shop from './components/Shop';
 import LuckyDraw from './components/LuckyDraw';
+import MathHub from './components/MathHub';
+import MathGame from './components/MathGame';
 import {
   SCHEDULED_LEVEL_KEYS,
   EMPTY_LEVEL_KEYS,
@@ -52,6 +54,7 @@ export default function App() {
   const [activeDifficulty, setActiveDifficulty] = useState('easy'); // ระดับความยากที่เลือก
   const [stageProgress, setStageProgress] = useState({}); // ความคืบหน้าด่าน (ปลดล็อก + เหรียญ แยกตามระดับ)
   const [lastCoinToast, setLastCoinToast] = useState(null);
+  const [mathSession, setMathSession] = useState(null);
 
   const refreshGameState = useCallback(async (userId) => {
     const id = userId || user?.id;
@@ -1096,7 +1099,7 @@ export default function App() {
   const shouldShowTopBar = page !== 'fc-play' && page !== 'dashboard' && page !== 'lucky-draw' && page !== 'battle' && page !== 'class-schedule' && page !== 'books';
   const isSelectWordsPage = page === 'select-words';
   const isHubPage = page === 'dashboard' || page === 'lucky-draw';
-  const isCreamPage = page === 'fc-play' || page === 'fc-chars' || page === 'library' || page === 'books' || page === 'statistics' || page === 'word-match' || page === 'class-schedule';
+  const isCreamPage = page === 'fc-play' || page === 'fc-chars' || page === 'library' || page === 'books' || page === 'statistics' || page === 'word-match' || page === 'class-schedule' || page === 'maths' || page === 'math-play';
 
   return (
     <div
@@ -1301,6 +1304,24 @@ export default function App() {
         {page === 'books' && <Books user={user} isAdmin={isAdmin} setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} />}
         {page === 'word-match' && <WordMatchGame user={user} setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} />}
         {page === 'class-schedule' && <ClassSchedule user={user} setPage={setPage} />}
+        {page === 'maths' && (
+          <MathHub
+            user={user}
+            setPage={setPage}
+            onStart={(config) => { setMathSession({ ...config, seed: Date.now() }); setPage('math-play'); }}
+          />
+        )}
+        {page === 'math-play' && mathSession && (
+          <MathGame
+            user={user}
+            config={mathSession}
+            onExit={() => { setMathSession(null); setPage('maths'); }}
+            onReward={async (exp) => {
+              const updated = await addCurrency({ exp });
+              if (updated) setGameState(updated);
+            }}
+          />
+        )}
         {page === 'score' && <Score user={user} selectedIds={selectedIds} levelCounts={levelCounts} setPage={setPage} />}
         {page === 'statistics' && <Statistics user={user} isAdmin={isAdmin} setPage={setPage} />}
         

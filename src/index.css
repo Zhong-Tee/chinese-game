@@ -10,6 +10,18 @@ body,
   padding: 0;
   overflow: hidden;
   overscroll-behavior: none;
+  background-color: #0a0e1a;
+}
+
+html {
+  min-height: -webkit-fill-available;
+  color-scheme: dark;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
 }
 
 #root {
@@ -20,7 +32,10 @@ body,
 /* App shell — เต็มจอทั้งกว้างและสูง */
 .app-shell {
   width: 100%;
+  height: 100vh;
   height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
   max-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -234,8 +249,8 @@ body,
 
 .hub-mode-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(3, minmax(3.2rem, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(3.2rem, 1fr));
   gap: 0.7rem;
   width: 100%;
   max-height: 100%;
@@ -253,7 +268,7 @@ body,
 }
 
 .hub-mode-label {
-  font-size: 0.625rem;
+  font-size: 0.5625rem;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -401,7 +416,7 @@ body,
 
   .hub-mode-grid {
     gap: 0.8rem;
-    grid-template-rows: repeat(3, minmax(3.5rem, 1fr));
+    grid-template-rows: repeat(2, minmax(3.5rem, 1fr));
   }
 
   .hub-mode-btn-compact {
@@ -413,7 +428,7 @@ body,
   }
 
   .hub-mode-label {
-    font-size: 0.6875rem;
+    font-size: 0.625rem;
   }
 
   .hub-lucky-anchor {
@@ -435,7 +450,7 @@ body,
 
   .hub-mode-grid {
     gap: 0.9rem;
-    grid-template-rows: repeat(3, minmax(3.85rem, 1fr));
+    grid-template-rows: repeat(2, minmax(3.85rem, 1fr));
   }
 
   .hub-mode-btn-compact {
@@ -447,7 +462,7 @@ body,
   }
 
   .hub-mode-label {
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
   }
 
   .hub-lucky-anchor {
@@ -467,7 +482,7 @@ body,
 
   .hub-mode-grid {
     gap: 1rem;
-    grid-template-rows: repeat(3, minmax(4.1rem, 1fr));
+    grid-template-rows: repeat(2, minmax(4.1rem, 1fr));
   }
 
   .hub-mode-btn-compact {
@@ -518,6 +533,8 @@ body,
   background: linear-gradient(180deg, rgba(10, 14, 30, 0.95) 0%, rgba(5, 8, 20, 0.98) 100%);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(16px);
+  /* ให้สีแถบต่อเนื่องผ่าน safe area / Home Indicator ของ iPhone */
+  box-shadow: 0 100px 0 100px #050814;
 }
 
 .hub-fight-btn {

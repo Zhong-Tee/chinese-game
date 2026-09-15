@@ -55,6 +55,13 @@ Deno.serve(async (request) => {
     if (cancelError) throw cancelError;
     if (!canceledBook) return json({ error: 'สถานะหนังสือเปลี่ยนไปแล้ว กรุณารีเฟรชและลองใหม่' }, 409);
 
+    // Stop queued chapter workers. A worker already inside an OpenAI request will
+    // discard its result after it observes the canceled book status.
+    await admin.from('ai_book_generation_jobs')
+      .update({ status: 'canceled', updated_at: new Date().toISOString() })
+      .eq('book_id', bookId)
+      .in('status', ['waiting', 'queued', 'processing', 'failed']);
+
     const { data: files } = await admin.storage.from('book-images').list(bookId, { limit: 100 });
     if (files?.length) await admin.storage.from('book-images').remove(files.map((file) => `${bookId}/${file.name}`));
 

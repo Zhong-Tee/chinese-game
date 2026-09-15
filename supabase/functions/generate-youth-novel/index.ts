@@ -155,6 +155,24 @@ async function removeBookImages(admin: AdminClient, bookId: string) {
   if (files?.length) await admin.storage.from('book-images').remove(files.map((file: JsonObject) => `${bookId}/${file.name}`));
 }
 
+async function dispatchChapterWorker(supabaseUrl: string, serviceKey: string, bookId: string, chapterNumber: number) {
+  let lastError = '';
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(`${supabaseUrl}/functions/v1/generate-youth-novel-worker`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookId, chapterNumber }),
+      });
+      if (response.ok) return;
+      lastError = `Chapter worker dispatch failed (${response.status})`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  throw new Error(lastError || 'Chapter worker dispatch failed');
+}
+
 function pageFromChapter(chapter: JsonObject, imageUrl: string) {
   return {
     heading_cn: chapter.heading_cn, heading_pinyin: chapter.heading_pinyin, heading_thai: chapter.heading_thai,
@@ -170,7 +188,7 @@ async function readerHistory(admin: AdminClient, userId: string) {
   return data || [];
 }
 
-async function processNovel(admin: AdminClient, apiKey: string, book: JsonObject, options: JsonObject, model: string) {
+async function processNovel(admin: AdminClient, apiKey: string, book: JsonObject, options: JsonObject, model: string, supabaseUrl: string, serviceKey: string) {
   const bookId = book.id;
   const userId = book.creator_id;
   const exchangeRate = Number(Deno.env.get('USD_THB_RATE') || 34);
@@ -184,10 +202,14 @@ async function processNovel(admin: AdminClient, apiKey: string, book: JsonObject
   };
   try {
     const history = options.useReaderProfile ? await readerHistory(admin, userId) : [];
+    const protectedNames = [options.protagonist, options.companion].filter(Boolean);
+    const protectedNameRule = protectedNames.length
+      ? `Protected character names: ${JSON.stringify(protectedNames)}. Preserve every protected name exactly as typed, including its original script, spelling, capitalization, spacing, and punctuation. Never translate, transliterate, localize, or invent a Chinese alias for it. In a segment containing a protected name, keep the exact name in hanzi and repeat that same exact name in pinyin instead of inventing Chinese characters or pronunciation.`
+      : '';
     const designInput = `Design one complete, original, bookstore-quality Chinese youth novel for a Thai learner. Exactly 8 chapters and one-volume ending.
 Reader age: ${options.age}. Chinese level: ${LEVELS[book.language_level]}. Primary genre: ${GENRES[options.primaryGenre]}. Secondary genre: ${GENRES[options.secondaryGenre] || 'none'}.
 Primary tone: ${options.primaryTone}. Secondary tone: ${options.secondaryTone || 'none'}. Interests: ${options.interests.join(', ')}.
-Optional protagonist: ${options.protagonist || 'invent one'}. Optional companion: ${options.companion || 'invent if useful'}. Setting: ${options.setting || 'invent one'}.
+Optional protagonist name: ${options.protagonist || 'invent one'}. Optional companion name: ${options.companion || 'invent if useful'}. ${protectedNameRule} Setting: ${options.setting || 'invent one'}.
 Requested idea: ${book.topic || 'invent an engaging premise'}. Exclude: ${options.exclusions || 'graphic violence, horror, adult content, real private information'}.
 Past completed-book signals (use lightly; keep 25% novelty): ${JSON.stringify(history)}.
 Every chapter plan must include Goal → Conflict → Discovery → Emotion → Hook. Resolve the central plot in chapter 8 without preaching. Use natural dialogue, character flaws, humor, curiosity, show-don't-tell, and child-safe stakes. Visual bible must lock character appearance, clothing, palette, and illustration style. Image prompts are English only, with no text, letters, logos, or copyrighted characters.`;
@@ -204,7 +226,7 @@ Every chapter plan must include Goal → Conflict → Discovery → Emotion → 
 
     const writePrompt = (plans: JsonObject[]) => `Write the requested chapters of this Chinese youth novel for Thai learners. Story design: ${JSON.stringify(design)}.
 Requested chapter plans: ${JSON.stringify(plans)}. Chinese level: ${LEVELS[book.language_level]}. Reader age: ${options.age}.
-Each chapter should feel like polished youth fiction, approximately 450–750 Chinese characters depending on the learner level. Preserve continuity. Use natural segmented Chinese with accurate tone-marked Hanyu Pinyin and a natural Thai translation for every paragraph. End each chapter with its planned hook except chapter 8, which resolves the story. Each English image_prompt must depict the single most important visual scene and repeat exact character appearance from the visual bible. No text or watermark in images.`;
+${protectedNameRule} Each chapter should feel like polished youth fiction, approximately 450–750 Chinese characters depending on the learner level. Preserve continuity. Use natural segmented Chinese with accurate tone-marked Hanyu Pinyin and a natural Thai translation for every paragraph. End each chapter with its planned hook except chapter 8, which resolves the story. Each English image_prompt must depict the single most important visual scene and repeat exact character appearance from the visual bible. No text or watermark in images.`;
     const chapterOneResponse = await structuredResponse(apiKey, model, 'youth_novel_chapter_1', chaptersSchema(1),
       'You are an award-winning Chinese youth-novel writer and expert Thai translator. Return only schema-valid data.', writePrompt([design.chapter_plan[0]]));
     await addTextUsage('novel_write_chapter_1', chapterOneResponse);
@@ -213,7 +235,7 @@ Each chapter should feel like polished youth fiction, approximately 450–750 Ch
     const editChapters = async (chapters: JsonObject[], operation: string) => {
       const response = await structuredResponse(apiKey, model, `youth_novel_editor_${chapters.length}`, editorialSchema(chapters.length),
         'You are an independent senior youth-fiction editor and critic. Return revised, publication-ready chapters plus honest scores. Preserve schema, Chinese level, pinyin, Thai meaning, facts, and continuity.',
-        `Edit and score these chapters: ${JSON.stringify(chapters)}. Story bible: ${JSON.stringify(design.story_bible)}. Score Opening Hook, Curiosity, Character, Conflict, Pacing, Dialogue, Emotion, Show Don't Tell, Age Appropriate, and Ending Hook. PASS when overall quality is at least 8.5; EDIT at 7.5–8.4; REWRITE below 7.5. Fix weak passages directly, not just notes.`);
+        `Edit and score these chapters: ${JSON.stringify(chapters)}. Story bible: ${JSON.stringify(design.story_bible)}. ${protectedNameRule} Score Opening Hook, Curiosity, Character, Conflict, Pacing, Dialogue, Emotion, Show Don't Tell, Age Appropriate, and Ending Hook. PASS when overall quality is at least 8.5; EDIT at 7.5–8.4; REWRITE below 7.5. Fix weak passages directly, not just notes.`);
       await addTextUsage(operation, response);
       return JSON.parse(outputText(response));
     };
@@ -237,38 +259,16 @@ Each chapter should feel like polished youth fiction, approximately 450–750 Ch
     await admin.from('ai_books').update({
       pages: [pageFromChapter(chapterOne[0], chapterOneImageUrl)], cover_url: coverUrl, status: 'partial', editorial_scores: editedOne.reviews,
       generation_cost_usd: totalUsd, generation_cost_thb: totalUsd * exchangeRate,
-      generation_progress: { stage: 'writing_remaining', completed_chapters: 1, target_chapters: 8, message_th: 'บทที่ 1 พร้อมอ่าน กำลังเขียนบทที่ 2–8' }, updated_at: new Date().toISOString(),
+      generation_progress: { stage: 'chapter_ready', completed_chapters: 1, target_chapters: 8, active_chapter: 2, message_th: 'บทที่ 1 พร้อมอ่าน กำลังเตรียมบทที่ 2' }, updated_at: new Date().toISOString(),
     }).eq('id', bookId).neq('status', 'canceled');
-
-    const remainingResponse = await structuredResponse(apiKey, model, 'youth_novel_chapters_2_8', chaptersSchema(7),
-      'You are an award-winning Chinese youth-novel writer and expert Thai translator. Return only schema-valid data.', writePrompt(design.chapter_plan.slice(1)));
-    await addTextUsage('novel_write_chapters_2_8', remainingResponse);
-    let remaining = JSON.parse(outputText(remainingResponse)).chapters;
-    let editedRemaining = await editChapters(remaining, 'novel_edit_chapters_2_8_round_1');
-    if (editedRemaining.reviews.some((review: JsonObject) => review.verdict !== 'PASS') && totalUsd * exchangeRate < hardLimitThb * 0.72) {
-      editedRemaining = await editChapters(editedRemaining.chapters, 'novel_edit_chapters_2_8_round_2');
-    }
-    remaining = editedRemaining.chapters;
-    await ensureActive(admin, bookId);
-    await admin.from('ai_books').update({
-      generation_progress: { stage: 'illustrating', completed_chapters: 1, target_chapters: 8, message_th: 'กำลังวาดภาพประกอบบทที่ 2–8' }, updated_at: new Date().toISOString(),
-    }).eq('id', bookId);
-
-    const imageResults = await Promise.all(remaining.map((chapter: JsonObject) => callOpenAI('images/generations', apiKey, {
-      model: IMAGE_MODEL, prompt: `${chapter.image_prompt}. ${design.visual_bible}. Premium youth-novel interior illustration, consistent recurring characters, no text, no letters, no logo, no watermark.`,
-      size: '1536x1024', quality: 'medium', output_format: 'png',
-    })));
-    for (let index = 0; index < imageResults.length; index += 1) await addImageUsage(`novel_chapter_${index + 2}_image`, imageResults[index]);
-    const imageUrls = await Promise.all(imageResults.map((result, index) => uploadImage(admin, bookId, `chapter-${index + 2}`, result.data?.[0]?.b64_json)));
-    await ensureActive(admin, bookId);
-    const pages = [pageFromChapter(chapterOne[0], chapterOneImageUrl), ...remaining.map((chapter: JsonObject, index: number) => pageFromChapter(chapter, imageUrls[index]))];
-    const reviews = [...editedOne.reviews, ...editedRemaining.reviews].sort((a, b) => Number(a.chapter_number) - Number(b.chapter_number));
-    const { error: readyError } = await admin.from('ai_books').update({
-      pages, editorial_scores: reviews, status: 'ready', generation_cost_usd: totalUsd, generation_cost_thb: totalUsd * exchangeRate, exchange_rate: exchangeRate,
-      generation_progress: { stage: 'complete', completed_chapters: 8, target_chapters: 8, message_th: 'นิยายพร้อมอ่านทั้งเล่ม' },
-      published_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-    }).eq('id', bookId).neq('status', 'canceled');
-    if (readyError) throw readyError;
+    const jobs = Array.from({ length: 7 }, (_, index) => ({
+      book_id: bookId,
+      chapter_number: index + 2,
+      status: index === 0 ? 'queued' : 'waiting',
+    }));
+    const { error: jobsError } = await admin.from('ai_book_generation_jobs').insert(jobs);
+    if (jobsError) throw jobsError;
+    await dispatchChapterWorker(supabaseUrl, serviceKey, bookId, 2);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('generate-youth-novel background:', message);
@@ -333,7 +333,7 @@ Deno.serve(async (request) => {
       generation_progress: { stage: 'queued', completed_chapters: 0, target_chapters: 8, message_th: 'กำลังเตรียมออกแบบนิยาย' },
     }).select().single();
     if (createError) throw createError;
-    const task = processNovel(admin, apiKey, book, sanitized, model);
+    const task = processNovel(admin, apiKey, book, sanitized, model, supabaseUrl, serviceKey);
     const edgeRuntime = (globalThis as unknown as { EdgeRuntime?: { waitUntil: (promise: Promise<unknown>) => void } }).EdgeRuntime;
     if (edgeRuntime?.waitUntil) {
       edgeRuntime.waitUntil(task);

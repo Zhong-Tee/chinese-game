@@ -88,18 +88,23 @@ export function cancelChineseSpeech() {
   window.speechSynthesis.cancel();
 }
 
-export async function speakChinese(text) {
+export async function speakChinese(text, options = {}) {
   const trimmed = text?.trim();
-  if (!trimmed || typeof window === 'undefined' || !window.speechSynthesis) return;
+  if (!trimmed || typeof window === 'undefined' || !window.speechSynthesis) return null;
 
   const voices = await getVoicesPromise();
+  if (options.shouldSpeak && !options.shouldSpeak()) return null;
   const utterance = new SpeechSynthesisUtterance(trimmed);
   utterance.lang = 'zh-CN';
   utterance.rate = getSpeechRate();
+  if (options.onStart) utterance.onstart = options.onStart;
+  if (options.onEnd) utterance.onend = options.onEnd;
+  if (options.onError) utterance.onerror = options.onError;
 
   const voice = pickChineseVoice(voices);
   if (voice) utterance.voice = voice;
 
   cancelChineseSpeech();
   window.speechSynthesis.speak(utterance);
+  return utterance;
 }

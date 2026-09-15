@@ -134,7 +134,7 @@ function BookCover({ book, onOpen, isRead = book._isRead || false, canSeeCost = 
         )}
         <span className="absolute left-2 top-2 rounded-full bg-slate-950/75 px-2.5 py-1 text-[10px] font-black text-white backdrop-blur">{isSeriesCollection ? `ซีรีส์ · ${book._seriesEpisodeCount} ตอน` : book.book_format === 'series' ? `ซีรีส์ · ตอน ${book.episode_number || 1}/${book.series_total || 5}` : book.book_format === 'youth_novel' ? 'นิยายเยาวชน · 8 บท' : category.label}</span>
         {isRead && <span className="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-emerald-500 text-lg font-black text-white shadow-lg" aria-label="อ่านจบแล้ว" title="อ่านจบแล้ว">✓</span>}
-        {book.status !== 'ready' && <span className="absolute inset-x-2 bottom-2 rounded-xl bg-amber-400/95 px-2 py-1.5 text-center text-xs font-black text-slate-900">{book.status === 'failed' ? 'สร้างไม่สำเร็จ' : book.generation_progress?.message_th || (book.status === 'partial' ? `พร้อมอ่าน ${book.pages?.length || 1}/8 บท` : 'กำลังสร้าง...')}{isYouthNovel && <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-black/10"><span className="block h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.max(5, (completedChapters / 8) * 100)}%` }} /></span>}</span>}
+        {book.status !== 'ready' && <span className="absolute inset-x-2 bottom-2 rounded-xl bg-amber-400/95 px-2 py-1.5 text-xs font-black text-slate-900"><span className="flex items-center justify-between gap-2"><span className="min-w-0 flex-1 text-center">{book.status === 'failed' ? 'สร้างไม่สำเร็จ' : book.generation_progress?.message_th || (book.status === 'partial' ? `พร้อมอ่าน ${book.pages?.length || 1}/8 บท` : 'กำลังสร้าง...')}</span>{isYouthNovel && <span className="shrink-0 rounded-lg bg-white/70 px-1.5 py-0.5 font-mono text-[10px] text-emerald-800">{Math.min(8, completedChapters)}/8</span>}</span>{isYouthNovel && <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-black/10" role="progressbar" aria-label="ความคืบหน้าการสร้างนิยาย" aria-valuemin="0" aria-valuemax="8" aria-valuenow={Math.min(8, completedChapters)}><span className="block h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.max(5, (completedChapters / 8) * 100)}%` }} /></span>}</span>}
       </div>
       <div className="space-y-1 p-3">
         <h3 className="line-clamp-1 text-base font-black text-slate-900">{book.title_cn || 'หนังสือเล่มใหม่'}</h3>
@@ -237,6 +237,8 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), onSelectEp
   });
   const [pageIndex, setPageIndex] = useState(0);
   const [audioMode, setAudioMode] = useState(() => localStorage.getItem('book-reader-audio-mode') || 'manual');
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const speechRunRef = useRef(0);
   const [showExpandedImage, setShowExpandedImage] = useState(false);
   const [quizAnswers, setQuizAnswers] = useState({});
   const [quizLoading, setQuizLoading] = useState(false);
@@ -260,13 +262,35 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), onSelectEp
     return next;
   });
 
+  const stopSpeech = useCallback(() => {
+    speechRunRef.current += 1;
+    cancelChineseSpeech();
+    setIsSpeaking(false);
+  }, []);
+  const startSpeech = useCallback(() => {
+    if (!speechText) return;
+    const runId = speechRunRef.current + 1;
+    speechRunRef.current = runId;
+    setIsSpeaking(true);
+    speakChinese(speechText, {
+      shouldSpeak: () => speechRunRef.current === runId,
+      onStart: () => speechRunRef.current === runId && setIsSpeaking(true),
+      onEnd: () => speechRunRef.current === runId && setIsSpeaking(false),
+      onError: () => speechRunRef.current === runId && setIsSpeaking(false),
+    }).then((utterance) => {
+      if (!utterance && speechRunRef.current === runId) setIsSpeaking(false);
+    }).catch(() => {
+      if (speechRunRef.current === runId) setIsSpeaking(false);
+    });
+  }, [speechText]);
+
   useEffect(() => {
     if (audioMode !== 'auto' || !speechText) return undefined;
-    speakChinese(speechText);
-    return undefined;
-  }, [audioMode, pageIndex, speechText]);
+    startSpeech();
+    return stopSpeech;
+  }, [audioMode, pageIndex, speechText, startSpeech, stopSpeech]);
 
-  useEffect(() => () => cancelChineseSpeech(), []);
+  useEffect(() => stopSpeech, [stopSpeech]);
 
   useEffect(() => {
     if (!book?.id || isQuizPage) return;
@@ -286,11 +310,17 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), onSelectEp
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [showExpandedImage]);
 
-  const selectAudioMode = (mode) => {
+  const toggleManualAudio = () => {
     if (isQuizPage) return;
-    localStorage.setItem('book-reader-audio-mode', mode);
-    setAudioMode(mode);
-    if (mode === 'manual') speakChinese(speechText);
+    if (isSpeaking) stopSpeech();
+    else startSpeech();
+  };
+  const toggleAutoAudio = () => {
+    if (isQuizPage) return;
+    const nextMode = audioMode === 'auto' ? 'manual' : 'auto';
+    localStorage.setItem('book-reader-audio-mode', nextMode);
+    setAudioMode(nextMode);
+    if (nextMode !== 'auto') stopSpeech();
   };
 
   const openQuiz = async () => {
@@ -337,8 +367,8 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), onSelectEp
         <div className="grid w-full shrink-0 grid-cols-[1.2fr_0.9fr_0.65fr_0.65fr_0.65fr_0.65fr] gap-1.5 sm:w-auto sm:min-w-[30rem] sm:gap-2">
           <button type="button" onClick={() => saveToggle('book-reader-pinyin', setShowPinyin)} aria-pressed={showPinyin} className={`h-10 rounded-xl px-2 text-xs font-black ${showPinyin ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-500'}`}>拼 Pinyin</button>
           <button type="button" onClick={() => saveToggle('book-reader-thai', setShowThai)} aria-pressed={showThai} className={`h-10 rounded-xl px-2 text-xs font-black ${showThai ? 'bg-cyan-500 text-white' : 'bg-slate-100 text-slate-500'}`}>ไทย</button>
-          <button type="button" onClick={() => selectAudioMode('manual')} disabled={isQuizPage} aria-label="เล่นเสียงหน้าปัจจุบัน" title="เล่น" aria-pressed={audioMode === 'manual'} className={`h-10 rounded-xl border-2 text-lg transition active:scale-95 disabled:opacity-30 ${audioMode === 'manual' ? 'border-orange-500 bg-orange-500 text-white' : 'border-orange-200 bg-white text-orange-600'}`}>🔊</button>
-          <button type="button" onClick={() => selectAudioMode('auto')} disabled={isQuizPage} aria-label="เล่นเสียงอัตโนมัติเมื่อเปลี่ยนหน้า" title="เล่นอัตโนมัติ" aria-pressed={audioMode === 'auto'} className={`h-10 rounded-xl border-2 text-lg transition active:scale-95 disabled:opacity-30 ${audioMode === 'auto' ? 'border-cyan-500 bg-cyan-500 text-white' : 'border-cyan-200 bg-white text-cyan-700'}`}>🔁</button>
+          <button type="button" onClick={toggleManualAudio} disabled={isQuizPage} aria-label={isSpeaking ? 'หยุดเสียง' : 'เล่นเสียงหน้าปัจจุบัน'} title={isSpeaking ? 'หยุดเสียง' : 'เล่น'} aria-pressed={isSpeaking} className={`h-10 rounded-xl border-2 text-lg transition active:scale-95 disabled:opacity-30 ${isSpeaking ? 'border-orange-500 bg-orange-500 text-white' : 'border-orange-200 bg-white text-orange-600'}`}>{isSpeaking ? '⏹️' : '🔊'}</button>
+          <button type="button" onClick={toggleAutoAudio} disabled={isQuizPage} aria-label={audioMode === 'auto' ? 'ปิดการเล่นเสียงอัตโนมัติ' : 'เปิดการเล่นเสียงอัตโนมัติเมื่อเปลี่ยนหน้า'} title={audioMode === 'auto' ? 'ปิดเล่นอัตโนมัติ' : 'เล่นอัตโนมัติ'} aria-pressed={audioMode === 'auto'} className={`h-10 rounded-xl border-2 text-lg transition active:scale-95 disabled:opacity-30 ${audioMode === 'auto' ? 'border-cyan-500 bg-cyan-500 text-white' : 'border-cyan-200 bg-white text-cyan-700'}`}>🔁</button>
           <button type="button" onClick={() => changeFont(-1)} disabled={fontIndex === 0} className="h-10 rounded-xl bg-slate-100 font-black disabled:opacity-30" aria-label="ลดขนาดอักษร">A−</button>
           <button type="button" onClick={() => changeFont(1)} disabled={fontIndex === FONT_SIZES.length - 1} className="h-10 rounded-xl bg-slate-100 text-lg font-black disabled:opacity-30" aria-label="เพิ่มขนาดอักษร">A+</button>
         </div>
@@ -391,7 +421,7 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), onSelectEp
             {(page.paragraphs || []).map((paragraph, paragraphIndex) => (
               <div key={paragraphIndex} className="space-y-2">
                 <div className="flex flex-wrap items-end gap-x-2 gap-y-3 leading-relaxed" style={{ fontSize: FONT_SIZES[fontIndex] }}>
-                  {(paragraph.segments || []).map((segment, segmentIndex) => <span key={`${segment.hanzi}-${segmentIndex}`} className="inline-flex flex-col items-center">{showPinyin && <span className="mb-0.5 text-[0.52em] font-bold leading-tight text-orange-500">{segment.pinyin}</span>}<span className="font-semibold text-slate-900">{segment.hanzi}</span></span>)}
+                  {(paragraph.segments || []).map((segment, segmentIndex) => <span key={`${segment.hanzi}-${segmentIndex}`} className="inline-flex flex-col items-center">{showPinyin && segment.pinyin && segment.pinyin.trim().toLocaleLowerCase() !== segment.hanzi.trim().toLocaleLowerCase() && <span className="mb-0.5 text-[0.52em] font-bold leading-tight text-orange-500">{segment.pinyin}</span>}<span className="font-semibold text-slate-900">{segment.hanzi}</span></span>)}
                 </div>
                 {showThai && paragraph.thai && <p className="rounded-xl bg-orange-50 px-3 py-2 text-sm leading-relaxed text-slate-600">{paragraph.thai}</p>}
               </div>
@@ -574,11 +604,12 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
               <label className="block text-sm font-black text-slate-800">โทนเสริม <span className="font-normal text-slate-400">(ไม่บังคับ)</span><select value={novelSecondaryTone} onChange={(event) => setNovelSecondaryTone(event.target.value)} className="mt-2 w-full rounded-xl border-2 border-white bg-white p-3 text-sm"><option value="">ไม่มี</option>{NOVEL_TONES.filter((item) => item !== novelTone).map((item) => <option key={item}>{item}</option>)}</select></label>
               <fieldset><legend className="mb-2 text-sm font-black text-slate-800">สิ่งที่เด็กชอบ * <span className="font-normal text-slate-400">(เลือก 1–5)</span></legend><div className="flex flex-wrap gap-2">{NOVEL_INTERESTS.map((item) => <button key={item} type="button" onClick={() => toggleNovelInterest(item)} className={`rounded-full border-2 px-3 py-2 text-xs font-black ${novelInterests.includes(item) ? 'border-cyan-500 bg-cyan-50 text-cyan-700' : 'border-white bg-white text-slate-600'}`}>{item}</button>)}</div></fieldset>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-sm font-black text-slate-800">ตัวละครเอก <span className="font-normal text-slate-400">(ไม่บังคับ)</span><input value={novelProtagonist} onChange={(event) => setNovelProtagonist(event.target.value)} maxLength={100} placeholder="เช่น เด็กหญิงช่างสังเกต" className="mt-2 w-full rounded-xl border-2 border-white bg-white p-3 text-sm font-normal" /></label>
-                <label className="text-sm font-black text-slate-800">เพื่อนร่วมทาง <span className="font-normal text-slate-400">(ไม่บังคับ)</span><input value={novelCompanion} onChange={(event) => setNovelCompanion(event.target.value)} maxLength={100} placeholder="เช่น หุ่นยนต์พูดมาก" className="mt-2 w-full rounded-xl border-2 border-white bg-white p-3 text-sm font-normal" /></label>
+                <label className="text-sm font-black text-slate-800">ชื่อตัวละครเอก <span className="font-normal text-slate-400">(ไม่บังคับ)</span><input value={novelProtagonist} onChange={(event) => setNovelProtagonist(event.target.value)} maxLength={100} placeholder="เช่น Techin หรือ เทคชิน" className="mt-2 w-full rounded-xl border-2 border-white bg-white p-3 text-sm font-normal" /></label>
+                <label className="text-sm font-black text-slate-800">ชื่อเพื่อนร่วมทาง <span className="font-normal text-slate-400">(ไม่บังคับ)</span><input value={novelCompanion} onChange={(event) => setNovelCompanion(event.target.value)} maxLength={100} placeholder="เช่น Nan หรือ น้องน่าน" className="mt-2 w-full rounded-xl border-2 border-white bg-white p-3 text-sm font-normal" /></label>
                 <label className="text-sm font-black text-slate-800">สถานที่ของเรื่อง <span className="font-normal text-slate-400">(ไม่บังคับ)</span><input value={novelSetting} onChange={(event) => setNovelSetting(event.target.value)} maxLength={120} placeholder="เช่น เมืองเก่าปักกิ่ง" className="mt-2 w-full rounded-xl border-2 border-white bg-white p-3 text-sm font-normal" /></label>
                 <label className="text-sm font-black text-slate-800">สิ่งที่ไม่ต้องการ <span className="font-normal text-slate-400">(ไม่บังคับ)</span><input value={novelExclusions} onChange={(event) => setNovelExclusions(event.target.value)} maxLength={160} placeholder="เช่น ไม่เอาฉากน่ากลัว" className="mt-2 w-full rounded-xl border-2 border-white bg-white p-3 text-sm font-normal" /></label>
               </div>
+              <p className="rounded-xl bg-white/80 px-3 py-2 text-xs font-bold leading-relaxed text-emerald-700">ชื่อที่กรอกจะใช้ตามตัวอักษรเดิมทุกประการ ไม่แปลเป็นภาษาจีนและไม่ตั้งชื่อจีนแทน</p>
               <label className="flex items-center justify-between gap-3 rounded-xl bg-white p-3 text-sm font-black text-slate-700"><span>ใช้ข้อมูลความชอบจากการอ่านครั้งก่อน</span><input type="checkbox" checked={useReaderProfile} onChange={(event) => setUseReaderProfile(event.target.checked)} className="h-5 w-5 accent-emerald-500" /></label>
             </div>
           )}
