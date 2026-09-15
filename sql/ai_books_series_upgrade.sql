@@ -1,5 +1,5 @@
 -- Upgrade AI Books: advanced level, 15-minute books, selectable text models,
--- and public 10-episode youth-fiction series.
+-- and public 5-episode youth-fiction series.
 create extension if not exists pgcrypto;
 
 alter table public.ai_books drop constraint if exists ai_books_language_level_check;
@@ -21,7 +21,7 @@ create table if not exists public.ai_book_series (
   title_pinyin text not null,
   title_th text not null,
   bible jsonb not null default '{}'::jsonb,
-  total_episodes integer not null default 10 check (total_episodes = 10),
+  total_episodes integer not null default 5 check (total_episodes = 5),
   last_episode_number integer not null default 1 check (last_episode_number between 1 and 10),
   text_model text not null,
   created_at timestamptz not null default now(),
@@ -78,4 +78,4 @@ using (
 
 grant select on public.ai_book_series to authenticated;
 
-comment on table public.ai_book_series is 'Continuity data and progress for 10-episode AI youth-fiction series.';
+comment on table public.ai_book_series is 'Continuity data and progress for 5-episode AI youth-fiction series.';

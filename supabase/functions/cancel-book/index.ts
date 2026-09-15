@@ -49,7 +49,7 @@ Deno.serve(async (request) => {
       .from('ai_books')
       .update({ status: 'canceled', error_message: 'ยกเลิกโดยผู้ใช้', updated_at: new Date().toISOString() })
       .eq('id', bookId)
-      .in('status', ['generating', 'failed'])
+      .in('status', ['generating', 'partial', 'failed'])
       .select('id')
       .maybeSingle();
     if (cancelError) throw cancelError;

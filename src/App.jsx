@@ -1302,7 +1302,7 @@ export default function App() {
         {page === 'word-match' && <WordMatchGame user={user} setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} />}
         {page === 'class-schedule' && <ClassSchedule user={user} setPage={setPage} />}
         {page === 'score' && <Score user={user} selectedIds={selectedIds} levelCounts={levelCounts} setPage={setPage} />}
-        {page === 'statistics' && <Statistics user={user} setPage={setPage} />}
+        {page === 'statistics' && <Statistics user={user} isAdmin={isAdmin} setPage={setPage} />}
         
         {(page === 'settings' || page === 'set-schedule') && (
           <Settings

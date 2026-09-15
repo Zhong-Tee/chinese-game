@@ -37,9 +37,34 @@ Deno.serve(async (request) => {
   if (profileError || !profile?.is_admin) return json({ error: 'เฉพาะ Admin เท่านั้นที่ลบหนังสือได้' }, 403);
 
   try {
-    const { bookId } = await request.json();
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(bookId || ''))) {
-      return json({ error: 'รหัสหนังสือไม่ถูกต้อง' }, 400);
+    const { bookId, seriesId } = await request.json();
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const deletingSeries = Boolean(seriesId);
+    if (!uuidPattern.test(String(deletingSeries ? seriesId : bookId || ''))) return json({ error: deletingSeries ? 'รหัสซีรีส์ไม่ถูกต้อง' : 'รหัสหนังสือไม่ถูกต้อง' }, 400);
+
+    if (deletingSeries) {
+      const { data: series, error: seriesError } = await admin.from('ai_book_series').select('id').eq('id', seriesId).maybeSingle();
+      if (seriesError) throw seriesError;
+      if (!series) return json({ error: 'ไม่พบซีรีส์นี้' }, 404);
+
+      const { data: seriesBooks, error: booksError } = await admin.from('ai_books').select('id').eq('series_id', seriesId);
+      if (booksError) throw booksError;
+      const bookIds = (seriesBooks || []).map((book) => book.id);
+      for (const id of bookIds) {
+        const { data: files, error: listError } = await admin.storage.from('book-images').list(id, { limit: 100 });
+        if (listError) throw listError;
+        if (files?.length) {
+          const { error: removeError } = await admin.storage.from('book-images').remove(files.map((file) => `${id}/${file.name}`));
+          if (removeError) throw removeError;
+        }
+      }
+      if (bookIds.length) {
+        const { error: deleteBooksError } = await admin.from('ai_books').delete().in('id', bookIds);
+        if (deleteBooksError) throw deleteBooksError;
+      }
+      const { error: deleteSeriesError } = await admin.from('ai_book_series').delete().eq('id', seriesId);
+      if (deleteSeriesError) throw deleteSeriesError;
+      return json({ ok: true, seriesId, deletedBookIds: bookIds });
     }
 
     const { data: book, error: bookError } = await admin

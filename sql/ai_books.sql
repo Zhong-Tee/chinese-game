@@ -33,7 +33,7 @@ create table if not exists public.ai_books (
   tone text,
   topic text,
   text_model text not null default 'gpt-5.6-terra',
-  book_format text not null default 'standalone' check (book_format in ('standalone', 'series')),
+  book_format text not null default 'standalone' check (book_format in ('standalone', 'series', 'youth_novel')),
   episode_number integer check (episode_number is null or episode_number between 1 and 10),
   series_total integer,
   series_genre text,
@@ -43,7 +43,20 @@ create table if not exists public.ai_books (
   content_image_url text,
   content_image_page integer not null default 0,
   visibility text not null default 'public' check (visibility in ('public', 'unlisted', 'private')),
-  status text not null default 'generating' check (status in ('generating', 'ready', 'failed', 'canceled')),
+  target_age text,
+  primary_genre text,
+  secondary_genre text,
+  secondary_tone text,
+  interests text[] not null default '{}',
+  protagonist_prompt text,
+  companion_prompt text,
+  setting_prompt text,
+  exclusions_prompt text,
+  use_reader_profile boolean not null default true,
+  story_bible jsonb not null default '{}'::jsonb,
+  editorial_scores jsonb not null default '[]'::jsonb,
+  generation_progress jsonb not null default '{}'::jsonb,
+  status text not null default 'generating' check (status in ('generating', 'partial', 'ready', 'failed', 'canceled')),
   generation_cost_usd numeric(14, 8) not null default 0,
   generation_cost_thb numeric(14, 4) not null default 0,
   exchange_rate numeric(10, 4) not null default 34,
@@ -62,7 +75,7 @@ create table if not exists public.ai_book_series (
   title_pinyin text not null,
   title_th text not null,
   bible jsonb not null default '{}'::jsonb,
-  total_episodes integer not null default 10 check (total_episodes = 10),
+  total_episodes integer not null default 5 check (total_episodes = 5),
   last_episode_number integer not null default 1 check (last_episode_number between 1 and 10),
   text_model text not null default 'gpt-5.6-terra',
   created_at timestamptz not null default now(),
@@ -96,7 +109,7 @@ create table if not exists public.ai_generation_runs (
   id bigint generated always as identity primary key,
   book_id uuid not null references public.ai_books(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
-  operation text not null check (operation in ('text', 'cover_image', 'content_image')),
+  operation text not null check (length(trim(operation)) > 0),
   model text not null,
   input_tokens bigint not null default 0,
   cached_input_tokens bigint not null default 0,
@@ -156,6 +169,36 @@ using (user_id = auth.uid())
 with check (user_id = auth.uid());
 grant select, insert, update on public.ai_book_reads to authenticated;
 
+create table if not exists public.ai_book_reader_events (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  book_id uuid not null references public.ai_books(id) on delete cascade,
+  event_type text not null check (event_type in ('start', 'chapter_open', 'complete', 'reread')),
+  chapter_number integer,
+  created_at timestamptz not null default now()
+);
+create index if not exists ai_book_reader_events_user_book_idx on public.ai_book_reader_events (user_id, book_id, created_at desc);
+alter table public.ai_book_reader_events enable row level security;
+drop policy if exists "Users record own AI book reading events" on public.ai_book_reader_events;
+create policy "Users record own AI book reading events" on public.ai_book_reader_events for all to authenticated
+using (user_id = auth.uid()) with check (user_id = auth.uid());
+grant select, insert on public.ai_book_reader_events to authenticated;
+
+create table if not exists public.ai_book_reviews (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  book_id uuid not null references public.ai_books(id) on delete cascade,
+  enjoyment text not null check (enjoyment in ('love', 'like', 'neutral', 'dislike')),
+  favorite_aspect text not null check (favorite_aspect in ('character', 'adventure', 'comedy', 'mystery', 'images', 'story')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, book_id)
+);
+alter table public.ai_book_reviews enable row level security;
+drop policy if exists "Users manage own AI book reviews" on public.ai_book_reviews;
+create policy "Users manage own AI book reviews" on public.ai_book_reviews for all to authenticated
+using (user_id = auth.uid()) with check (user_id = auth.uid());
+grant select, insert, update on public.ai_book_reviews to authenticated;
+
 drop policy if exists "Owners and admins can inspect generation runs" on public.ai_generation_runs;
 create policy "Owners and admins can inspect generation runs"
 on public.ai_generation_runs for select to authenticated
@@ -191,6 +234,6 @@ on storage.objects for select to public
 using (bucket_id = 'book-images');
 
 comment on table public.ai_books is 'AI-generated Chinese books. Ready public rows are readable by every authenticated user.';
-comment on table public.ai_book_series is 'Continuity data and progress for 10-episode AI youth-fiction series.';
+comment on table public.ai_book_series is 'Continuity data and progress for 5-episode AI youth-fiction series.';
 comment on table public.ai_book_reads is 'Books each user has completed; one row per user and book.';
 comment on table public.ai_generation_runs is 'Raw OpenAI usage and computed cost for each generation step.';

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
+import AdminMissionOverview from './AdminMissionOverview';
 import { fetchFlashcardStatistics } from '../utils/flashcardStatsStorage';
 import { fetchTodayMission, syncTodayMissionProgress } from '../utils/dailyMissionStorage';
 import {
@@ -155,12 +156,12 @@ function LeaderboardSection({ title, items, valueKey, formatValue }) {
   );
 }
 
-export default function Statistics({ user, setPage }) {
+export default function Statistics({ user, setPage, isAdmin = false }) {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
-  const [activeTab, setActiveTab] = useState('personal');
-  const [selectedUserId, setSelectedUserId] = useState(() => user?.id || '');
+  const [activeTab, setActiveTab] = useState(() => isAdmin ? 'missions' : 'personal');
+  const [selectedUserId, setSelectedUserId] = useState(() => isAdmin ? '' : (user?.id || ''));
   const [rememberNowWords, setRememberNowWords] = useState(0);
   const [loading, setLoading] = useState(true);
   const [statsData, setStatsData] = useState(null);
@@ -177,7 +178,7 @@ export default function Statistics({ user, setPage }) {
     return years.length ? years : [currentYear];
   }, [statsData?.earliest_stat_date, currentYear]);
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     setError(null);
@@ -196,11 +197,11 @@ export default function Statistics({ user, setPage }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id, year, month, selectedUserId, activeTab]);
 
   useEffect(() => {
     loadStats();
-  }, [user?.id, year, month, selectedUserId, activeTab]);
+  }, [loadStats]);
 
   useEffect(() => {
     if (!selectedUserId && activeTab === 'personal' && user?.id) {
@@ -321,7 +322,9 @@ export default function Statistics({ user, setPage }) {
       </button>
       <h2 className="text-3xl font-black text-center uppercase italic mb-2 text-slate-800">📈 Statistics</h2>
       <p className="text-center text-xs font-bold text-slate-500 px-4">
-        {activeTab === 'overview' && !selectedUserId
+        {activeTab === 'missions'
+          ? 'ติดตามภารกิจรายวันของนักเรียนแบบรายเดือนและทั้งปี'
+          : activeTab === 'overview' && !selectedUserId
           ? 'ประวัติการเล่น Flashcards — ภาพรวมรวมวันเข้าเล่นของทุกคน'
           : 'ประวัติการเล่น Flashcards — นับเฉพาะวันที่มีการเล่นเกม'}
       </p>
@@ -390,7 +393,7 @@ export default function Statistics({ user, setPage }) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      {activeTab !== 'missions' && <div className="grid grid-cols-2 gap-3">
         <SummaryCard label="วันเข้าเล่น" value={activeDays} accent="orange" />
         <SummaryCard label="เวลาเล่นรวม" value={formatPlayDuration(summary.total_seconds || 0)} accent="blue" />
         <SummaryCard label="คำศัพท์รวม" value={summary.total_words || 0} accent="purple" />
@@ -419,9 +422,9 @@ export default function Statistics({ user, setPage }) {
           }
           accent="red"
         />
-      </div>
+      </div>}
 
-      <div className="flex gap-2">
+      <div className={`grid gap-2 ${isAdmin ? 'grid-cols-3' : 'grid-cols-1'}`}>
         <button
           onClick={() => {
             setSelectedUserId(user?.id || '');
@@ -433,27 +436,53 @@ export default function Statistics({ user, setPage }) {
         >
           ของฉัน
         </button>
-        {!selectedUserId && (
+        {isAdmin && (
           <button
-            onClick={() => setActiveTab('overview')}
-            className={`flex-1 py-3 rounded-full font-black text-sm uppercase transition-all ${
+            onClick={() => {
+              setSelectedUserId('');
+              setActiveTab('missions');
+            }}
+            className={`py-3 rounded-full font-black text-xs sm:text-sm uppercase transition-all ${
+              activeTab === 'missions' ? 'bg-violet-600 text-white' : 'bg-white border-2 border-slate-200 text-slate-600'
+            }`}
+          >
+            ภาพรวมภารกิจ
+          </button>
+        )}
+        {isAdmin && (
+          <button
+            onClick={() => {
+              setSelectedUserId('');
+              setActiveTab('overview');
+            }}
+            className={`py-3 rounded-full font-black text-xs sm:text-sm uppercase transition-all ${
               activeTab === 'overview' ? 'bg-orange-500 text-white' : 'bg-white border-2 border-slate-200 text-slate-600'
             }`}
           >
-            ภาพรวม
-          </button>
-        )}
-        {selectedUserId && (
-          <button
-            onClick={() => setActiveTab('personal')}
-            className="flex-1 py-3 rounded-full font-black text-sm uppercase transition-all bg-orange-500 text-white"
-          >
-            ภารกิจประจำวัน
+            สถิติการเล่น
           </button>
         )}
       </div>
 
+      {isAdmin && activeTab === 'missions' && (() => {
+        const { startDate, endDate } = getDateRange(year, month);
+        return (
+          <AdminMissionOverview
+            startDate={startDate}
+            endDate={endDate}
+            month={month}
+            fallbackUsers={statsData?.users || []}
+            currentUserId={user?.id}
+            onOpenStudent={(studentId) => {
+              setSelectedUserId(studentId);
+              setActiveTab('personal');
+            }}
+          />
+        );
+      })()}
+
       {activeTab === 'personal' && (
+        <div className="space-y-4">
         <div className="bg-white p-4 rounded-3xl border-2 border-slate-200 shadow-sm">
           <h3 className="text-lg font-black uppercase italic mb-4 text-center text-slate-800">
             🎯 ภารกิจวันนี้ — {selectedUserName || 'ของฉัน'}
@@ -514,6 +543,11 @@ export default function Statistics({ user, setPage }) {
               })}
             </div>
           )}
+        </div>
+        <div className="bg-white p-4 rounded-3xl border-2 border-slate-200 shadow-sm">
+          <h3 className="text-lg font-black uppercase italic mb-4 text-center text-slate-800">ประวัติการเล่นตามวันที่</h3>
+          <DailyBreakdownTable dailyRows={dailyRows} schedules={viewSchedules} />
+        </div>
         </div>
       )}
 
