@@ -1307,6 +1307,7 @@ export default function App() {
         {page === 'maths' && (
           <MathHub
             user={user}
+            isAdmin={isAdmin}
             setPage={setPage}
             onStart={(config) => { setMathSession({ ...config, seed: Date.now() }); setPage('math-play'); }}
           />

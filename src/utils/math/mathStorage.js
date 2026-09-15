@@ -21,6 +21,7 @@ export async function loadMathProgress(userId) {
   if (error) return loadLocal(userId);
   if (!data) return loadLocal(userId);
   return normalizeMathProgress({
+    curriculumVersion: data.curriculum_version,
     currentStage: data.current_stage,
     currentLevel: data.current_level,
     totalQuestions: data.total_questions,
@@ -40,6 +41,7 @@ export async function saveMathProgress(userId, progress) {
   if (!userId) return normalized;
   const { error } = await supabase.from('user_math_progress').upsert({
     user_id: userId,
+    curriculum_version: normalized.curriculumVersion,
     current_stage: normalized.currentStage,
     current_level: normalized.currentLevel,
     total_questions: normalized.totalQuestions,

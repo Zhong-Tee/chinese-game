@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import MathVisual from './MathVisual';
+import MathSplitAnswer from './MathSplitAnswer';
+import MathSubtractionSplit from './MathSubtractionSplit';
+import MathBorrowingSplit from './MathBorrowingSplit';
 import { buildDailyTraining } from '../utils/math/dailyTraining';
 import { createSeededRandom, generateQuestion, generateQuestionSet } from '../utils/math/questionGenerators';
 import { getMathSummary, MATH_STAGE_META, recordMathAnswer } from '../utils/math/mathProgress';
@@ -23,6 +26,7 @@ export default function MathGame({ user, config, onExit, onReward }) {
   const [finished, setFinished] = useState(initialQuestions.length === 0);
   const startedAt = useRef(0);
   const sfxRef = useRef({});
+  const draggedAnswerRef = useRef(null);
   const question = questions[index];
   const stageMeta = MATH_STAGE_META.find(item => item.stage === question?.stage);
 
@@ -100,11 +104,25 @@ export default function MathGame({ user, config, onExit, onReward }) {
       <div className="mt-1 text-center text-sm font-black text-slate-500">{stageMeta?.icon} {stageMeta?.thai}</div>
 
       <section className="mt-4 rounded-[2rem] bg-white p-5 shadow-xl">
-        <h1 className="text-center text-2xl font-black leading-snug text-slate-800">{question.prompt}</h1>
-        <MathVisual visual={question.visual} />
+        <h1 className="whitespace-pre-line text-center text-2xl font-black leading-snug text-slate-800">{question.prompt}</h1>
+        {!['split-two', 'subtraction-split', 'borrowing-split'].includes(question.inputMode) && <MathVisual visual={question.visual} />}
+        {!feedback && question.inputMode === 'split-two' && (
+          <MathSplitAnswer
+            key={question.id}
+            visual={question.visual}
+            answer={question.answer}
+            onSubmit={submit}
+          />
+        )}
+        {!feedback && question.inputMode === 'subtraction-split' && (
+          <MathSubtractionSplit key={question.id} visual={question.visual} answer={question.answer} onSubmit={submit} />
+        )}
+        {!feedback && question.inputMode === 'borrowing-split' && (
+          <MathBorrowingSplit key={question.id} visual={question.visual} onSubmit={submit} />
+        )}
 
         {!feedback && question.inputMode === 'choice' && (
-          <div className="mt-5 grid grid-cols-2 gap-3">{question.choices.map(choice => <button key={choice} onClick={() => { setAnswer(choice); submit(choice); }} className="rounded-2xl border-2 border-indigo-100 bg-indigo-50 py-4 text-2xl font-black text-indigo-700 shadow-sm active:scale-95">{choice}</button>)}</div>
+          <div className="mt-5 grid grid-cols-2 gap-3">{question.choices.map(choice => <button key={choice} onClick={() => { setAnswer(choice); submit(choice); }} className={`rounded-2xl border-2 border-indigo-100 bg-indigo-50 py-4 font-black text-indigo-700 shadow-sm active:scale-95 ${question.choiceLabels ? 'text-base sm:text-lg' : 'text-2xl'}`}>{question.choiceLabels?.[String(choice)] || choice}</button>)}</div>
         )}
         {!feedback && question.inputMode === 'number' && (
           <form onSubmit={event => { event.preventDefault(); submit(); }} className="mt-5">
@@ -112,13 +130,58 @@ export default function MathGame({ user, config, onExit, onReward }) {
             <button disabled={answer === ''} className="mt-3 w-full rounded-2xl bg-indigo-600 py-4 text-lg font-black text-white shadow-[0_5px_0_#3730a3] disabled:opacity-40">ตรวจคำตอบ</button>
           </form>
         )}
+        {!feedback && question.inputMode === 'drag' && (
+          <div className="mt-5">
+            <div
+              data-math-drop-target
+              onPointerUp={() => {
+                if (draggedAnswerRef.current != null) submit(draggedAnswerRef.current);
+                draggedAnswerRef.current = null;
+              }}
+              className="flex min-h-24 items-center justify-center rounded-3xl border-4 border-dashed border-indigo-300 bg-indigo-50 px-4 text-center font-black text-indigo-500"
+            >
+              ลากตัวเลขที่ถูกต้องมาวางตรงนี้
+            </div>
+            <div className="mt-4 grid grid-cols-4 gap-2">
+              {question.choices.map(choice => (
+                <button
+                  key={choice}
+                  type="button"
+                  onPointerDown={() => { draggedAnswerRef.current = choice; }}
+                  onPointerUp={(event) => {
+                    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-math-drop-target]');
+                    if (target) submit(choice);
+                    draggedAnswerRef.current = null;
+                  }}
+                  onClick={() => setAnswer(choice)}
+                  className={`touch-none rounded-2xl border-2 py-4 text-2xl font-black shadow-sm active:scale-95 ${Number(answer) === choice ? 'border-indigo-500 bg-indigo-200 text-indigo-800' : 'border-indigo-100 bg-white text-indigo-600'}`}
+                >
+                  {choice}
+                </button>
+              ))}
+            </div>
+            <button type="button" disabled={answer === ''} onClick={() => submit(answer)} className="mt-3 w-full rounded-2xl bg-indigo-600 py-3 font-black text-white shadow disabled:opacity-40">
+              แตะตัวเลขแล้วกดจับคู่
+            </button>
+          </div>
+        )}
 
         {feedback && (
           <div className={`mt-5 rounded-3xl p-4 ${feedback.type === 'correct' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>
             <div className={`text-center text-4xl ${feedback.type === 'correct' ? 'animate-bounce' : ''}`}>{feedback.type === 'correct' ? '🌟' : '💡'}</div>
             <h2 className="text-center text-xl font-black">{feedback.title}</h2>
             {feedback.type === 'wrong' && <div className="mt-4 space-y-2">{question.explanation.map((step, stepIndex) => <div key={step} className="flex items-center gap-3 rounded-xl bg-white/80 p-3 font-bold"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400 text-white">{stepIndex + 1}</span>{step}</div>)}</div>}
-            {feedback.type === 'correct' && <div className="mt-2 text-center font-bold">คำตอบคือ {question.answer}</div>}
+            {feedback.type === 'correct' && (
+              question.inputMode === 'split-two'
+                ? <div className="mt-2 text-center font-bold">{question.visual.target ?? 10} + {question.answer} = {question.visual.first + question.visual.second}<br />ดังนั้น {question.visual.first} + {question.visual.second} = {question.visual.first + question.visual.second}</div>
+                : question.inputMode === 'subtraction-split'
+                  ? <div className="mt-2 text-center font-bold">{question.visual.base} − {question.visual.subtract} = {question.answer}<br />{question.visual.remainder} + {question.answer} = {question.visual.finalAnswer}</div>
+                : question.inputMode === 'borrowing-split'
+                  ? <div className="mt-2 text-center font-bold">{question.visual.borrowedOnes} − {question.visual.subtractOnes} = {question.visual.onesDifference}<br />{question.visual.tensDifference} + {question.visual.onesDifference} = {question.answer}</div>
+                : question.choiceLabels
+                  ? <div className="mt-2 text-center font-bold">เลือก {question.choiceLabels[String(question.answer)]}</div>
+                  : <div className="mt-2 text-center font-bold">คำตอบคือ {question.answer}</div>
+            )}
             <button onClick={next} className={`mt-4 w-full rounded-2xl py-3 font-black text-white shadow ${feedback.type === 'correct' ? 'bg-emerald-500' : 'bg-amber-500'}`}>{feedback.type === 'wrong' ? 'ลองข้อใกล้เคียงต่อ →' : 'ข้อต่อไป →'}</button>
           </div>
         )}

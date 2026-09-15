@@ -1,13 +1,14 @@
 export const MATH_STAGE_META = [
-  { stage: 1, title: 'ความเข้าใจจำนวน', thai: 'จับคู่จำนวนให้ครบ 10', icon: '🔟', color: 'from-emerald-400 to-teal-600' },
-  { stage: 2, title: 'การบวก', thai: 'บวกแบบทำให้ครบ 10', icon: '➕', color: 'from-sky-400 to-blue-600' },
+  { stage: 1, title: 'ความเข้าใจจำนวน', thai: 'ฝึกแยกจำนวน 5 และ 10', icon: '🔟', color: 'from-emerald-400 to-teal-600' },
+  { stage: 2, title: 'การบวก', thai: 'บวกแบบทำให้ครบหลักสิบ', icon: '➕', color: 'from-sky-400 to-blue-600' },
   { stage: 3, title: 'การลบ', thai: 'ลบแบบแยกหลักสิบ', icon: '➖', color: 'from-violet-400 to-purple-600' },
-  { stage: 4, title: 'การคูณ', thai: 'เข้าใจการคูณเป็นกลุ่ม', icon: '✖️', color: 'from-amber-400 to-orange-600' },
-  { stage: 5, title: 'การหาร', thai: 'แบ่งจำนวนเท่า ๆ กัน', icon: '➗', color: 'from-rose-400 to-pink-600' },
-  { stage: 6, title: 'คิดเลขในใจ', thai: 'ฝึกคิดเลขให้คล่อง', icon: '🧠', color: 'from-indigo-400 to-indigo-700' },
+  { stage: 4, title: 'การยืม', thai: 'ลบแบบยืมหลักสิบ', icon: '🔄', color: 'from-cyan-400 to-teal-600' },
+  { stage: 5, title: 'การคูณ', thai: 'เข้าใจการคูณเป็นกลุ่ม', icon: '✖️', color: 'from-amber-400 to-orange-600' },
+  { stage: 6, title: 'การหาร', thai: 'แบ่งจำนวนเท่า ๆ กัน', icon: '➗', color: 'from-rose-400 to-pink-600' },
 ];
 
 export const EMPTY_MATH_PROGRESS = {
+  curriculumVersion: 2,
   currentStage: 1,
   currentLevel: 1,
   totalQuestions: 0,
@@ -34,15 +35,25 @@ const previousDateKey = (date = new Date()) => {
 };
 
 export function normalizeMathProgress(raw = {}) {
+  const sourceStage = Number(raw.currentStage) || 1;
+  const sourceVersion = Number(raw.curriculumVersion) || 1;
+  const migratedStage = sourceVersion < 2 && sourceStage >= 4 ? Math.min(6, sourceStage + 1) : sourceStage;
+  const migratedLevel = sourceVersion < 2 && sourceStage > 5
+    ? 4
+    : Math.min(4, Math.max(1, Number(raw.currentLevel) || 1));
   return {
     ...EMPTY_MATH_PROGRESS,
     ...raw,
+    curriculumVersion: 2,
+    currentStage: Math.min(6, Math.max(1, migratedStage)),
+    currentLevel: migratedLevel,
     skills: raw.skills || {},
     badges: Array.isArray(raw.badges) ? raw.badges : [],
   };
 }
 
-export function isMathLevelUnlocked(progress, stage, level) {
+export function isMathLevelUnlocked(progress, stage, level, isAdmin = false) {
+  if (isAdmin) return true;
   if (stage === 1 && level === 1) return true;
   const current = normalizeMathProgress(progress);
   return stage < current.currentStage || (stage === current.currentStage && level <= current.currentLevel);

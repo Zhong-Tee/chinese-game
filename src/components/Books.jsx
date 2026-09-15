@@ -170,7 +170,7 @@ function BookCover({ book, onOpen, isRead = book._isRead || false, canSeeCost = 
   );
 }
 
-function buildShelfEntries(bookRows, seriesRows, readBookIds) {
+function buildShelfEntries(bookRows, seriesRows, readBookIds, allBookRows = bookRows) {
   const seriesMeta = new Map((seriesRows || []).map((series) => [series.id, series]));
   const groupedSeries = new Map();
   const entries = [];
@@ -193,7 +193,8 @@ function buildShelfEntries(bookRows, seriesRows, readBookIds) {
   });
 
   groupedSeries.forEach((unsortedEpisodes, seriesId) => {
-    const episodes = [...unsortedEpisodes].sort((a, b) => Number(a.episode_number || 0) - Number(b.episode_number || 0));
+    const completeSeriesEpisodes = (allBookRows || []).filter((book) => book.series_id === seriesId && book.status !== 'canceled');
+    const episodes = [...(completeSeriesEpisodes.length ? completeSeriesEpisodes : unsortedEpisodes)].sort((a, b) => Number(a.episode_number || 0) - Number(b.episode_number || 0));
     const readyEpisodes = episodes.filter((episode) => episode.status === 'ready');
     const pendingEpisodes = episodes.filter((episode) => ['generating', 'failed'].includes(episode.status));
     const firstEpisode = readyEpisodes[0] || episodes[0];
@@ -355,13 +356,15 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), onSelectEp
             <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" /></svg>
           </button>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-black text-slate-900">{book.title_cn}</div>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className={`min-w-0 truncate text-sm font-black text-slate-900 ${seriesEpisodes.length > 1 ? 'max-w-[40%] shrink' : 'flex-1'}`}>{book.title_cn}</div>
+              {seriesEpisodes.length > 1 && (
+                <select value={book.id} onChange={(event) => onSelectEpisode?.(event.target.value)} aria-label="เลือกตอนของซีรีส์" className="min-w-0 flex-1 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-[11px] font-black text-violet-800 outline-none">
+                  {seriesEpisodes.map((episode) => <option key={episode.id} value={episode.id}>ตอน {episode.episode_number || 1}{readBookIds.has(episode.id) ? ' ✓' : ''} — {episode.title_th || episode.title_cn}</option>)}
+                </select>
+              )}
+            </div>
             <div className="text-[10px] font-bold text-slate-400">{isQuizPage ? 'แบบทดสอบท้ายเล่ม' : `${isYouthNovel ? 'บท' : 'หน้า'} ${pageIndex + 1} / ${targetPageCount}${novelInProgress ? ' · กำลังสร้างต่อ' : ''}`}</div>
-            {seriesEpisodes.length > 1 && (
-              <select value={book.id} onChange={(event) => onSelectEpisode?.(event.target.value)} aria-label="เลือกตอนของซีรีส์" className="mt-1.5 max-w-full rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-[11px] font-black text-violet-800 outline-none">
-                {seriesEpisodes.map((episode) => <option key={episode.id} value={episode.id}>ตอน {episode.episode_number || 1}{readBookIds.has(episode.id) ? ' ✓' : ''} — {episode.title_th || episode.title_cn}</option>)}
-              </select>
-            )}
           </div>
         </div>
         <div className="grid w-full shrink-0 grid-cols-[1.2fr_0.9fr_0.65fr_0.65fr_0.65fr_0.65fr] gap-1.5 sm:w-auto sm:min-w-[30rem] sm:gap-2">
@@ -818,7 +821,7 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
     ? book.creator_id === userId && book.status !== 'canceled'
     : (book.status === 'ready' && book.visibility === 'public')
       || (book.creator_id === userId && ['generating', 'partial', 'failed'].includes(book.status)));
-  const shelfEntries = buildShelfEntries(tabBooks, seriesRows, readBookIds);
+  const shelfEntries = buildShelfEntries(tabBooks, seriesRows, readBookIds, books);
   const categoryCounts = shelfEntries.reduce((counts, entry) => {
     counts[entry.book.category] = (counts[entry.book.category] || 0) + 1;
     return counts;

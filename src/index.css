@@ -29,6 +29,21 @@ body {
   flex-direction: column;
 }
 
+/* ป้องกัน Safari/Chrome เปลี่ยนช่อง Login เป็นสีเทาเมื่อ Autofill */
+.login-input,
+.login-input:-webkit-autofill,
+.login-input:-webkit-autofill:hover,
+.login-input:-webkit-autofill:focus,
+.login-input:-webkit-autofill:active {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  background-color: #fff !important;
+  -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
+  box-shadow: 0 0 0 1000px #fff inset !important;
+  caret-color: #ea580c;
+  transition: background-color 9999s ease-out 0s;
+}
+
 /* App shell — เต็มจอทั้งกว้างและสูง */
 .app-shell {
   width: 100%;

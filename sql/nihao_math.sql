@@ -5,6 +5,7 @@
 
 create table if not exists public.user_math_progress (
   user_id uuid primary key references auth.users(id) on delete cascade,
+  curriculum_version integer not null default 2,
   current_stage integer not null default 1 check (current_stage between 1 and 6),
   current_level integer not null default 1 check (current_level between 1 and 4),
   total_questions integer not null default 0,
@@ -32,6 +33,41 @@ create table if not exists public.math_training_sessions (
 
 create index if not exists math_training_sessions_user_played_idx
   on public.math_training_sessions (user_id, played_at desc);
+
+-- อัปเกรดฐานข้อมูลเดิม: แทรกด่านการยืมก่อนการคูณและการหารเพียงครั้งเดียว
+alter table public.user_math_progress
+  add column if not exists curriculum_version integer not null default 1;
+
+alter table public.user_math_progress
+  drop constraint if exists user_math_progress_current_stage_check;
+alter table public.user_math_progress
+  add constraint user_math_progress_current_stage_check check (current_stage between 1 and 6);
+
+alter table public.math_training_sessions
+  drop constraint if exists math_training_sessions_stage_check;
+alter table public.math_training_sessions
+  add constraint math_training_sessions_stage_check check (stage between 1 and 6);
+
+update public.math_training_sessions as sessions
+set stage = least(6, sessions.stage + 1)
+where sessions.stage >= 4
+  and exists (
+    select 1
+    from public.user_math_progress as progress
+    where progress.user_id = sessions.user_id
+      and progress.curriculum_version < 2
+  );
+
+update public.user_math_progress
+set current_stage = least(6, current_stage + 1), curriculum_version = 2
+where curriculum_version < 2 and current_stage >= 4;
+
+update public.user_math_progress
+set curriculum_version = 2
+where curriculum_version < 2;
+
+alter table public.user_math_progress
+  alter column curriculum_version set default 2;
 
 alter table public.user_math_progress enable row level security;
 alter table public.math_training_sessions enable row level security;

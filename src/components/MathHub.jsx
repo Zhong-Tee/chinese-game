@@ -11,7 +11,7 @@ const BADGE_LABELS = {
   'Division Explorer': 'นักสำรวจการหาร',
 };
 
-export default function MathHub({ user, setPage, onStart }) {
+export default function MathHub({ user, isAdmin = false, setPage, onStart }) {
   const [progress, setProgress] = useState(null);
 
   useEffect(() => {
@@ -56,7 +56,7 @@ export default function MathHub({ user, setPage, onStart }) {
       <h2 className="mt-7 mb-3 text-lg font-black text-indigo-800">เลือกด่าน</h2>
       <div className="space-y-4">
         {MATH_STAGE_META.map(stage => {
-          const stageUnlocked = isMathLevelUnlocked(progress, stage.stage, 1);
+          const stageUnlocked = isMathLevelUnlocked(progress, stage.stage, 1, isAdmin);
           return (
             <section key={stage.stage} className={`rounded-3xl border-2 bg-white p-4 shadow-sm ${stageUnlocked ? 'border-white' : 'border-slate-200 opacity-65'}`}>
               <div className="flex items-center gap-3">
@@ -65,7 +65,7 @@ export default function MathHub({ user, setPage, onStart }) {
               </div>
               <div className="mt-4 grid grid-cols-4 gap-2">
                 {[1, 2, 3, 4].map(level => {
-                  const unlocked = isMathLevelUnlocked(progress, stage.stage, level);
+                  const unlocked = isMathLevelUnlocked(progress, stage.stage, level, isAdmin);
                   return (
                     <button key={level} disabled={!unlocked} onClick={() => onStart({ mode: 'stage', stage: stage.stage, level, progress })}
                       title={LEVEL_NAMES[level - 1]}

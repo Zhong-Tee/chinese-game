@@ -11,6 +11,19 @@ import {
   speakChinese,
 } from '../utils/chineseSpeech';
 
+async function functionErrorMessage(data, invokeError, fallback) {
+  if (data?.error) return data.error;
+  if (invokeError?.context?.json) {
+    try {
+      const body = await invokeError.context.json();
+      if (body?.error) return body.error;
+    } catch {
+      // The response body may already have been consumed.
+    }
+  }
+  return invokeError?.message || fallback;
+}
+
 function NumericSettingInput({ value, onCommit, min, max, step = 1, suffix, className, decimals }) {
   const displayValue = (nextValue) => (
     decimals === undefined ? String(nextValue) : Number(nextValue).toFixed(decimals)
@@ -77,6 +90,11 @@ export default function Settings({
   const [keyLevel, setKeyLevel] = useState('3');
   const [keyGrantLoading, setKeyGrantLoading] = useState(false);
   const [keyGrantMessage, setKeyGrantMessage] = useState('');
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminUsersLoading, setAdminUsersLoading] = useState(false);
+  const [userDeleteTarget, setUserDeleteTarget] = useState(null);
+  const [userDeleteLoading, setUserDeleteLoading] = useState(false);
+  const [userDeleteError, setUserDeleteError] = useState('');
 
   const applySpeechRate = (rate, playPreview = true) => {
     const saved = setSpeechRate(rate);
@@ -103,6 +121,14 @@ export default function Settings({
         setKeyUsers(users);
         setKeyUserId((current) => current || users[0]?.user_id || '');
       });
+      setAdminUsersLoading(true);
+      supabase.functions.invoke('admin-users', { body: { action: 'list' } }).then(({ data, error }) => {
+        if (error || !Array.isArray(data?.users)) {
+          console.error('load admin users:', error || data?.error);
+          return;
+        }
+        setAdminUsers(data.users);
+      }).finally(() => setAdminUsersLoading(false));
     }
   }, [page, isAdmin]);
 
@@ -121,6 +147,24 @@ export default function Settings({
     }
     const selectedUser = keyUsers.find((item) => item.user_id === keyUserId);
     setKeyGrantMessage(`✓ ให้กุญแจ LV.${keyLevel} แก่ ${selectedUser?.display_name || 'ผู้ใช้'} แล้ว`);
+  };
+
+  const deleteAdminUser = async () => {
+    if (!userDeleteTarget?.user_id || userDeleteLoading) return;
+    setUserDeleteLoading(true);
+    setUserDeleteError('');
+    const { data, error } = await supabase.functions.invoke('admin-users', { body: { action: 'delete', userId: userDeleteTarget.user_id } });
+    setUserDeleteLoading(false);
+    if (error || !data?.ok) {
+      setUserDeleteError(await functionErrorMessage(data, error, 'ลบผู้ใช้ไม่สำเร็จ'));
+      return;
+    }
+    const deletedId = userDeleteTarget.user_id;
+    setAdminUsers((current) => current.filter((item) => item.user_id !== deletedId));
+    setKeyUsers((current) => current.filter((item) => item.user_id !== deletedId));
+    if (keyUserId === deletedId) setKeyUserId('');
+    if (missionApplyUserId === deletedId) setMissionApplyUserId('');
+    setUserDeleteTarget(null);
   };
 
   const saveMissionConfig = async () => {
@@ -537,6 +581,27 @@ export default function Settings({
             </div>
           )}
 
+          {isAdmin && (
+            <div className="space-y-4 border-t border-white/10 pt-5">
+              <div className="text-center">
+                <h3 className="text-base font-black uppercase italic text-red-300 sm:text-lg">👥 จัดการผู้ใช้</h3>
+                <p className="mt-1 text-[11px] text-white/45">ลบบัญชีและข้อมูลทั้งหมดของผู้ใช้แบบถาวร</p>
+              </div>
+              {adminUsersLoading ? <p className="py-4 text-center text-sm font-bold text-white/45">กำลังโหลดผู้ใช้...</p> : (
+                <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                  {adminUsers.filter((item) => item.user_id !== user?.id && !item.is_admin).map((item) => (
+                    <div key={item.user_id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-left">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-500/20 font-black text-violet-200">{String(item.display_name || '?').slice(0, 1).toUpperCase()}</div>
+                      <div className="min-w-0 flex-1"><p className="truncate text-sm font-black text-white">{item.display_name}</p><p className="truncate text-[11px] text-white/45">{item.email || item.user_id}</p></div>
+                      <button type="button" onClick={() => { setUserDeleteError(''); setUserDeleteTarget(item); }} className="min-h-10 shrink-0 rounded-xl bg-red-500 px-3 text-xs font-black text-white shadow-lg transition active:scale-95">ลบ</button>
+                    </div>
+                  ))}
+                  {adminUsers.filter((item) => item.user_id !== user?.id && !item.is_admin).length === 0 && <p className="py-4 text-center text-sm italic text-white/40">ไม่พบผู้ใช้ที่สามารถลบได้</p>}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* รายการคำผิด (จากมินิเกม กด WRONG) */}
           <div className="pt-4 border-t border-white/10">
             <h3 className="text-base sm:text-lg font-black text-white/70 mb-3 uppercase tracking-wide">คำผิด</h3>
@@ -578,6 +643,21 @@ export default function Settings({
             )}
           </div>
         </div>
+        {userDeleteTarget && (
+          <div className="fixed inset-0 z-[180] flex items-center justify-center bg-slate-950/85 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="delete-user-title" onMouseDown={(event) => event.target === event.currentTarget && !userDeleteLoading && setUserDeleteTarget(null)}>
+            <div className="w-full max-w-sm overflow-hidden rounded-[2rem] border-2 border-red-200 bg-white text-center shadow-2xl">
+              <div className="bg-gradient-to-br from-red-500 to-rose-600 px-6 py-6 text-white"><div className="text-5xl" aria-hidden="true">⚠️</div><h2 id="delete-user-title" className="mt-2 text-xl font-black">ลบผู้ใช้อย่างถาวร?</h2></div>
+              <div className="px-6 py-6">
+                <p className="text-xl font-black text-slate-900">{userDeleteTarget.display_name}</p>
+                <p className="mt-1 text-sm font-bold text-slate-500">{userDeleteTarget.email}</p>
+                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-left text-sm font-bold leading-relaxed text-red-700"><p>ข้อมูลที่จะถูกลบ:</p><ul className="mt-2 list-inside list-disc space-y-1 text-xs"><li>บัญชีเข้าสู่ระบบ</li><li>ความคืบหน้า คะแนน และภารกิจ</li><li>หนังสือและรูปภาพที่ผู้ใช้สร้าง</li><li>ประวัติการอ่านและข้อมูลส่วนตัว</li></ul></div>
+                <p className="mt-3 text-xs font-black text-red-600">การดำเนินการนี้ไม่สามารถเรียกคืนได้</p>
+                {userDeleteError && <p className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{userDeleteError}</p>}
+                <div className="mt-6 grid grid-cols-2 gap-2"><button type="button" autoFocus onClick={() => { setUserDeleteTarget(null); setUserDeleteError(''); }} disabled={userDeleteLoading} className="min-h-12 rounded-2xl bg-slate-100 px-4 font-black text-slate-600 disabled:opacity-50">ยกเลิก</button><button type="button" onClick={deleteAdminUser} disabled={userDeleteLoading} className="min-h-12 rounded-2xl bg-red-500 px-4 font-black text-white shadow-lg disabled:opacity-60">{userDeleteLoading ? 'กำลังลบ...' : 'ยืนยันลบ'}</button></div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

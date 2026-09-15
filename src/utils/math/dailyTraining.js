@@ -8,7 +8,7 @@ export function buildDailyTraining(progress, { userId = 'guest', date = localDat
   const state = normalizeMathProgress(progress);
   const rng = createSeededRandom(hash(`${userId}:${date}`));
   const unlocked = [];
-  for (let stage = 1; stage <= state.currentStage; stage += 1) {
+  for (let stage = 1; stage <= Math.min(6, state.currentStage); stage += 1) {
     const maxLevel = stage < state.currentStage ? 4 : state.currentLevel;
     for (let level = 1; level <= maxLevel; level += 1) unlocked.push({ stage, level });
   }
@@ -18,10 +18,12 @@ export function buildDailyTraining(progress, { userId = 'guest', date = localDat
       if (key.startsWith('numberBond')) return 1;
       if (key.startsWith('addition')) return 2;
       if (key.startsWith('subtraction')) return 3;
-      if (key.startsWith('multiplication')) return 4;
-      if (key.startsWith('division')) return 5;
-      return 6;
-    });
+      if (key.startsWith('borrowing')) return 4;
+      if (key.startsWith('multiplication')) return 5;
+      if (key.startsWith('division')) return 6;
+      return null;
+    })
+    .filter(Boolean);
   const questions = [];
   const signatures = new Set();
   let guard = 0;

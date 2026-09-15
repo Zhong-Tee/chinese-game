@@ -99,14 +99,14 @@ export default function Login({ setPage, setUser, fetchInitialData, fetchUserSet
         <input 
           type="text" 
           placeholder="Username" 
-          className="w-full p-4 border rounded-3xl outline-none shadow-inner" 
+          className="login-input w-full rounded-3xl border-2 border-slate-300 bg-white p-4 font-bold text-slate-900 caret-orange-600 shadow-inner outline-none placeholder:text-slate-500 focus:border-orange-500 focus:ring-4 focus:ring-orange-200/60"
           value={username}
           onChange={e => setUsername(e.target.value)} 
         />
         <input 
           type="password" 
           placeholder="Password" 
-          className="w-full p-4 border rounded-3xl outline-none shadow-inner" 
+          className="login-input w-full rounded-3xl border-2 border-slate-300 bg-white p-4 font-bold text-slate-900 caret-orange-600 shadow-inner outline-none placeholder:text-slate-500 focus:border-orange-500 focus:ring-4 focus:ring-orange-200/60"
           value={password}
           onChange={e => setPassword(e.target.value)} 
         />
