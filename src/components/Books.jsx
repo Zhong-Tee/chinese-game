@@ -255,6 +255,8 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
   const [audioMode, setAudioMode] = useState(() => localStorage.getItem('book-reader-audio-mode') || 'manual');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const speechRunRef = useRef(0);
+  const readerScrollRef = useRef(null);
+  const touchStartRef = useRef(null);
   const [showExpandedImage, setShowExpandedImage] = useState(false);
   const [quizAnswers, setQuizAnswers] = useState({});
   const [quizLoading, setQuizLoading] = useState(false);
@@ -292,6 +294,12 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
     const timerId = window.setTimeout(saveCurrentPage, 500);
     return () => window.clearTimeout(timerId);
   }, [book?.id, isQuizPage, pageIndex, pages.length, saveCurrentPage]);
+
+  useEffect(() => {
+    const scrollArea = readerScrollRef.current;
+    if (!scrollArea) return;
+    scrollArea.scrollTop = 0;
+  }, [book?.id, pageIndex]);
 
   const stopSpeech = useCallback(() => {
     speechRunRef.current += 1;
@@ -371,6 +379,30 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
       setQuizLoading(false);
     }
   };
+  const handleTouchStart = (event) => {
+    if (event.touches.length !== 1 || event.target.closest('button, input, select, textarea, a')) {
+      touchStartRef.current = null;
+      return;
+    }
+    const touch = event.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+  };
+  const handleTouchEnd = (event) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start || event.changedTouches.length !== 1) return;
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    const elapsed = Date.now() - start.time;
+    if (elapsed > 1000 || Math.abs(deltaX) < 60 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.25) return;
+    if (deltaX < 0) {
+      if (pageIndex < pages.length - 1) setPageIndex((value) => Math.min(pages.length - 1, value + 1));
+      else if (!novelInProgress && !isQuizPage) openQuiz();
+    } else if (pageIndex > 0) {
+      setPageIndex((value) => Math.max(0, value - 1));
+    }
+  };
   const answeredCount = quizQuestions.filter((_, index) => quizAnswers[index] !== undefined).length;
   const quizScore = quizQuestions.reduce((score, question, index) => score + (quizAnswers[index] === Number(question.correct_index) ? 1 : 0), 0);
   const allQuizAnswered = quizQuestions.length === 3 && answeredCount === quizQuestions.length;
@@ -407,7 +439,7 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
           <button type="button" onClick={() => changeFont(1)} disabled={fontIndex === FONT_SIZES.length - 1} className="h-10 rounded-xl bg-slate-100 text-lg font-black disabled:opacity-30" aria-label="เพิ่มขนาดอักษร">A+</button>
         </div>
       </header>
-      <main className="flex-1 overflow-y-auto px-5 py-6">
+      <main ref={readerScrollRef} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchCancel={() => { touchStartRef.current = null; }} className="flex-1 touch-pan-y overflow-y-auto px-5 py-6">
         <article className="mx-auto max-w-2xl rounded-[2rem] border border-orange-100 bg-white p-5 shadow-xl sm:p-8">
           {isQuizPage ? (
             <div>
