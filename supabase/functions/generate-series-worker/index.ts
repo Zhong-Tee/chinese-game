@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { buildReaderPreferenceProfile, readerPreferenceGuidance } from '../_shared/reader-preferences.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -208,11 +209,15 @@ async function processEpisode(admin: AdminClient, apiKey: string, supabaseUrl: s
       totalUsd = Number(firstBook.generation_cost_usd || 0);
       const pageCount = PAGE_COUNTS[Number(firstBook.reading_minutes || 5)] || 6;
       const model = String(series.text_model || firstBook.text_model || 'gpt-5.6-terra');
+      const readerProfile = firstBook.use_reader_profile !== false
+        ? await buildReaderPreferenceProfile(admin, series.creator_id)
+        : null;
       await admin.from('ai_books').update({ status: 'generating', error_message: null, generation_progress: { stage: 'designing_series', completed_episodes: 0, target_episodes: 5, active_episode: 1, message_th: 'กำลังออกแบบโครงเรื่องครบ 5 ตอน' }, updated_at: new Date().toISOString() }).eq('id', bookId);
       await admin.from('ai_book_series').update({ generation_status: 'generating', error_message: null, generation_progress: { stage: 'designing_series', completed_episodes: 0, target_episodes: 5, active_episode: 1, message_th: 'กำลังออกแบบโครงเรื่องครบ 5 ตอน' }, updated_at: new Date().toISOString() }).eq('id', seriesId);
 
       const firstPrompt = `Design one complete five-episode Chinese-learning youth-fiction series for Thai speakers, then write episode 1.
 Genre: ${SERIES_GENRES[series.genre] || series.genre}. Chinese level: ${firstBook.language_level}. Length: exactly ${pageCount} pages per episode. Tone: ${firstBook.tone}. Requested topic: ${firstBook.topic || 'invent an engaging original premise'}.
+${readerPreferenceGuidance(readerProfile)}
 Create a detailed immutable series bible and exactly five episode plans before writing episode 1. Every plan must specify opening state, goal, conflict, discovery, emotional turn, resolved threads, carry-forward threads, ending state, and hook. The five episodes must form one causal story rather than separate adventures. Episode 5 must resolve the central arc.
 Write episode 1 with natural segmented Chinese, accurate tone-marked Hanyu Pinyin, and natural Thai per paragraph. Create exactly 3 grounded multiple-choice questions with 3 options each. Return the actual end-of-episode continuity_state with precise character knowledge, relationships, items, time, location, resolved threads, open threads, preserved facts, and ending scene. English image prompts must preserve the visual bible and contain no text, letters, logos, watermark, or copyrighted characters.`;
       const draftResponse = await structuredResponse(apiKey, model, 'series_design_and_episode_1', firstEpisodeSchema(pageCount),
@@ -284,7 +289,7 @@ Write episode 1 with natural segmented Chinese, accurate tone-marked Hanyu Pinyi
         creator_id: series.creator_id, creator_name: series.creator_name, category: 'series', language_level: previous.language_level,
         reading_minutes: previous.reading_minutes, tone: previous.tone, topic: previous.topic, text_model: model, book_format: 'series',
         series_id: seriesId, episode_number: episodeNumber, series_total: 5, series_genre: series.genre, title_cn: plan.title_cn,
-        status: 'generating', visibility: 'public', generation_progress: { stage: 'writing_episode', completed_episodes: episodeNumber - 1, target_episodes: 5, active_episode: episodeNumber, message_th: `กำลังเขียนตอนที่ ${episodeNumber}` },
+        use_reader_profile: previous.use_reader_profile !== false, status: 'generating', visibility: 'public', generation_progress: { stage: 'writing_episode', completed_episodes: episodeNumber - 1, target_episodes: 5, active_episode: episodeNumber, message_th: `กำลังเขียนตอนที่ ${episodeNumber}` },
       }).select().single();
       if (createError) throw createError;
       bookId = created.id;

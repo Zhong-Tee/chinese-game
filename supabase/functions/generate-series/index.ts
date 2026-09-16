@@ -69,6 +69,7 @@ Deno.serve(async (request) => {
     const textModel = String(body.textModel || 'gpt-5.6-terra');
     const topic = String(body.topic || '').slice(0, 240);
     const tone = String(body.tone || 'สนุกและอบอุ่น').slice(0, 80);
+    const useReaderProfile = body.useReaderProfile !== false;
     if (!SERIES_GENRES[genre] || !LEVELS.has(languageLevel) || !MINUTES.has(readingMinutes) || !MODELS.has(textModel)) return json({ error: 'ข้อมูลสำหรับสร้างซีรีส์ไม่ถูกต้อง' }, 400);
 
     const dailyLimit = Number(Deno.env.get('AI_BOOKS_DAILY_LIMIT') || 5);
@@ -93,7 +94,7 @@ Deno.serve(async (request) => {
       creator_id: user.id, creator_name: creatorName, title_cn: '正在创作第一集', title_pinyin: 'Zhèngzài chuàngzuò dì yī jí', title_th: 'กำลังสร้างตอนที่ 1',
       category: 'series', language_level: languageLevel, reading_minutes: readingMinutes, tone, topic, text_model: textModel,
       book_format: 'series', series_id: series.id, episode_number: 1, series_total: 5, series_genre: genre,
-      status: 'generating', visibility: 'public', generation_progress: { stage: 'queued', completed_episodes: 0, target_episodes: 5, active_episode: 1, message_th: 'กำลังรอเริ่มสร้างตอนที่ 1' },
+      use_reader_profile: useReaderProfile, status: 'generating', visibility: 'public', generation_progress: { stage: 'queued', completed_episodes: 0, target_episodes: 5, active_episode: 1, message_th: 'กำลังรอเริ่มสร้างตอนที่ 1' },
     }).select().single();
     if (bookError) throw bookError;
     bookId = book.id;

@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { buildReaderPreferenceProfile, readerPreferenceGuidance } from '../_shared/reader-preferences.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -228,6 +229,7 @@ Deno.serve(async (request) => {
     let seriesGenre = String(body.seriesGenre || '');
     let topic = String(body.topic || '').slice(0, 240);
     let tone = String(body.tone || 'สนุกและอบอุ่น').slice(0, 80);
+    let useReaderProfile = body.useReaderProfile !== false;
     let learnedWords = Array.isArray(body.learnedWords) ? body.learnedWords.slice(0, 80).map((word: Record<string, unknown>) => ({ hanzi: String(word?.hanzi || '').slice(0, 30), pinyin: String(word?.pinyin || '').slice(0, 80), thai: String(word?.thai || '').slice(0, 80) })).filter((word: Record<string, string>) => word.hanzi) : [];
 
     if (requestedSeriesId) {
@@ -237,7 +239,7 @@ Deno.serve(async (request) => {
       if (foundSeries.creator_id !== user.id && !profile?.is_admin) return json({ error: 'เฉพาะผู้สร้างซีรีส์หรือ Admin เท่านั้นที่สร้างตอนถัดไปได้' }, 403);
       series = foundSeries;
       seriesTotal = Number(foundSeries.total_episodes || DEFAULT_SERIES_TOTAL);
-      const { data: existingBooks, error: booksError } = await admin.from('ai_books').select('episode_number, episode_summary_th, title_cn, language_level, reading_minutes, tone, topic, cover_url').eq('series_id', foundSeries.id).eq('status', 'ready').order('episode_number', { ascending: true });
+      const { data: existingBooks, error: booksError } = await admin.from('ai_books').select('episode_number, episode_summary_th, title_cn, language_level, reading_minutes, tone, topic, cover_url,use_reader_profile').eq('series_id', foundSeries.id).eq('status', 'ready').order('episode_number', { ascending: true });
       if (booksError) throw booksError;
       previousBooks = existingBooks || [];
       episodeNumber = Math.max(0, ...previousBooks.map((item) => Number(item.episode_number || 0))) + 1;
@@ -245,7 +247,7 @@ Deno.serve(async (request) => {
       const lastBook = previousBooks[previousBooks.length - 1];
       category = 'series'; bookFormat = 'series'; seriesGenre = foundSeries.genre; textModel = foundSeries.text_model;
       languageLevel = lastBook?.language_level || 'easy'; readingMinutes = Number(lastBook?.reading_minutes || 5);
-      tone = lastBook?.tone || 'สนุกและอบอุ่น'; topic = lastBook?.topic || ''; learnedWords = [];
+      tone = lastBook?.tone || 'สนุกและอบอุ่น'; topic = lastBook?.topic || ''; useReaderProfile = lastBook?.use_reader_profile !== false; learnedWords = [];
     }
 
     const seriesMode = bookFormat === 'series';
@@ -258,12 +260,13 @@ Deno.serve(async (request) => {
       creator_id: user.id, creator_name: creatorName, category, language_level: languageLevel, reading_minutes: readingMinutes,
       tone, topic, text_model: textModel, book_format: seriesMode ? 'series' : 'standalone', series_id: series?.id || null,
       episode_number: seriesMode ? episodeNumber : null, series_total: seriesMode ? seriesTotal : null, series_genre: seriesMode ? seriesGenre : null,
-      status: 'generating', visibility: 'public',
+      use_reader_profile: useReaderProfile, status: 'generating', visibility: 'public',
     }).select().single();
     if (createError) throw createError;
     bookId = created.id;
 
     const pageCount = PAGE_COUNTS[readingMinutes];
+    const readerProfile = useReaderProfile ? await buildReaderPreferenceProfile(admin, user.id) : null;
     const levelInstruction = languageLevel === 'advanced' ? 'Use sophisticated but natural Chinese, varied sentence structures, connectors, and age-appropriate idioms. Keep all pinyin and Thai translations precise.' : `Use Chinese suitable for the ${languageLevel} learner level.`;
     const specialInstruction = category === 'one-hundred-thousand-whys' ? 'Explain a stable scientific or everyday fact accurately. If uncertain, choose a simpler established topic.' : category === 'jokes' ? 'Create wholesome child-safe humor that also works in Thai.' : 'Create a coherent child-safe story.';
     const seriesInstruction = seriesMode ? firstEpisode
@@ -273,6 +276,7 @@ Deno.serve(async (request) => {
     const prompt = `Create a Chinese learner book for Thai speakers. Category: ${CATEGORY_NAMES[category]}. Level: ${languageLevel}. Length: exactly ${pageCount} pages. Tone: ${tone}. Requested topic: ${topic || 'choose an engaging topic yourself'}.
 ${levelInstruction}
 ${seriesInstruction}
+${readerPreferenceGuidance(readerProfile)}
 Create one title for the whole book only; do not create page or chapter headings. Split every Chinese sentence into natural word segments with correct Hanyu Pinyin and a natural Thai translation per paragraph. Create exactly 3 unambiguous multiple-choice comprehension questions grounded only in the book content, each with exactly 3 plausible options and exactly one correct answer. Include accurate tone-marked pinyin and natural Thai for every question and option, plus a short Thai explanation. Keep visual descriptions consistent. Image prompts must be in English, request no text, letters, or watermark, and describe the same main characters. Avoid trademarks and copyrighted characters. For a series, never reset relationships, knowledge, inventory, time, or location between episodes; continuity_state must describe what is true after the final scene.
 ${learnedWords.length ? `Naturally reuse some learned words when appropriate: ${JSON.stringify(learnedWords)}` : ''}`;
 

@@ -549,7 +549,7 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
     try {
       const functionName = isYouthNovel ? 'generate-youth-novel' : isSeries ? 'generate-series' : 'generate-book';
       const { data, error: invokeError } = await supabase.functions.invoke(functionName, { body: {
-        bookFormat, category, seriesGenre, languageLevel: level, readingMinutes: minutes, textModel, topic: topic.trim(), tone, learnedWords,
+        bookFormat, category, seriesGenre, languageLevel: level, readingMinutes: minutes, textModel, topic: topic.trim(), tone, learnedWords, useReaderProfile,
         novelOptions: isYouthNovel ? {
           age: novelAge, primaryGenre: novelGenre, secondaryGenre: novelSecondaryGenre,
           primaryTone: novelTone, secondaryTone: novelSecondaryTone, interests: novelInterests,
@@ -613,9 +613,9 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
                 <label className="text-sm font-black text-slate-800">สิ่งที่ไม่ต้องการ <span className="font-normal text-slate-400">(ไม่บังคับ)</span><input value={novelExclusions} onChange={(event) => setNovelExclusions(event.target.value)} maxLength={160} placeholder="เช่น ไม่เอาฉากน่ากลัว" className="mt-2 w-full rounded-xl border-2 border-white bg-white p-3 text-sm font-normal" /></label>
               </div>
               <p className="rounded-xl bg-white/80 px-3 py-2 text-xs font-bold leading-relaxed text-emerald-700">ชื่อที่กรอกจะใช้ตามตัวอักษรเดิมทุกประการ ไม่แปลเป็นภาษาจีนและไม่ตั้งชื่อจีนแทน</p>
-              <label className="flex items-center justify-between gap-3 rounded-xl bg-white p-3 text-sm font-black text-slate-700"><span>ใช้ข้อมูลความชอบจากการอ่านครั้งก่อน</span><input type="checkbox" checked={useReaderProfile} onChange={(event) => setUseReaderProfile(event.target.checked)} className="h-5 w-5 accent-emerald-500" /></label>
             </div>
           )}
+          <label className="flex items-center justify-between gap-3 rounded-2xl border-2 border-emerald-100 bg-emerald-50 p-4 text-sm font-black text-slate-700"><span><span className="block">ใช้ข้อมูลความชอบจากการอ่านครั้งก่อน</span><span className="mt-1 block text-xs font-bold text-emerald-700">ใช้เฉพาะประวัติอ่านและรีวิวของบัญชีนี้</span></span><input type="checkbox" checked={useReaderProfile} onChange={(event) => setUseReaderProfile(event.target.checked)} className="h-5 w-5 shrink-0 accent-emerald-500" /></label>
           <fieldset><legend className="mb-3 font-black text-slate-800">3. ระดับภาษาจีน</legend><div className="space-y-2">{LEVELS.map((item) => <button key={item.id} type="button" onClick={() => setLevel(item.id)} className={`flex w-full items-center justify-between rounded-2xl border-2 p-3 text-left ${level === item.id ? 'border-cyan-500 bg-cyan-50' : 'border-white bg-white'}`}><span><span className="block text-sm font-black text-slate-800">{item.label}</span><span className="text-xs text-slate-400">{item.detail}</span></span><span className={`h-5 w-5 rounded-full border-4 ${level === item.id ? 'border-cyan-500 bg-white' : 'border-slate-200'}`} /></button>)}</div></fieldset>
           {isYouthNovel ? <div className="rounded-2xl border-2 border-violet-200 bg-violet-50 p-4 text-center"><div className="font-black text-violet-900">📚 ความยาว 8 บท</div><div className="mt-1 text-xs font-bold text-violet-600">หนึ่งเล่มจบ · ภาพประกอบทุกบท · แบบทดสอบท้ายเล่ม</div></div> : <fieldset><legend className="mb-3 font-black text-slate-800">4. ความยาว</legend><div className="grid grid-cols-4 gap-2">{LENGTHS.map((item) => <button key={item.minutes} type="button" onClick={() => setMinutes(item.minutes)} className={`min-w-0 rounded-2xl border-2 px-1 py-4 text-center ${minutes === item.minutes ? 'border-violet-500 bg-violet-50' : 'border-white bg-white'}`}><span className="block whitespace-nowrap text-sm font-black text-slate-800 sm:text-base">{item.pages} หน้า</span></button>)}</div></fieldset>}
           <fieldset><legend className="mb-3 font-black text-slate-800">5. โมเดลสร้างเนื้อหา</legend><div className="grid grid-cols-3 gap-2">{TEXT_MODELS.map((item) => <button key={item.id} type="button" onClick={() => setTextModel(item.id)} className={`relative rounded-2xl border-2 px-2 py-3 text-center ${textModel === item.id ? 'border-emerald-500 bg-emerald-50' : 'border-white bg-white'}`}>{item.recommended && <span className="absolute -top-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-emerald-500 px-2 py-0.5 text-[8px] font-black text-white">แนะนำ</span>}<span className="block text-xs font-black text-slate-800">{item.label}</span><span className="mt-1 block text-[10px] text-slate-400">{item.detail}</span></button>)}</div></fieldset>
@@ -751,6 +751,10 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
       setReadBookIds((current) => new Set([...current, book.id]));
       if (book.book_format === 'youth_novel') {
         await recordReadingEvent(book, 'complete', 8);
+      }
+      const isFinalSeriesEpisode = book.book_format === 'series'
+        && Number(book.episode_number || 0) >= Number(book.series_total || 5);
+      if (book.book_format !== 'series' || isFinalSeriesEpisode) {
         setReviewEnjoyment('');
         setReviewAspect('');
         setReviewError('');
@@ -762,7 +766,7 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
     }
     setCompletingBookId(null);
   };
-  const saveNovelReview = async () => {
+  const saveBookReview = async () => {
     if (!userId || !reviewTarget?.id || !reviewEnjoyment || !reviewAspect || reviewSaving) return;
     setReviewSaving(true);
     setReviewError('');
@@ -924,14 +928,14 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
         </div>
       )}
       {reviewTarget && (
-        <div className="fixed inset-0 z-[155] flex items-center justify-center bg-slate-950/75 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="novel-review-title">
+        <div className="fixed inset-0 z-[155] flex items-center justify-center bg-slate-950/75 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="book-review-title">
           <div className="max-h-full w-full max-w-sm overflow-y-auto rounded-[2rem] border-2 border-violet-100 bg-white p-6 shadow-2xl">
-            <div className="text-center"><div className="text-5xl" aria-hidden="true">📚</div><h2 id="novel-review-title" className="mt-2 text-xl font-black text-slate-900">หนูชอบเรื่องนี้แค่ไหน?</h2><p className="mt-1 text-sm font-bold text-slate-500">ตอบ 2 ข้อสั้น ๆ เพื่อช่วยให้เล่มต่อไปสนุกขึ้น</p></div>
+            <div className="text-center"><div className="text-5xl" aria-hidden="true">📚</div><h2 id="book-review-title" className="mt-2 text-xl font-black text-slate-900">{reviewTarget.book_format === 'series' ? 'หนูชอบซีรีส์นี้แค่ไหน?' : 'หนูชอบหนังสือเล่มนี้แค่ไหน?'}</h2><p className="mt-1 text-sm font-bold text-slate-500">{reviewTarget.book_format === 'series' ? `อ่านครบ ${reviewTarget.series_total || 5} ตอนแล้ว ตอบ 2 ข้อสั้น ๆ ได้เลย` : 'อ่านจบแล้ว ตอบ 2 ข้อสั้น ๆ ได้เลย'}</p></div>
             <div className="mt-5 grid grid-cols-2 gap-2">{REVIEW_ENJOYMENT.map((item) => <button key={item.id} type="button" onClick={() => setReviewEnjoyment(item.id)} aria-pressed={reviewEnjoyment === item.id} className={`min-h-12 rounded-2xl border-2 px-3 text-sm font-black transition ${reviewEnjoyment === item.id ? 'border-violet-500 bg-violet-50 text-violet-800' : 'border-slate-100 bg-slate-50 text-slate-700'}`}>{item.label}</button>)}</div>
             <h3 className="mt-6 text-center text-base font-black text-slate-900">ชอบอะไรมากที่สุด?</h3>
             <div className="mt-3 grid grid-cols-2 gap-2">{REVIEW_ASPECTS.map((item) => <button key={item.id} type="button" onClick={() => setReviewAspect(item.id)} aria-pressed={reviewAspect === item.id} className={`min-h-12 rounded-2xl border-2 px-3 text-sm font-black transition ${reviewAspect === item.id ? 'border-cyan-500 bg-cyan-50 text-cyan-800' : 'border-slate-100 bg-slate-50 text-slate-700'}`}>{item.label}</button>)}</div>
             {reviewError && <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-600">{reviewError}</p>}
-            <div className="mt-6 grid grid-cols-[0.8fr_1.2fr] gap-2"><button type="button" onClick={() => setReviewTarget(null)} disabled={reviewSaving} className="min-h-12 rounded-2xl bg-slate-100 px-3 font-black text-slate-500 disabled:opacity-50">ไว้ทีหลัง</button><button type="button" onClick={saveNovelReview} disabled={!reviewEnjoyment || !reviewAspect || reviewSaving} className="min-h-12 rounded-2xl bg-violet-600 px-3 font-black text-white shadow-lg disabled:opacity-40">{reviewSaving ? 'กำลังบันทึก…' : 'บันทึกรีวิว ✓'}</button></div>
+            <div className="mt-6 grid grid-cols-[0.8fr_1.2fr] gap-2"><button type="button" onClick={() => setReviewTarget(null)} disabled={reviewSaving} className="min-h-12 rounded-2xl bg-slate-100 px-3 font-black text-slate-500 disabled:opacity-50">ไว้ทีหลัง</button><button type="button" onClick={saveBookReview} disabled={!reviewEnjoyment || !reviewAspect || reviewSaving} className="min-h-12 rounded-2xl bg-violet-600 px-3 font-black text-white shadow-lg disabled:opacity-40">{reviewSaving ? 'กำลังบันทึก…' : 'บันทึกรีวิว ✓'}</button></div>
           </div>
         </div>
       )}
