@@ -4,6 +4,9 @@ import MathSplitAnswer from './MathSplitAnswer';
 import MathMakeTenBond from './MathMakeTenBond';
 import MathSubtractionSplit from './MathSubtractionSplit';
 import MathBorrowingSplit from './MathBorrowingSplit';
+import MathCutTenSplit from './MathCutTenSplit';
+import MathMultiplyBuild from './MathMultiplyBuild';
+import MathDivideBuild from './MathDivideBuild';
 import { buildDailyTraining } from '../utils/math/dailyTraining';
 import { createSeededRandom, generateQuestion, generateQuestionSet } from '../utils/math/questionGenerators';
 import { getMathSummary, MATH_STAGE_META, recordMathAnswer } from '../utils/math/mathProgress';
@@ -106,7 +109,7 @@ export default function MathGame({ user, config, onExit, onReward }) {
 
       <section className="mt-4 rounded-[2rem] bg-white p-5 shadow-xl">
         <h1 className="whitespace-pre-line text-center text-2xl font-black leading-snug text-slate-800">{question.prompt}</h1>
-        {!['bond-split', 'split-two', 'subtraction-split', 'borrowing-split'].includes(question.inputMode) && <MathVisual visual={question.visual} />}
+        {!['bond-split', 'split-two', 'subtraction-split', 'borrowing-split', 'cut-ten-split', 'multiply-build', 'divide-build'].includes(question.inputMode) && <MathVisual visual={question.visual} />}
         {!feedback && question.inputMode === 'bond-split' && (
           <MathMakeTenBond key={question.id} visual={question.visual} answer={question.answer} onSubmit={submit} />
         )}
@@ -123,6 +126,15 @@ export default function MathGame({ user, config, onExit, onReward }) {
         )}
         {!feedback && question.inputMode === 'borrowing-split' && (
           <MathBorrowingSplit key={question.id} visual={question.visual} onSubmit={submit} />
+        )}
+        {!feedback && question.inputMode === 'cut-ten-split' && (
+          <MathCutTenSplit key={question.id} visual={question.visual} answer={question.answer} onSubmit={submit} />
+        )}
+        {!feedback && question.inputMode === 'multiply-build' && (
+          <MathMultiplyBuild key={question.id} visual={question.visual} answer={question.answer} onSubmit={submit} />
+        )}
+        {!feedback && question.inputMode === 'divide-build' && (
+          <MathDivideBuild key={question.id} visual={question.visual} answer={question.answer} onSubmit={submit} />
         )}
 
         {!feedback && question.inputMode === 'choice' && (
@@ -184,6 +196,12 @@ export default function MathGame({ user, config, onExit, onReward }) {
                   ? <div className="mt-2 text-center font-bold">{question.visual.base} − {question.visual.subtract} = {question.answer}<br />{question.visual.remainder} + {question.answer} = {question.visual.finalAnswer}</div>
                 : question.inputMode === 'borrowing-split'
                   ? <div className="mt-2 text-center font-bold">{question.visual.borrowedOnes} − {question.visual.subtractOnes} = {question.visual.onesDifference}<br />{question.visual.tensDifference} + {question.visual.onesDifference} = {question.answer}</div>
+                : question.inputMode === 'cut-ten-split'
+                  ? <div className="mt-2 text-center font-bold">{question.visual.subtract} = {question.visual.firstCut} + {question.visual.secondCut}<br />{question.visual.whole} − {question.visual.firstCut} = {question.visual.base} แล้ว {question.visual.base} − {question.visual.secondCut} = {question.visual.finalAnswer}</div>
+                : question.inputMode === 'multiply-build'
+                  ? <div className="mt-2 text-center font-bold">{question.visual.groups} × {question.visual.size} = {question.visual.product}</div>
+                : question.inputMode === 'divide-build'
+                  ? <div className="mt-2 text-center font-bold">{question.visual.divisor} × {question.visual.quotient} = {question.visual.total}<br />{question.visual.total} ÷ {question.visual.divisor} = {question.visual.quotient}</div>
                 : question.choiceLabels
                   ? <div className="mt-2 text-center font-bold">เลือก {question.choiceLabels[String(question.answer)]}</div>
                   : <div className="mt-2 text-center font-bold">คำตอบคือ {question.answer}</div>

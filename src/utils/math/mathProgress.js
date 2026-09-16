@@ -3,12 +3,15 @@ export const MATH_STAGE_META = [
   { stage: 2, title: 'การบวก', thai: 'บวกแบบทำให้ครบหลักสิบ', icon: '➕', color: 'from-sky-400 to-blue-600' },
   { stage: 3, title: 'การลบ', thai: 'ลบแบบแยกหลักสิบ', icon: '➖', color: 'from-violet-400 to-purple-600' },
   { stage: 4, title: 'การยืม', thai: 'ลบแบบยืมหลักสิบ', icon: '🔄', color: 'from-cyan-400 to-teal-600' },
-  { stage: 5, title: 'การคูณ', thai: 'เข้าใจการคูณเป็นกลุ่ม', icon: '✖️', color: 'from-amber-400 to-orange-600' },
-  { stage: 6, title: 'การหาร', thai: 'แบ่งจำนวนเท่า ๆ กัน', icon: '➗', color: 'from-rose-400 to-pink-600' },
+  { stage: 5, title: 'ลบ10', thai: 'ลบแบบตัด10', icon: '✂️', color: 'from-lime-400 to-green-600' },
+  { stage: 6, title: 'การคูณ', thai: 'เข้าใจการคูณเป็นกลุ่ม', icon: '✖️', color: 'from-amber-400 to-orange-600' },
+  { stage: 7, title: 'การหาร', thai: 'แบ่งจำนวนเท่า ๆ กัน', icon: '➗', color: 'from-rose-400 to-pink-600' },
 ];
 
+export const TOTAL_MATH_STAGES = MATH_STAGE_META.length;
+
 export const EMPTY_MATH_PROGRESS = {
-  curriculumVersion: 2,
+  curriculumVersion: 3,
   currentStage: 1,
   currentLevel: 1,
   totalQuestions: 0,
@@ -35,17 +38,20 @@ const previousDateKey = (date = new Date()) => {
 };
 
 export function normalizeMathProgress(raw = {}) {
-  const sourceStage = Number(raw.currentStage) || 1;
   const sourceVersion = Number(raw.curriculumVersion) || 1;
-  const migratedStage = sourceVersion < 2 && sourceStage >= 4 ? Math.min(6, sourceStage + 1) : sourceStage;
-  const migratedLevel = sourceVersion < 2 && sourceStage > 5
+  let migratedStage = Math.max(1, Number(raw.currentStage) || 1);
+  // v1 → v2 แทรกด่านการยืมไว้ที่ 4, v2 → v3 แทรกด่านลบ10 ไว้ที่ 5 ด่านหลังจากนั้นจึงเลื่อนลงทีละหนึ่ง
+  if (sourceVersion < 2 && migratedStage >= 4) migratedStage += 1;
+  if (sourceVersion < 3 && migratedStage >= 5) migratedStage += 1;
+  // เรียนจบหลักสูตรเดิมมาแล้ว (เลยด่านสุดท้าย) ให้ถือว่าผ่านด่านสุดท้ายครบทุกระดับ
+  const migratedLevel = migratedStage > TOTAL_MATH_STAGES
     ? 4
     : Math.min(4, Math.max(1, Number(raw.currentLevel) || 1));
   return {
     ...EMPTY_MATH_PROGRESS,
     ...raw,
-    curriculumVersion: 2,
-    currentStage: Math.min(6, Math.max(1, migratedStage)),
+    curriculumVersion: 3,
+    currentStage: Math.min(TOTAL_MATH_STAGES, migratedStage),
     currentLevel: migratedLevel,
     skills: raw.skills || {},
     badges: Array.isArray(raw.badges) ? raw.badges : [],
@@ -65,6 +71,7 @@ function badgesFor(progress) {
   if (entries.some(([key, value]) => key.startsWith('numberBond.') && value.score >= 80)) badges.add('Make 10 Master');
   if ((progress.skills['addition.mentalAddition']?.score || 0) >= 80) badges.add('Addition Hero');
   if ((progress.skills['subtraction.break10']?.score || 0) >= 80) badges.add('Break 10 Master');
+  if ((progress.skills['cutTen.under20']?.score || 0) >= 80) badges.add('Cut 10 Master');
   if ((progress.skills['multiplication.array']?.score || 0) >= 80) badges.add('Multiplication Explorer');
   if ((progress.skills['division.factFamily']?.score || 0) >= 80) badges.add('Division Explorer');
   return [...badges];
@@ -97,7 +104,7 @@ export function recordMathAnswer(progress, question, correct, responseMs) {
 
   if (score >= 80 && previousSkill.attempts + 1 >= 15 && question.stage === next.currentStage && question.level === next.currentLevel) {
     if (next.currentLevel < 4) next.currentLevel += 1;
-    else if (next.currentStage < 6) {
+    else if (next.currentStage < TOTAL_MATH_STAGES) {
       next.currentStage += 1;
       next.currentLevel = 1;
     }

@@ -36,22 +36,36 @@ Deno.serve(async (request) => {
 
     const admin = createClient(supabaseUrl, serviceKey);
     const [{ data: book, error: bookError }, { data: profile }] = await Promise.all([
-      admin.from('ai_books').select('id, creator_id, status').eq('id', bookId).maybeSingle(),
+      admin.from('ai_books').select('id, creator_id, status, series_id').eq('id', bookId).maybeSingle(),
       admin.from('profiles').select('is_admin').eq('user_id', user.id).maybeSingle(),
     ]);
     if (bookError) throw bookError;
     if (!book) return json({ error: 'ไม่พบหนังสือเล่มนี้' }, 404);
     if (book.creator_id !== user.id && !profile?.is_admin) return json({ error: 'คุณไม่มีสิทธิ์ยกเลิกรายการนี้' }, 403);
-    if (book.status === 'ready') return json({ error: 'หนังสือสร้างเสร็จแล้ว หากต้องการนำออกให้ Admin ลบหนังสือ' }, 409);
+    let series: Record<string, any> | null = null;
+    if (book.series_id) {
+      const { data } = await admin.from('ai_book_series').select('id, generation_status').eq('id', book.series_id).maybeSingle();
+      series = data;
+    }
+    const activeSeries = series?.generation_status === 'generating' || series?.generation_status === 'failed';
+    if (book.status === 'ready' && !activeSeries) return json({ error: 'หนังสือสร้างเสร็จแล้ว หากต้องการนำออกให้ Admin ลบหนังสือ' }, 409);
     if (book.status === 'canceled') return json({ ok: true, bookId, quotaRestored: true, alreadyCanceled: true });
 
-    const { data: canceledBook, error: cancelError } = await admin
-      .from('ai_books')
-      .update({ status: 'canceled', error_message: 'ยกเลิกโดยผู้ใช้', updated_at: new Date().toISOString() })
-      .eq('id', bookId)
-      .in('status', ['generating', 'partial', 'failed'])
-      .select('id')
-      .maybeSingle();
+    if (activeSeries) {
+      await admin.from('ai_book_series').update({ generation_status: 'canceled', error_message: 'ยกเลิกโดยผู้ใช้', generation_progress: { stage: 'canceled', message_th: 'ยกเลิกการสร้างซีรีส์แล้ว' }, updated_at: new Date().toISOString() }).eq('id', book.series_id);
+      await admin.from('ai_series_generation_jobs').update({ status: 'canceled', updated_at: new Date().toISOString() }).eq('series_id', book.series_id).in('status', ['waiting', 'queued', 'processing', 'failed']);
+      const { data: seriesBooks, error: seriesBooksError } = await admin.from('ai_books').select('id').eq('series_id', book.series_id);
+      if (seriesBooksError) throw seriesBooksError;
+      const { error: cancelSeriesBooksError } = await admin.from('ai_books').update({ status: 'canceled', error_message: 'ยกเลิกโดยผู้ใช้', updated_at: new Date().toISOString() }).eq('series_id', book.series_id).in('status', ['generating', 'partial', 'failed', 'ready']);
+      if (cancelSeriesBooksError) throw cancelSeriesBooksError;
+      for (const seriesBook of seriesBooks || []) {
+        const { data: files } = await admin.storage.from('book-images').list(seriesBook.id, { limit: 100 });
+        if (files?.length) await admin.storage.from('book-images').remove(files.map((file) => `${seriesBook.id}/${file.name}`));
+      }
+    }
+    const { data: canceledBook, error: cancelError } = activeSeries
+      ? { data: { id: bookId }, error: null }
+      : await admin.from('ai_books').update({ status: 'canceled', error_message: 'ยกเลิกโดยผู้ใช้', updated_at: new Date().toISOString() }).eq('id', bookId).in('status', ['generating', 'partial', 'failed']).select('id').maybeSingle();
     if (cancelError) throw cancelError;
     if (!canceledBook) return json({ error: 'สถานะหนังสือเปลี่ยนไปแล้ว กรุณารีเฟรชและลองใหม่' }, 409);
 
@@ -62,8 +76,10 @@ Deno.serve(async (request) => {
       .eq('book_id', bookId)
       .in('status', ['waiting', 'queued', 'processing', 'failed']);
 
-    const { data: files } = await admin.storage.from('book-images').list(bookId, { limit: 100 });
-    if (files?.length) await admin.storage.from('book-images').remove(files.map((file) => `${bookId}/${file.name}`));
+    if (!activeSeries) {
+      const { data: files } = await admin.storage.from('book-images').list(bookId, { limit: 100 });
+      if (files?.length) await admin.storage.from('book-images').remove(files.map((file) => `${bookId}/${file.name}`));
+    }
 
     return json({ ok: true, bookId, quotaRestored: true });
   } catch (error) {

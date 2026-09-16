@@ -1,5 +1,5 @@
 import { createSeededRandom, generateQuestion } from './questionGenerators.js';
-import { localDateKey, normalizeMathProgress } from './mathProgress.js';
+import { localDateKey, normalizeMathProgress, TOTAL_MATH_STAGES } from './mathProgress.js';
 
 const hash = (value) => [...String(value)].reduce((acc, char) => Math.imul(acc ^ char.charCodeAt(0), 16777619), 2166136261) >>> 0;
 const pick = (rng, list) => list[Math.floor(rng() * list.length)];
@@ -8,7 +8,7 @@ export function buildDailyTraining(progress, { userId = 'guest', date = localDat
   const state = normalizeMathProgress(progress);
   const rng = createSeededRandom(hash(`${userId}:${date}`));
   const unlocked = [];
-  for (let stage = 1; stage <= Math.min(6, state.currentStage); stage += 1) {
+  for (let stage = 1; stage <= Math.min(TOTAL_MATH_STAGES, state.currentStage); stage += 1) {
     const maxLevel = stage < state.currentStage ? 4 : state.currentLevel;
     for (let level = 1; level <= maxLevel; level += 1) unlocked.push({ stage, level });
   }
@@ -19,8 +19,9 @@ export function buildDailyTraining(progress, { userId = 'guest', date = localDat
       if (key.startsWith('addition')) return 2;
       if (key.startsWith('subtraction')) return 3;
       if (key.startsWith('borrowing')) return 4;
-      if (key.startsWith('multiplication')) return 5;
-      if (key.startsWith('division')) return 6;
+      if (key.startsWith('cutTen')) return 5;
+      if (key.startsWith('multiplication')) return 6;
+      if (key.startsWith('division')) return 7;
       return null;
     })
     .filter(Boolean);

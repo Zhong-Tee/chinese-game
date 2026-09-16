@@ -310,7 +310,7 @@ Deno.serve(async (request) => {
     const since = new Date(Date.now() + 7 * 3600000); since.setUTCHours(0, 0, 0, 0); const sinceIso = new Date(since.getTime() - 7 * 3600000).toISOString();
     const dailyLimit = Number(Deno.env.get('AI_BOOKS_DAILY_LIMIT') || 5);
     const [{ count }, { count: activeCount }] = await Promise.all([
-      admin.from('ai_books').select('id', { count: 'exact', head: true }).eq('creator_id', user.id).gte('created_at', sinceIso).neq('status', 'canceled'),
+      admin.from('ai_books').select('id', { count: 'exact', head: true }).eq('creator_id', user.id).gte('created_at', sinceIso).neq('status', 'canceled').or('series_id.is.null,episode_number.eq.1'),
       admin.from('ai_books').select('id', { count: 'exact', head: true }).eq('creator_id', user.id).in('status', ['generating', 'partial']),
     ]);
     if ((activeCount || 0) > 0) return json({ error: 'คุณมีหนังสือที่กำลังสร้างอยู่ กรุณารอให้เสร็จก่อน' }, 429);

@@ -125,6 +125,7 @@ function BookCover({ book, onOpen, isRead = book._isRead || false, canSeeCost = 
   const pageCount = Number(book._pageCount ?? (Array.isArray(book.pages) ? book.pages.length : 0));
   const isYouthNovel = book.book_format === 'youth_novel';
   const completedChapters = Number(book.generation_progress?.completed_chapters || 0);
+  const completedEpisodes = Number(book.generation_progress?.completed_episodes ?? book._seriesEpisodeCount ?? 0);
   return (
     <div className="relative">
     <button type="button" onClick={() => onOpen(book)} className="group w-full overflow-hidden rounded-[1.4rem] border-2 border-white bg-white text-left shadow-lg transition active:scale-[0.98]">
@@ -132,9 +133,9 @@ function BookCover({ book, onOpen, isRead = book._isRead || false, canSeeCost = 
         {book.cover_url ? <img src={book.cover_url} alt={`ปก ${book.title_th || book.title_cn}`} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" /> : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center"><span className="text-6xl">{category.icon}</span><span className="text-xl font-black text-slate-800">{book.title_cn || 'กำลังสร้างหนังสือ'}</span></div>
         )}
-        <span className="absolute left-2 top-2 rounded-full bg-slate-950/75 px-2.5 py-1 text-[10px] font-black text-white backdrop-blur">{isSeriesCollection ? `ซีรีส์ · ${book._seriesEpisodeCount} ตอน` : book.book_format === 'series' ? `ซีรีส์ · ตอน ${book.episode_number || 1}/${book.series_total || 5}` : book.book_format === 'youth_novel' ? 'นิยายเยาวชน · 8 บท' : category.label}</span>
+        <span className="absolute left-2 top-2 rounded-full bg-slate-950/75 px-2.5 py-1 text-[10px] font-black text-white backdrop-blur">{isSeriesCollection ? `ซีรีส์ · ${book._seriesEpisodeCount || 0}/5 ตอน` : book.book_format === 'series' ? `ซีรีส์ · ตอน ${book.episode_number || 1}/${book.series_total || 5}` : book.book_format === 'youth_novel' ? 'นิยายเยาวชน · 8 บท' : category.label}</span>
         {isRead && <span className="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-emerald-500 text-lg font-black text-white shadow-lg" aria-label="อ่านจบแล้ว" title="อ่านจบแล้ว">✓</span>}
-        {book.status !== 'ready' && <span className="absolute inset-x-2 bottom-2 rounded-xl bg-amber-400/95 px-2 py-1.5 text-xs font-black text-slate-900"><span className="flex items-center justify-between gap-2"><span className="min-w-0 flex-1 text-center">{book.status === 'failed' ? 'สร้างไม่สำเร็จ' : book.generation_progress?.message_th || (book.status === 'partial' ? `พร้อมอ่าน ${book.pages?.length || 1}/8 บท` : 'กำลังสร้าง...')}</span>{isYouthNovel && <span className="shrink-0 rounded-lg bg-white/70 px-1.5 py-0.5 font-mono text-[10px] text-emerald-800">{Math.min(8, completedChapters)}/8</span>}</span>{isYouthNovel && <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-black/10" role="progressbar" aria-label="ความคืบหน้าการสร้างนิยาย" aria-valuemin="0" aria-valuemax="8" aria-valuenow={Math.min(8, completedChapters)}><span className="block h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.max(5, (completedChapters / 8) * 100)}%` }} /></span>}</span>}
+        {book.status !== 'ready' && <span className="absolute inset-x-2 bottom-2 rounded-xl bg-amber-400/95 px-2 py-1.5 text-xs font-black text-slate-900"><span className="flex items-center justify-between gap-2"><span className="min-w-0 flex-1 text-center">{book.status === 'failed' ? 'สร้างไม่สำเร็จ' : book.status === 'canceled' ? 'ยกเลิกการสร้างแล้ว' : book.generation_progress?.message_th || (book.status === 'partial' ? `พร้อมอ่าน ${book.pages?.length || 1}/8 บท` : 'กำลังสร้าง...')}</span>{(isYouthNovel || isSeriesCollection) && <span className="shrink-0 rounded-lg bg-white/70 px-1.5 py-0.5 font-mono text-[10px] text-emerald-800">{isYouthNovel ? `${Math.min(8, completedChapters)}/8` : `${Math.min(5, completedEpisodes)}/5`}</span>}</span>{(isYouthNovel || isSeriesCollection) && <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-black/10" role="progressbar" aria-label={isYouthNovel ? 'ความคืบหน้าการสร้างนิยาย' : 'ความคืบหน้าการสร้างซีรีส์'} aria-valuemin="0" aria-valuemax={isYouthNovel ? 8 : 5} aria-valuenow={isYouthNovel ? Math.min(8, completedChapters) : Math.min(5, completedEpisodes)}><span className="block h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.max(5, isYouthNovel ? (completedChapters / 8) * 100 : (completedEpisodes / 5) * 100)}%` }} /></span>}</span>}
       </div>
       <div className="space-y-1 p-3">
         <h3 className="line-clamp-1 text-base font-black text-slate-900">{book.title_cn || 'หนังสือเล่มใหม่'}</h3>
@@ -199,9 +200,10 @@ function buildShelfEntries(bookRows, seriesRows, readBookIds, allBookRows = book
     const pendingEpisodes = episodes.filter((episode) => ['generating', 'failed'].includes(episode.status));
     const firstEpisode = readyEpisodes[0] || episodes[0];
     const latestEpisode = readyEpisodes[readyEpisodes.length - 1] || firstEpisode;
-    const pendingBook = pendingEpisodes[pendingEpisodes.length - 1] || null;
-    const openBook = readyEpisodes.find((episode) => !readBookIds.has(episode.id)) || latestEpisode;
     const meta = seriesMeta.get(seriesId);
+    const seriesPending = ['generating', 'failed'].includes(meta?.generation_status);
+    const pendingBook = pendingEpisodes[pendingEpisodes.length - 1] || (seriesPending ? firstEpisode : null);
+    const openBook = readyEpisodes.find((episode) => !readBookIds.has(episode.id)) || latestEpisode;
     const readCount = readyEpisodes.filter((episode) => readBookIds.has(episode.id)).length;
     const newestDate = episodes.reduce((latest, episode) => episode.created_at > latest ? episode.created_at : latest, episodes[0]?.created_at || '');
     entries.push({
@@ -217,6 +219,8 @@ function buildShelfEntries(bookRows, seriesRows, readBookIds, allBookRows = book
         _pageCount: readyEpisodes.reduce((total, episode) => total + (Array.isArray(episode.pages) ? episode.pages.length : 0), 0),
         _generationCostThb: readyEpisodes.reduce((total, episode) => total + Number(episode.generation_cost_thb || 0), 0),
         _isRead: readyEpisodes.length > 0 && readCount === readyEpisodes.length,
+        status: seriesPending ? meta.generation_status : firstEpisode.status,
+        generation_progress: meta?.generation_progress || firstEpisode.generation_progress,
       },
       openBook,
       pendingBook,
@@ -229,7 +233,7 @@ function buildShelfEntries(bookRows, seriesRows, readBookIds, allBookRows = book
   return entries.sort((a, b) => String(b.sortDate).localeCompare(String(a.sortDate)));
 }
 
-function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), onSelectEpisode, onClose, onComplete, completing = false, onReadingEvent, onEnsureQuiz, canCreateNext = false, creatingNext = false, onCreateNext }) {
+function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), onSelectEpisode, onClose, onComplete, completing = false, onReadingEvent, onEnsureQuiz }) {
   const [showPinyin, setShowPinyin] = useState(() => localStorage.getItem('book-reader-pinyin') !== 'false');
   const [showThai, setShowThai] = useState(() => localStorage.getItem('book-reader-thai') !== 'false');
   const [fontIndex, setFontIndex] = useState(() => {
@@ -430,12 +434,6 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), onSelectEp
               </div>
             ))}
           </div>
-          {pageIndex === pages.length - 1 && canCreateNext && (
-            <div className="mt-6 rounded-2xl border-2 border-violet-200 bg-violet-50 p-4 text-center">
-              <div className="font-black text-violet-900">ซีรีส์ตอนที่ {book.episode_number || 1} / {book.series_total || 5}</div>
-              <button type="button" onClick={() => onCreateNext?.(book)} disabled={creatingNext} className="mt-3 min-h-12 w-full rounded-2xl bg-violet-600 px-4 py-3 font-black text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-60">{creatingNext ? 'กำลังสร้างตอนถัดไป…' : `สร้างตอนที่ ${Number(book.episode_number || 1) + 1} →`}</button>
-            </div>
-          )}
           {pageIndex === pages.length - 1 && quizError && <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-center text-sm font-bold text-red-600">{quizError}</p>}
           </>}
         </article>
@@ -591,12 +589,12 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
             <legend className="mb-3 font-black text-slate-800">1. รูปแบบหนังสือ</legend>
             <div className="grid grid-cols-3 gap-2">
               <button type="button" onClick={() => setBookFormat('standalone')} className={`min-w-0 rounded-2xl border-2 px-1 py-3 text-center text-xs font-black sm:text-sm ${bookFormat === 'standalone' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-white bg-white text-slate-700'}`}>📕 เล่มเดียวจบ</button>
-              <button type="button" onClick={() => setBookFormat('series')} className={`min-w-0 rounded-2xl border-2 px-1 py-3 text-center text-xs font-black sm:text-sm ${bookFormat === 'series' ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-white bg-white text-slate-700'}`}>🎬 ซีรีส์ 5 ตอน</button>
+              <button type="button" onClick={() => setBookFormat('series')} className={`min-w-0 rounded-2xl border-2 px-1 py-3 text-center text-xs font-black sm:text-sm ${bookFormat === 'series' ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-white bg-white text-slate-700'}`}>🎬 ซีรีส์ครบ 5 ตอน</button>
               <button type="button" onClick={() => setBookFormat('youth_novel')} className={`min-w-0 rounded-2xl border-2 px-1 py-3 text-center text-xs font-black sm:text-sm ${isYouthNovel ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-white bg-white text-slate-700'}`}>📗 นิยายเยาวชน</button>
             </div>
           </fieldset>
           {bookFormat === 'standalone' && <fieldset><legend className="mb-3 font-black text-slate-800">2. เลือกหมวดหมู่</legend><div className="grid grid-cols-2 gap-2">{CATEGORIES.filter((item) => !item.filterOnly).map((item) => <button key={item.id} type="button" onClick={() => setCategory(item.id)} className={`rounded-2xl border-2 p-3 text-left transition ${category === item.id ? 'border-orange-500 bg-orange-50 shadow-md' : 'border-white bg-white'}`}><span className="mr-2 text-xl">{item.icon}</span><span className="text-sm font-black text-slate-800">{item.label}</span>{item.subtitle && <span className="mt-1 block pl-8 text-[10px] text-slate-400">{item.subtitle}</span>}</button>)}</div></fieldset>}
-          {bookFormat === 'series' && <fieldset><legend className="mb-3 font-black text-slate-800">2. แนวซีรีส์เยาวชน</legend><div className="grid grid-cols-2 gap-2">{SERIES_GENRES.map((item) => <button key={item.id} type="button" onClick={() => setSeriesGenre(item.id)} className={`rounded-2xl border-2 p-3 text-left transition ${seriesGenre === item.id ? 'border-violet-500 bg-violet-50 shadow-md' : 'border-white bg-white'}`}><span className="mr-2 text-xl">{item.icon}</span><span className="text-sm font-black text-slate-800">{item.label}</span></button>)}</div><p className="mt-2 text-xs font-bold text-violet-600">เริ่มจากตอนที่ 1 และสร้างตอนถัดไปได้เมื่ออ่านจบ สูงสุด 5 ตอน</p></fieldset>}
+          {bookFormat === 'series' && <fieldset><legend className="mb-3 font-black text-slate-800">2. แนวซีรีส์เยาวชน</legend><div className="grid grid-cols-2 gap-2">{SERIES_GENRES.map((item) => <button key={item.id} type="button" onClick={() => setSeriesGenre(item.id)} className={`rounded-2xl border-2 p-3 text-left transition ${seriesGenre === item.id ? 'border-violet-500 bg-violet-50 shadow-md' : 'border-white bg-white'}`}><span className="mr-2 text-xl">{item.icon}</span><span className="text-sm font-black text-slate-800">{item.label}</span></button>)}</div><p className="mt-2 rounded-xl bg-violet-50 p-3 text-xs font-bold leading-relaxed text-violet-700">สร้างครบทั้ง 5 ตอนอัตโนมัติจากโครงเรื่องเดียวกัน คุณเริ่มอ่านตอนที่พร้อมแล้วได้ระหว่างที่ระบบกำลังสร้างตอนถัดไป</p></fieldset>}
           {isYouthNovel && (
             <div className="space-y-5 rounded-3xl border-2 border-emerald-100 bg-emerald-50/60 p-4">
               <div><h3 className="font-black text-emerald-900">2. ออกแบบนิยายเยาวชน 8 บท</h3><p className="mt-1 text-xs font-bold text-emerald-700">ช่องที่มี * จำเป็นต้องเลือก ส่วนช่องอื่นให้ AI คิดให้ได้</p></div>
@@ -660,7 +658,6 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelingId, setCancelingId] = useState(null);
   const [cancelError, setCancelError] = useState('');
-  const [creatingNextId, setCreatingNextId] = useState(null);
   const [seriesError, setSeriesError] = useState('');
   const [reviewTarget, setReviewTarget] = useState(null);
   const [reviewEnjoyment, setReviewEnjoyment] = useState('');
@@ -669,18 +666,18 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
   const [reviewError, setReviewError] = useState('');
   const refreshQuota = useCallback(async () => {
     if (!userId) { setQuotaUsed(0); return; }
-    const { count, error } = await supabase.from('ai_books').select('id', { count: 'exact', head: true }).eq('creator_id', userId).gte('created_at', bangkokDayStartIso()).neq('status', 'canceled');
+    const { count, error } = await supabase.from('ai_books').select('id', { count: 'exact', head: true }).eq('creator_id', userId).gte('created_at', bangkokDayStartIso()).neq('status', 'canceled').or('series_id.is.null,episode_number.eq.1');
     setQuotaUsed(error ? null : Number(count || 0));
   }, [userId]);
   const loadBooks = useCallback(async () => {
     setLoading(true); setLoadError('');
     const quotaRequest = userId
-      ? supabase.from('ai_books').select('id', { count: 'exact', head: true }).eq('creator_id', userId).gte('created_at', bangkokDayStartIso()).neq('status', 'canceled')
+      ? supabase.from('ai_books').select('id', { count: 'exact', head: true }).eq('creator_id', userId).gte('created_at', bangkokDayStartIso()).neq('status', 'canceled').or('series_id.is.null,episode_number.eq.1')
       : Promise.resolve({ count: 0, error: null });
     const readsRequest = userId
       ? supabase.from('ai_book_reads').select('book_id').eq('user_id', userId)
       : Promise.resolve({ data: [], error: null });
-    const seriesRequest = supabase.from('ai_book_series').select('id, title_cn, title_pinyin, title_th, total_episodes').limit(1000);
+    const seriesRequest = supabase.from('ai_book_series').select('id, title_cn, title_pinyin, title_th, total_episodes, generation_status, generation_progress, error_message').limit(1000);
     const [booksResult, summaryResult, quotaResult, readsResult, seriesResult] = await Promise.all([supabase.from('ai_books').select('*').order('created_at', { ascending: false }).limit(1000), supabase.rpc('get_ai_book_cost_summary'), quotaRequest, readsRequest, seriesRequest]);
     if (booksResult.error) { setLoadError(booksResult.error.code === '42P01' ? 'ยังไม่ได้ติดตั้งฐานข้อมูล Books กรุณารันไฟล์ sql/ai_books.sql ใน Supabase' : booksResult.error.message); setBooks([]); } else setBooks(booksResult.data || []);
     if (!seriesResult.error) setSeriesRows(seriesResult.data || []);
@@ -693,15 +690,19 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
     // The async callback owns the initial loading lifecycle for this server-backed screen.
     loadBooks();
   }, [loadBooks]);
-  const hasBookInProgress = books.some((book) => book.status === 'generating' || (book.status === 'partial' && book.generation_progress?.stage !== 'failed'));
+  const hasBookInProgress = books.some((book) => book.status === 'generating' || (book.status === 'partial' && book.generation_progress?.stage !== 'failed')) || seriesRows.some((series) => series.generation_status === 'generating');
   useEffect(() => {
     if (!hasBookInProgress) return undefined;
     const poll = async () => {
-      const { data, error } = await supabase.from('ai_books').select('*').order('created_at', { ascending: false }).limit(1000);
+      const [{ data, error }, { data: nextSeriesRows }] = await Promise.all([
+        supabase.from('ai_books').select('*').order('created_at', { ascending: false }).limit(1000),
+        supabase.from('ai_book_series').select('id, title_cn, title_pinyin, title_th, total_episodes, generation_status, generation_progress, error_message').limit(1000),
+      ]);
       if (error) return;
       setBooks(data || []);
+      if (nextSeriesRows) setSeriesRows(nextSeriesRows);
       setActiveBook((current) => current ? ((data || []).find((book) => book.id === current.id) || current) : current);
-      if (!(data || []).some((book) => book.status === 'generating' || (book.status === 'partial' && book.generation_progress?.stage !== 'failed'))) {
+      if (!(data || []).some((book) => book.status === 'generating' || (book.status === 'partial' && book.generation_progress?.stage !== 'failed')) && !(nextSeriesRows || []).some((series) => series.generation_status === 'generating')) {
         const { data: nextSummary } = await supabase.rpc('get_ai_book_cost_summary');
         if (nextSummary) setSummary(Array.isArray(nextSummary) ? nextSummary[0] : nextSummary);
       }
@@ -806,10 +807,10 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
         setCancelError(await functionErrorMessage(data, error, 'ยกเลิกการสร้างหนังสือไม่สำเร็จ'));
         return;
       }
-      setBooks((current) => current.filter((item) => item.id !== book.id));
+      setBooks((current) => current.filter((item) => book.series_id ? item.series_id !== book.series_id : item.id !== book.id));
       setQuotaUsed((current) => Number.isFinite(current) ? Math.max(0, current - 1) : current);
       setCancelTarget(null);
-      if (activeBook?.id === book.id) setActiveBook(null);
+      if (book.series_id ? activeBook?.series_id === book.series_id : activeBook?.id === book.id) setActiveBook(null);
       await loadBooks();
     } catch (error) {
       setCancelError(error?.message || 'เชื่อมต่อระบบยกเลิกไม่สำเร็จ');
@@ -834,10 +835,6 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
     ? books.filter((book) => book.series_id === activeBook.series_id && book.status === 'ready')
       .sort((a, b) => Number(a.episode_number || 0) - Number(b.episode_number || 0))
     : [];
-  const latestSeriesEpisode = activeSeriesEpisodes[activeSeriesEpisodes.length - 1] || null;
-  const seriesGenerationPending = activeBook?.series_id
-    ? books.some((book) => book.series_id === activeBook.series_id && book.status === 'generating')
-    : false;
   const changePage = (nextPage) => {
     setCurrentPage(Math.max(1, Math.min(totalPages, nextPage)));
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -850,30 +847,6 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
       return;
     }
     setShowCreate(true);
-  };
-  const createNextEpisode = async (book) => {
-    if (creatingNextId || !book?.series_id) return;
-    if (quotaReached) {
-      setShowQuotaModal(true);
-      return;
-    }
-    setSeriesError('');
-    setCreatingNextId(book.id);
-    try {
-      const { data, error } = await supabase.functions.invoke('generate-book', { body: { seriesId: book.series_id } });
-      if (error || !data?.book) {
-        setSeriesError(await functionErrorMessage(data, error, 'ไม่สามารถสร้างตอนถัดไปได้'));
-        return;
-      }
-      setBooks((current) => [data.book, ...current.filter((item) => item.id !== data.book.id)]);
-      setActiveBook(data.book);
-      setTab('mine');
-      await loadBooks();
-    } catch (error) {
-      setSeriesError(error?.message || 'เชื่อมต่อระบบสร้างตอนถัดไปไม่สำเร็จ');
-    } finally {
-      setCreatingNextId(null);
-    }
   };
   const ensureBookQuiz = async (book) => {
     const existingQuiz = quizQuestionsFromBook(book);
@@ -943,19 +916,9 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
           </div>
         </div>
       )}
-      {creatingNextId && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/80 px-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="series-progress-title">
-          <div className="w-full max-w-sm rounded-[2rem] bg-white p-6 text-center shadow-2xl">
-            <div className="mx-auto h-14 w-14 animate-spin rounded-full border-4 border-violet-100 border-t-violet-600" aria-hidden="true" />
-            <h2 id="series-progress-title" className="mt-5 text-xl font-black text-slate-900">กำลังสร้างตอนถัดไป…</h2>
-            <p className="mt-2 text-sm font-bold text-slate-500">โดยทั่วไปใช้เวลาประมาณ 1–3 นาที</p>
-            <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-xs font-black text-red-600">อย่าปิดหรือรีเฟรชหน้าต่างนี้ เพื่อป้องกันการสร้างซ้ำ</p>
-          </div>
-        </div>
-      )}
       {seriesError && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/75 px-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="series-error-title" onMouseDown={(event) => event.target === event.currentTarget && setSeriesError('')}>
-          <div className="w-full max-w-sm rounded-[2rem] border-2 border-red-100 bg-white p-6 text-center shadow-2xl"><div className="text-5xl">⚠️</div><h2 id="series-error-title" className="mt-3 text-xl font-black text-red-600">สร้างตอนถัดไปไม่สำเร็จ</h2><p className="mt-2 text-sm font-bold leading-relaxed text-slate-600">{seriesError}</p><button type="button" autoFocus onClick={() => setSeriesError('')} className="mt-6 min-h-12 w-full rounded-2xl bg-orange-500 px-5 py-3 font-black text-white">ตกลง</button></div>
+          <div className="w-full max-w-sm rounded-[2rem] border-2 border-red-100 bg-white p-6 text-center shadow-2xl"><div className="text-5xl">⚠️</div><h2 id="series-error-title" className="mt-3 text-xl font-black text-red-600">ดำเนินการไม่สำเร็จ</h2><p className="mt-2 text-sm font-bold leading-relaxed text-slate-600">{seriesError}</p><button type="button" autoFocus onClick={() => setSeriesError('')} className="mt-6 min-h-12 w-full rounded-2xl bg-orange-500 px-5 py-3 font-black text-white">ตกลง</button></div>
         </div>
       )}
       {reviewTarget && (
@@ -970,8 +933,8 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
           </div>
         </div>
       )}
-      {showCreate && <CreateBookModal user={user} allMasterCards={allMasterCards} selectedIds={selectedIds} quotaUsed={quotaUsed} quotaLimit={DAILY_BOOK_LIMIT} onClose={() => setShowCreate(false)} onCreated={(book) => { setShowCreate(false); setBooks((current) => [book, ...current.filter((item) => item.id !== book.id)]); setTab('mine'); setCurrentPage(1); if (['ready', 'partial'].includes(book.status)) setActiveBook(book); }} />}
-      {activeBook && <Reader key={activeBook.id} book={activeBook} seriesEpisodes={activeSeriesEpisodes} readBookIds={readBookIds} onSelectEpisode={(episodeId) => setActiveBook(activeSeriesEpisodes.find((episode) => episode.id === episodeId) || activeBook)} onClose={() => setActiveBook(null)} onComplete={completeBook} completing={completingBookId === activeBook.id} onReadingEvent={recordReadingEvent} onEnsureQuiz={ensureBookQuiz} canCreateNext={(isAdmin || activeBook.creator_id === user?.id) && activeBook.book_format === 'series' && activeBook.id === latestSeriesEpisode?.id && !seriesGenerationPending && Number(activeBook.episode_number || 1) < Number(activeBook.series_total || 5)} creatingNext={creatingNextId === activeBook.id} onCreateNext={createNextEpisode} />}
+      {showCreate && <CreateBookModal user={user} allMasterCards={allMasterCards} selectedIds={selectedIds} quotaUsed={quotaUsed} quotaLimit={DAILY_BOOK_LIMIT} onClose={() => setShowCreate(false)} onCreated={async (book) => { setShowCreate(false); setBooks((current) => [book, ...current.filter((item) => item.id !== book.id)]); setTab('mine'); setCurrentPage(1); if (['ready', 'partial'].includes(book.status)) setActiveBook(book); await loadBooks(); }} />}
+      {activeBook && <Reader key={activeBook.id} book={activeBook} seriesEpisodes={activeSeriesEpisodes} readBookIds={readBookIds} onSelectEpisode={(episodeId) => setActiveBook(activeSeriesEpisodes.find((episode) => episode.id === episodeId) || activeBook)} onClose={() => setActiveBook(null)} onComplete={completeBook} completing={completingBookId === activeBook.id} onReadingEvent={recordReadingEvent} onEnsureQuiz={ensureBookQuiz} />}
     </div>
   );
 }

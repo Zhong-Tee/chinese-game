@@ -191,37 +191,125 @@ export function generateStage4(level = 1, rng = Math.random) {
     explanation: [`ยืม 1 สิบ: ${data.whole} = ${data.tensRemainder} + ${data.borrowedOnes}`, `${data.borrowedOnes} − ${data.subtractOnes} = ${data.onesDifference}`, `${data.tensRemainder} − ${data.subtractTens} = ${data.tensDifference}`, `${data.tensDifference} + ${data.onesDifference} = ${data.finalAnswer}`], inputMode: 'number' });
 }
 
-export function generateStage5(level = 1, rng = Math.random) {
-  const groups = int(rng, 2, level === 4 ? 9 : 5);
-  const size = int(rng, 2, level === 4 ? 9 : 6);
-  const answer = groups * size;
-  const skill = ['multiplication.equalGroups', 'multiplication.repeatedAddition', 'multiplication.array', 'multiplication.mentalMultiplication'][level - 1] || 'multiplication.mentalMultiplication';
-  const prompts = [
-    `มี ${groups} กลุ่ม กลุ่มละ ${size} มีทั้งหมดกี่ชิ้น?`,
-    `${Array(groups).fill(size).join(' + ')} = ?`,
-    `ตาราง ${groups} แถว แถวละ ${size} จุด มีทั้งหมดกี่จุด?`,
-    `${groups} × ${size} = ?`,
-  ];
-  return question({ stage: 5, level, skill, prompt: prompts[level - 1] || prompts[3], answer, rng,
-    visual: level === 1 ? { type: 'groups', groups, size } : level === 3 ? { type: 'array', rows: groups, columns: size } : null,
-    explanation: [`มี ${groups} กลุ่ม กลุ่มละ ${size}`, `${Array(groups).fill(size).join(' + ')} = ${answer}`, `${groups} × ${size} = ${answer}`], inputMode: level === 4 ? 'number' : 'choice' });
+/**
+ * ลบแบบตัด 10 (平十法): ดูหลักหน่วยของตัวตั้ง แยกตัวลบเป็นสองส่วน
+ * ส่วนแรกตัดตัวตั้งให้ลงมาพอดีหลักสิบ แล้วค่อยลบส่วนที่เหลือต่อ
+ * ตัวอย่าง 14 − 9 → แยก 9 เป็น 4 กับ 5 → 14 − 4 = 10 → 10 − 5 = 5
+ */
+function makeCutTenProblem(rng, minWhole, maxWhole) {
+  // หลักหน่วยของตัวตั้งต้องไม่เป็น 0 และตัวลบต้องมากกว่าหลักหน่วย จึงจะต้องตัดข้ามหลักสิบจริง
+  const whole = int(rng, minWhole, maxWhole);
+  const firstCut = whole % 10;
+  const subtract = int(rng, firstCut + 1, 9);
+  return { whole, subtract, firstCut, secondCut: subtract - firstCut, base: whole - firstCut, finalAnswer: whole - subtract };
 }
 
-export function generateStage6(level = 1, rng = Math.random) {
-  const divisor = int(rng, 2, level === 4 ? 9 : 5);
-  const quotient = int(rng, 2, level === 4 ? 9 : 6);
-  const total = divisor * quotient;
-  const skill = ['division.equalSharing', 'division.grouping', 'division.factFamily', 'division.mentalDivision'][level - 1] || 'division.mentalDivision';
-  const prompts = [
-    `แบ่งของ ${total} ชิ้นให้ ${divisor} คนเท่า ๆ กัน แต่ละคนได้กี่ชิ้น?`,
-    `มี ${total} ชิ้น จัดกลุ่มละ ${quotient} ชิ้น ได้กี่กลุ่ม?`,
-    `${divisor} × ${quotient} = ${total} ดังนั้น ${total} ÷ ${divisor} = ?`,
-    `${total} ÷ ${divisor} = ?`,
+function cutTenExplanation(data) {
+  return [
+    `หลักหน่วยของ ${data.whole} คือ ${data.firstCut}`,
+    `แยก ${data.subtract} เป็น ${data.firstCut} กับ ${data.secondCut}`,
+    `${data.whole} − ${data.firstCut} = ${data.base}`,
+    `${data.base} − ${data.secondCut} = ${data.finalAnswer}`,
   ];
-  const answer = level === 2 ? divisor : quotient;
-  return question({ stage: 6, level, skill, prompt: prompts[level - 1] || prompts[3], answer, rng,
-    visual: level <= 2 ? { type: 'sharing', total, groups: level === 2 ? divisor : divisor } : null,
-    explanation: [`เริ่มจากของ ${total} ชิ้น`, `แบ่งเป็น ${divisor} กลุ่มเท่า ๆ กัน`, `แต่ละกลุ่มมี ${quotient}`, `${total} ÷ ${divisor} = ${quotient}`], inputMode: level === 4 ? 'number' : 'choice' });
+}
+
+export function generateStage5(level = 1, rng = Math.random) {
+  if (level === 1) {
+    const data = makeCutTenProblem(rng, 11, 18);
+    return question({ stage: 5, level, skill: 'cutTen.splitSubtract', prompt: `${data.whole} − ${data.subtract} = ?\nแยก ${data.subtract} ออกเป็น 2 ส่วน`, answer: data.firstCut, rng,
+      visual: { type: 'cutTenSplit', ...data, requireBase: false, requireFinal: false },
+      explanation: cutTenExplanation(data), inputMode: 'cut-ten-split' });
+  }
+
+  if (level === 2 || level === 3) {
+    const data = makeCutTenProblem(rng, level === 2 ? 11 : 21, level === 2 ? 18 : 28);
+    return question({ stage: 5, level, skill: level === 2 ? 'cutTen.under20' : 'cutTen.under30', prompt: `${data.whole} − ${data.subtract} แบบตัดให้เหลือ ${data.base}`, answer: data.finalAnswer, rng,
+      visual: { type: 'cutTenSplit', ...data, requireBase: level === 3, requireFinal: true },
+      explanation: cutTenExplanation(data), inputMode: 'cut-ten-split' });
+  }
+
+  // เลือกหลักสิบก่อน แล้วบวกหลักหน่วย 1–8 เสมอ เลข 19, 20 ที่ตัดไม่ได้จึงไม่หลุดมา
+  const mentalDecade = pick(rng, [10, 20]);
+  const data = makeCutTenProblem(rng, mentalDecade + 1, mentalDecade + 8);
+  return question({ stage: 5, level, skill: 'cutTen.mental', prompt: `คิดในใจด้วยวิธีตัด 10\n${data.whole} − ${data.subtract} = ?`, answer: data.finalAnswer, rng,
+    explanation: cutTenExplanation(data), inputMode: 'number' });
+}
+
+const repeatChain = (times, value) => Array(times).fill(value).join(' + ');
+const skipCount = (times, value) => Array.from({ length: times }, (_, index) => value * (index + 1)).join(', ');
+
+export function generateStage6(level = 1, rng = Math.random) {
+  if (level === 1) {
+    // ภาพตะกร้าเล็ก ๆ ที่นับได้จริง เด็กต้องอ่านภาพให้ออกว่า "กี่กลุ่ม กลุ่มละเท่าไร"
+    const groups = int(rng, 2, 5);
+    const size = int(rng, 2, 5);
+    const product = groups * size;
+    return question({ stage: 6, level, skill: 'multiplication.equalGroups', prompt: 'นับจุดในภาพ แล้วเขียนเป็นประโยคคูณ', answer: product, rng,
+      visual: { type: 'multiplyBuild', mode: 'groups', groups, size, product },
+      explanation: [`ในภาพมี ${groups} กลุ่ม กลุ่มละ ${size}`, `${repeatChain(groups, size)} = ${product}`, `เขียนสั้น ๆ ได้ว่า ${groups} × ${size} = ${product}`], inputMode: 'multiply-build' });
+  }
+
+  if (level === 2) {
+    // เริ่มจากแม่ 2, 5, 10 ซึ่งเป็นแม่ที่เด็กนับต่อได้เอง
+    const size = pick(rng, [2, 5, 10]);
+    const groups = int(rng, 2, 6);
+    const product = groups * size;
+    return question({ stage: 6, level, skill: 'multiplication.repeatedAddition', prompt: `${repeatChain(groups, size)} = ?\nเขียนเป็นประโยคคูณ`, answer: product, rng,
+      visual: { type: 'multiplyBuild', mode: 'repeat', groups, size, product },
+      explanation: [`บวก ${size} ซ้ำกัน ${groups} ครั้ง`, `นับทีละ ${size}: ${skipCount(groups, size)}`, `${groups} × ${size} = ${product}`], inputMode: 'multiply-build' });
+  }
+
+  if (level === 3) {
+    const groups = int(rng, 2, 6);
+    const size = int(rng, 2, 9);
+    const product = groups * size;
+    return question({ stage: 6, level, skill: 'multiplication.array', prompt: 'ตารางนี้มีจุดทั้งหมดกี่จุด?\nเขียนเป็นประโยคคูณ', answer: product, rng,
+      visual: { type: 'multiplyBuild', mode: 'array', groups, size, product },
+      explanation: [`ตารางมี ${groups} แถว แถวละ ${size} จุด`, `${repeatChain(groups, size)} = ${product}`, `${groups} × ${size} = ${product}`, `หมุนตารางก็ได้เท่ากัน ${size} × ${groups} = ${product}`], inputMode: 'multiply-build' });
+  }
+
+  const groups = int(rng, 2, 9);
+  const size = int(rng, 2, 9);
+  const product = groups * size;
+  return question({ stage: 6, level, skill: 'multiplication.mentalMultiplication', prompt: `${groups} × ${size} = ?`, answer: product, rng,
+    explanation: [`คูณคือบวก ${size} ซ้ำ ${groups} ครั้ง`, `นับทีละ ${size}: ${skipCount(groups, size)}`, `${groups} × ${size} = ${product}`], inputMode: 'number' });
+}
+
+export function generateStage7(level = 1, rng = Math.random) {
+  if (level === 1) {
+    // แบ่งของทีละรอบให้ครบทุกคน กองของจึงต้องเล็กพอที่เด็กจะแจกไหวบนจอเดียว
+    const divisor = int(rng, 2, 4);
+    const quotient = int(rng, 2, 5);
+    const total = divisor * quotient;
+    return question({ stage: 7, level, skill: 'division.equalSharing', prompt: `แบ่ง ${total} ชิ้นให้ ${divisor} คนเท่า ๆ กัน คนละกี่ชิ้น?`, answer: quotient, rng,
+      visual: { type: 'divideBuild', mode: 'share', total, divisor, quotient },
+      explanation: [`มีของ ${total} ชิ้น แจกให้ ${divisor} คน`, `แจกคนละ 1 ชิ้นได้ทั้งหมด ${quotient} รอบ`, `ทุกคนจึงได้คนละ ${quotient} ชิ้น`, `${total} ÷ ${divisor} = ${quotient}`], inputMode: 'divide-build' });
+  }
+
+  if (level === 2) {
+    const quotient = int(rng, 2, 5);
+    const divisor = int(rng, 2, 6);
+    const total = divisor * quotient;
+    return question({ stage: 7, level, skill: 'division.grouping', prompt: `มี ${total} ชิ้น จัดกลุ่มละ ${quotient} ชิ้น ได้กี่กลุ่ม?`, answer: divisor, rng,
+      visual: { type: 'divideBuild', mode: 'group', total, divisor, quotient },
+      explanation: [`มีของ ${total} ชิ้น วงทีละ ${quotient} ชิ้น`, `วงได้ทั้งหมด ${divisor} กลุ่มพอดี`, `${divisor} × ${quotient} = ${total}`, `${total} ÷ ${quotient} = ${divisor}`], inputMode: 'divide-build' });
+  }
+
+  if (level === 3) {
+    const divisor = int(rng, 2, 9);
+    // ตัวคูณสองตัวต้องต่างกัน ประโยคหารสองประโยคจึงไม่ซ้ำกันเอง
+    const quotient = pick(rng, [2, 3, 4, 5, 6, 7, 8, 9].filter(value => value !== divisor));
+    const total = divisor * quotient;
+    return question({ stage: 7, level, skill: 'division.factFamily', prompt: 'เขียนประโยคหาร 2 ประโยคจากประโยคคูณนี้', answer: quotient, rng,
+      visual: { type: 'divideBuild', mode: 'factFamily', total, divisor, quotient },
+      explanation: [`ตารางมี ${divisor} แถว แถวละ ${quotient} จุด รวม ${total}`, `แบ่ง ${total} เป็น ${divisor} กลุ่ม ได้กลุ่มละ ${quotient}`, `${total} ÷ ${divisor} = ${quotient}`, `${total} ÷ ${quotient} = ${divisor}`], inputMode: 'divide-build' });
+  }
+
+  const divisor = int(rng, 2, 9);
+  const quotient = int(rng, 2, 9);
+  const total = divisor * quotient;
+  return question({ stage: 7, level, skill: 'division.mentalDivision', prompt: `${total} ÷ ${divisor} = ?`, answer: quotient, rng,
+    explanation: [`คิดกลับจากสูตรคูณ: ${divisor} × ? = ${total}`, `นับทีละ ${divisor}: ${skipCount(quotient, divisor)}`, `${divisor} × ${quotient} = ${total}`, `${total} ÷ ${divisor} = ${quotient}`], inputMode: 'number' });
 }
 
 export const STAGE_GENERATORS = {
@@ -231,6 +319,7 @@ export const STAGE_GENERATORS = {
   4: generateStage4,
   5: generateStage5,
   6: generateStage6,
+  7: generateStage7,
 };
 
 export function generateQuestion(stage, level, rng = Math.random) {

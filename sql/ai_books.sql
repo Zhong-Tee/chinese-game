@@ -38,6 +38,7 @@ create table if not exists public.ai_books (
   series_total integer,
   series_genre text,
   episode_summary_th text,
+  continuity_state jsonb not null default '{}'::jsonb,
   pages jsonb not null default '[]'::jsonb,
   cover_url text,
   content_image_url text,
@@ -78,6 +79,10 @@ create table if not exists public.ai_book_series (
   total_episodes integer not null default 5 check (total_episodes = 5),
   last_episode_number integer not null default 1 check (last_episode_number between 1 and 10),
   text_model text not null default 'gpt-5.6-terra',
+  generation_status text not null default 'ready' check (generation_status in ('generating', 'ready', 'failed', 'canceled')),
+  generation_progress jsonb not null default '{}'::jsonb,
+  continuity_state jsonb not null default '{}'::jsonb,
+  error_message text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -95,6 +100,23 @@ create unique index if not exists ai_books_series_episode_unique
   where series_id is not null;
 create index if not exists ai_books_series_idx
   on public.ai_books (series_id, episode_number);
+
+create table if not exists public.ai_series_generation_jobs (
+  id bigint generated always as identity primary key,
+  series_id uuid not null references public.ai_book_series(id) on delete cascade,
+  episode_number integer not null check (episode_number between 2 and 5),
+  status text not null default 'waiting' check (status in ('waiting', 'queued', 'processing', 'completed', 'failed', 'canceled')),
+  attempts integer not null default 0 check (attempts between 0 and 3),
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  completed_at timestamptz,
+  unique (series_id, episode_number)
+);
+create index if not exists ai_series_generation_jobs_queue_idx
+  on public.ai_series_generation_jobs (status, updated_at, id)
+  where status in ('queued', 'processing');
+alter table public.ai_series_generation_jobs enable row level security;
 
 create table if not exists public.ai_book_reads (
   user_id uuid not null references auth.users(id) on delete cascade,
