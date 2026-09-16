@@ -18,7 +18,7 @@ const CATEGORIES = [
   { id: 'learned-words', label: 'คำศัพท์ที่เรียนแล้ว', icon: '🎓' },
   { id: 'one-hundred-thousand-whys', label: '十万个为什么', subtitle: 'คำถามทำไมรอบตัว', icon: '💡' },
   { id: 'jokes', label: 'เรื่องตลก', icon: '😄' },
-  { id: 'series', label: 'ซีรีส์', icon: '🎬', filterOnly: true },
+  { id: 'series', label: 'เรื่องยาว', icon: '🎬', filterOnly: true },
   { id: 'youth-novel', label: 'นิยายเยาวชน', icon: '📗', filterOnly: true },
 ];
 
@@ -34,6 +34,8 @@ const LENGTHS = [
   { minutes: 8, pages: 8 },
   { minutes: 15, pages: 12 },
 ];
+const LONG_STORY_LENGTHS = [12, 16];
+const NOVEL_LENGTHS = [16, 20, 24];
 const TEXT_MODELS = [
   { id: 'gpt-5.6-luna', label: 'ประหยัด', detail: 'Luna · $' },
   { id: 'gpt-5.6-terra', label: 'มาตรฐาน', detail: 'Terra · $$', recommended: true },
@@ -124,6 +126,8 @@ function BookCover({ book, onOpen, isRead = book._isRead || false, canSeeCost = 
   const isSeriesCollection = Boolean(book._isSeriesCollection || Number(book._seriesEpisodeCount || 0) > 0);
   const pageCount = Number(book._pageCount ?? (Array.isArray(book.pages) ? book.pages.length : 0));
   const isYouthNovel = book.book_format === 'youth_novel';
+  const isLegacyNovel = isYouthNovel && Number(book.generation_progress?.target_chapters || 0) === 8;
+  const isLongStory = book.book_format === 'series' && !book.series_id;
   const completedChapters = Number(book.generation_progress?.completed_chapters || 0);
   const completedEpisodes = Number(book.generation_progress?.completed_episodes ?? book._seriesEpisodeCount ?? 0);
   return (
@@ -133,15 +137,15 @@ function BookCover({ book, onOpen, isRead = book._isRead || false, canSeeCost = 
         {book.cover_url ? <img src={book.cover_url} alt={`ปก ${book.title_th || book.title_cn}`} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" /> : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center"><span className="text-6xl">{category.icon}</span><span className="text-xl font-black text-slate-800">{book.title_cn || 'กำลังสร้างหนังสือ'}</span></div>
         )}
-        <span className="absolute left-2 top-2 rounded-full bg-slate-950/75 px-2.5 py-1 text-[10px] font-black text-white backdrop-blur">{isSeriesCollection ? `ซีรีส์ · ${book._seriesEpisodeCount || 0}/5 ตอน` : book.book_format === 'series' ? `ซีรีส์ · ตอน ${book.episode_number || 1}/${book.series_total || 5}` : book.book_format === 'youth_novel' ? 'นิยายเยาวชน · 8 บท' : category.label}</span>
+        <span className="absolute left-2 top-2 rounded-full bg-slate-950/75 px-2.5 py-1 text-[10px] font-black text-white backdrop-blur">{isSeriesCollection ? `ซีรีส์ · ${book._seriesEpisodeCount || 0}/5 ตอน` : isLongStory ? `เรื่องยาว · ${pageCount || book.generation_progress?.target_pages || 16} หน้า` : book.book_format === 'series' ? `ซีรีส์ · ตอน ${book.episode_number || 1}/${book.series_total || 5}` : isLegacyNovel ? 'นิยายเยาวชน · 8 บท' : isYouthNovel ? `นิยายเยาวชน · ${pageCount || book.generation_progress?.target_pages || 16} หน้า` : category.label}</span>
         {isRead && <span className="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-emerald-500 text-lg font-black text-white shadow-lg" aria-label="อ่านจบแล้ว" title="อ่านจบแล้ว">✓</span>}
-        {book.status !== 'ready' && <span className="absolute inset-x-2 bottom-2 rounded-xl bg-amber-400/95 px-2 py-1.5 text-xs font-black text-slate-900"><span className="flex items-center justify-between gap-2"><span className="min-w-0 flex-1 text-center">{book.status === 'failed' ? 'สร้างไม่สำเร็จ' : book.status === 'canceled' ? 'ยกเลิกการสร้างแล้ว' : book.generation_progress?.message_th || (book.status === 'partial' ? `พร้อมอ่าน ${book.pages?.length || 1}/8 บท` : 'กำลังสร้าง...')}</span>{(isYouthNovel || isSeriesCollection) && <span className="shrink-0 rounded-lg bg-white/70 px-1.5 py-0.5 font-mono text-[10px] text-emerald-800">{isYouthNovel ? `${Math.min(8, completedChapters)}/8` : `${Math.min(5, completedEpisodes)}/5`}</span>}</span>{(isYouthNovel || isSeriesCollection) && <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-black/10" role="progressbar" aria-label={isYouthNovel ? 'ความคืบหน้าการสร้างนิยาย' : 'ความคืบหน้าการสร้างซีรีส์'} aria-valuemin="0" aria-valuemax={isYouthNovel ? 8 : 5} aria-valuenow={isYouthNovel ? Math.min(8, completedChapters) : Math.min(5, completedEpisodes)}><span className="block h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.max(5, isYouthNovel ? (completedChapters / 8) * 100 : (completedEpisodes / 5) * 100)}%` }} /></span>}</span>}
+        {book.status !== 'ready' && <span className="absolute inset-x-2 bottom-2 rounded-xl bg-amber-400/95 px-2 py-1.5 text-xs font-black text-slate-900"><span className="flex items-center justify-between gap-2"><span className="min-w-0 flex-1 text-center">{book.status === 'failed' ? 'สร้างไม่สำเร็จ' : book.status === 'canceled' ? 'ยกเลิกการสร้างแล้ว' : book.generation_progress?.message_th || (book.status === 'partial' ? `พร้อมอ่าน ${book.pages?.length || 1}/8 บท` : 'กำลังสร้าง...')}</span>{(isLegacyNovel || isSeriesCollection) && <span className="shrink-0 rounded-lg bg-white/70 px-1.5 py-0.5 font-mono text-[10px] text-emerald-800">{isLegacyNovel ? `${Math.min(8, completedChapters)}/8` : `${Math.min(5, completedEpisodes)}/5`}</span>}</span>{(isLegacyNovel || isSeriesCollection) && <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-black/10" role="progressbar" aria-label={isLegacyNovel ? 'ความคืบหน้าการสร้างนิยาย' : 'ความคืบหน้าการสร้างซีรีส์'} aria-valuemin="0" aria-valuemax={isLegacyNovel ? 8 : 5} aria-valuenow={isLegacyNovel ? Math.min(8, completedChapters) : Math.min(5, completedEpisodes)}><span className="block h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.max(5, isLegacyNovel ? (completedChapters / 8) * 100 : (completedEpisodes / 5) * 100)}%` }} /></span>}</span>}
       </div>
       <div className="space-y-1 p-3">
         <h3 className="line-clamp-1 text-base font-black text-slate-900">{book.title_cn || 'หนังสือเล่มใหม่'}</h3>
         <p className="line-clamp-1 text-xs font-bold text-orange-600">{book.title_pinyin || category.label}</p>
         <p className="line-clamp-1 text-xs text-slate-500">{book.title_th || `${book.reading_minutes || 5} นาที`}</p>
-        <div className="flex items-center justify-between gap-2 pt-1 text-[10px] font-bold text-slate-400"><span className="min-w-0 truncate">{book.creator_name || 'นักอ่าน Nihao'} · {levelLabel(book.language_level)}</span><span className="shrink-0">{pageCount > 0 && `${pageCount} ${isYouthNovel ? 'บท' : 'หน้า'} · `}{canSeeCost ? <span className="text-emerald-600">{money(book._generationCostThb ?? book.generation_cost_thb, 'THB')}</span> : `${book.reading_minutes || 5} นาที`}</span></div>
+        <div className="flex items-center justify-between gap-2 pt-1 text-[10px] font-bold text-slate-400"><span className="min-w-0 truncate">{book.creator_name || 'นักอ่าน Nihao'} · {levelLabel(book.language_level)}</span><span className="shrink-0">{pageCount > 0 && `${pageCount} ${isLegacyNovel ? 'บท' : 'หน้า'} · `}{canSeeCost ? <span className="text-emerald-600">{money(book._generationCostThb ?? book.generation_cost_thb, 'THB')}</span> : `${book.reading_minutes || 5} นาที`}</span></div>
       </div>
     </button>
     {canDelete && (
@@ -233,14 +237,14 @@ function buildShelfEntries(bookRows, seriesRows, readBookIds, allBookRows = book
   return entries.sort((a, b) => String(b.sortDate).localeCompare(String(a.sortDate)));
 }
 
-function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), onSelectEpisode, onClose, onComplete, completing = false, onReadingEvent, onEnsureQuiz }) {
+function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageIndex = null, onSaveProgress, onSelectEpisode, onClose, onComplete, completing = false, onReadingEvent, onEnsureQuiz }) {
   const [showPinyin, setShowPinyin] = useState(() => localStorage.getItem('book-reader-pinyin') !== 'false');
   const [showThai, setShowThai] = useState(() => localStorage.getItem('book-reader-thai') !== 'false');
   const [fontIndex, setFontIndex] = useState(() => {
     const stored = Number(localStorage.getItem('book-reader-font-index'));
     return Number.isInteger(stored) && stored >= 0 && stored < FONT_SIZES.length ? stored : 2;
   });
-  const [pageIndex, setPageIndex] = useState(0);
+  const [pageIndex, setPageIndex] = useState(() => Math.max(0, Math.min(Number(savedPageIndex || 0), Math.max(0, (Array.isArray(book.pages) ? book.pages.length : 1) - 1))));
   const [audioMode, setAudioMode] = useState(() => localStorage.getItem('book-reader-audio-mode') || 'manual');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const speechRunRef = useRef(0);
@@ -252,8 +256,9 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), onSelectEp
   const pages = Array.isArray(book.pages) ? book.pages : [];
   const quizQuestions = quizQuestionsFromBook(book);
   const isYouthNovel = book.book_format === 'youth_novel';
-  const novelInProgress = isYouthNovel && book.status !== 'ready';
-  const targetPageCount = isYouthNovel ? 8 : pages.length;
+  const isLegacyNovel = isYouthNovel && Number(book.generation_progress?.target_chapters || 0) === 8;
+  const novelInProgress = isLegacyNovel && book.status !== 'ready';
+  const targetPageCount = novelInProgress ? 8 : pages.length;
   const isQuizPage = !novelInProgress && pageIndex === pages.length;
   const page = pages[pageIndex] || null;
   const pageImageUrl = page?.image_url || ((!isYouthNovel && book.content_image_url && pageIndex === Number(book.content_image_page ?? Math.floor(pages.length / 2))) ? book.content_image_url : '');
@@ -266,6 +271,20 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), onSelectEp
     localStorage.setItem('book-reader-font-index', String(next));
     return next;
   });
+  const saveCurrentPage = useCallback(() => {
+    if (!book?.id || pageIndex >= pages.length) return;
+    onSaveProgress?.(book.id, pageIndex);
+  }, [book?.id, onSaveProgress, pageIndex, pages.length]);
+  const closeReader = () => {
+    saveCurrentPage();
+    onClose?.();
+  };
+
+  useEffect(() => {
+    if (!book?.id || isQuizPage || pageIndex >= pages.length) return undefined;
+    const timerId = window.setTimeout(saveCurrentPage, 500);
+    return () => window.clearTimeout(timerId);
+  }, [book?.id, isQuizPage, pageIndex, pages.length, saveCurrentPage]);
 
   const stopSpeech = useCallback(() => {
     speechRunRef.current += 1;
@@ -356,7 +375,7 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), onSelectEp
     <div className="fixed inset-0 z-[120] flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-[#FBF4E6] text-slate-800">
       <header className="flex flex-col gap-2 border-b border-orange-200 bg-white/95 px-3 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] shadow-sm backdrop-blur sm:flex-row sm:items-center">
         <div className="flex w-full min-w-0 items-center gap-2">
-          <button type="button" onClick={onClose} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-800" aria-label="ปิดหนังสือ">
+          <button type="button" onClick={closeReader} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-800" aria-label="ปิดหนังสือ">
             <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" /></svg>
           </button>
           <div className="min-w-0 flex-1">
@@ -368,12 +387,13 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), onSelectEp
                 </select>
               )}
             </div>
-            <div className="text-[10px] font-bold text-slate-400">{isQuizPage ? 'แบบทดสอบท้ายเล่ม' : `${isYouthNovel ? 'บท' : 'หน้า'} ${pageIndex + 1} / ${targetPageCount}${novelInProgress ? ' · กำลังสร้างต่อ' : ''}`}</div>
+            <div className="text-[10px] font-bold text-slate-400">{isQuizPage ? 'แบบทดสอบท้ายเล่ม' : `${isLegacyNovel ? 'บท' : 'หน้า'} ${pageIndex + 1} / ${targetPageCount}${novelInProgress ? ' · กำลังสร้างต่อ' : ''}`}</div>
           </div>
         </div>
-        <div className="grid w-full shrink-0 grid-cols-[1.2fr_0.9fr_0.65fr_0.65fr_0.65fr_0.65fr] gap-1.5 sm:w-auto sm:min-w-[30rem] sm:gap-2">
+        <div className="grid w-full shrink-0 grid-cols-[1.2fr_0.9fr_0.65fr_0.65fr_0.65fr_0.65fr_0.65fr] gap-1.5 sm:w-auto sm:min-w-[33rem] sm:gap-2">
           <button type="button" onClick={() => saveToggle('book-reader-pinyin', setShowPinyin)} aria-pressed={showPinyin} className={`h-10 rounded-xl px-2 text-xs font-black ${showPinyin ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-500'}`}>拼 Pinyin</button>
           <button type="button" onClick={() => saveToggle('book-reader-thai', setShowThai)} aria-pressed={showThai} className={`h-10 rounded-xl px-2 text-xs font-black ${showThai ? 'bg-cyan-500 text-white' : 'bg-slate-100 text-slate-500'}`}>ไทย</button>
+          <button type="button" onClick={saveCurrentPage} disabled={isQuizPage} aria-label="บันทึกหน้าปัจจุบัน" title="บันทึกไว้อ่านต่อ" className={`h-10 rounded-xl border-2 text-lg transition active:scale-95 disabled:opacity-30 ${savedPageIndex !== null && Number(savedPageIndex) === pageIndex ? 'border-amber-500 bg-amber-400 text-white' : 'border-amber-200 bg-white text-amber-600'}`}>🔖</button>
           <button type="button" onClick={toggleManualAudio} disabled={isQuizPage} aria-label={isSpeaking ? 'หยุดเสียง' : 'เล่นเสียงหน้าปัจจุบัน'} title={isSpeaking ? 'หยุดเสียง' : 'เล่น'} aria-pressed={isSpeaking} className={`h-10 rounded-xl border-2 text-lg transition active:scale-95 disabled:opacity-30 ${isSpeaking ? 'border-orange-500 bg-orange-500 text-white' : 'border-orange-200 bg-white text-orange-600'}`}>{isSpeaking ? '⏹️' : '🔊'}</button>
           <button type="button" onClick={toggleAutoAudio} disabled={isQuizPage} aria-label={audioMode === 'auto' ? 'ปิดการเล่นเสียงอัตโนมัติ' : 'เปิดการเล่นเสียงอัตโนมัติเมื่อเปลี่ยนหน้า'} title={audioMode === 'auto' ? 'ปิดเล่นอัตโนมัติ' : 'เล่นอัตโนมัติ'} aria-pressed={audioMode === 'auto'} className={`h-10 rounded-xl border-2 text-lg transition active:scale-95 disabled:opacity-30 ${audioMode === 'auto' ? 'border-cyan-500 bg-cyan-500 text-white' : 'border-cyan-200 bg-white text-cyan-700'}`}>🔁</button>
           <button type="button" onClick={() => changeFont(-1)} disabled={fontIndex === 0} className="h-10 rounded-xl bg-slate-100 font-black disabled:opacity-30" aria-label="ลดขนาดอักษร">A−</button>
@@ -410,17 +430,17 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), onSelectEp
               {allQuizAnswered && <div className="mt-6 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 p-5 text-center text-white"><p className="text-sm font-bold text-white/75">คะแนนของคุณ</p><p className="mt-1 text-4xl font-black">{quizScore} / 3</p><button type="button" onClick={() => setQuizAnswers({})} className="mt-3 rounded-xl bg-white/15 px-4 py-2 text-sm font-black">ลองอีกครั้ง</button></div>}
             </div>
           ) : <>
-          {(pageIndex === 0 || isYouthNovel) && (
+          {(pageIndex === 0 || isLegacyNovel) && (
             <div className="mb-5 min-w-0">
-              {isYouthNovel && <p className="mb-1 text-xs font-black uppercase tracking-wider text-emerald-600">บทที่ {pageIndex + 1}</p>}
-              <h2 className="text-2xl font-black text-slate-900">{isYouthNovel ? (page.heading_cn || book.title_cn) : book.title_cn}</h2>
-              {showPinyin && (isYouthNovel ? page.heading_pinyin : book.title_pinyin) && <p className="mt-1 text-sm font-bold text-orange-500">{isYouthNovel ? page.heading_pinyin : book.title_pinyin}</p>}
-              {showThai && (isYouthNovel ? page.heading_thai : book.title_th) && <p className="mt-1 text-sm font-bold text-slate-500">{isYouthNovel ? page.heading_thai : book.title_th}</p>}
+              {isLegacyNovel && <p className="mb-1 text-xs font-black uppercase tracking-wider text-emerald-600">บทที่ {pageIndex + 1}</p>}
+              <h2 className="text-2xl font-black text-slate-900">{isLegacyNovel ? (page.heading_cn || book.title_cn) : book.title_cn}</h2>
+              {showPinyin && (isLegacyNovel ? page.heading_pinyin : book.title_pinyin) && <p className="mt-1 text-sm font-bold text-orange-500">{isLegacyNovel ? page.heading_pinyin : book.title_pinyin}</p>}
+              {showThai && (isLegacyNovel ? page.heading_thai : book.title_th) && <p className="mt-1 text-sm font-bold text-slate-500">{isLegacyNovel ? page.heading_thai : book.title_th}</p>}
             </div>
           )}
           {showContentImage && (
             <button type="button" onClick={() => setShowExpandedImage(true)} className="group relative mb-6 block w-full overflow-hidden rounded-2xl shadow-md" aria-label="ขยายภาพประกอบ">
-              <img src={pageImageUrl} alt={`ภาพประกอบ${isYouthNovel ? `บทที่ ${pageIndex + 1}` : 'เนื้อหา'}`} className="aspect-[4/3] w-full object-cover transition duration-300 group-hover:scale-[1.02]" />
+              <img src={pageImageUrl} alt={`ภาพประกอบ${isLegacyNovel ? `บทที่ ${pageIndex + 1}` : 'เนื้อหา'}`} className="aspect-[4/3] w-full object-cover transition duration-300 group-hover:scale-[1.02]" />
               <span className="absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-slate-950/65 text-lg text-white shadow-lg backdrop-blur" aria-hidden="true">🔍</span>
             </button>
           )}
@@ -475,6 +495,7 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
   const [seriesGenre, setSeriesGenre] = useState('adventure');
   const [level, setLevel] = useState('easy');
   const [minutes, setMinutes] = useState(5);
+  const [longPageCount, setLongPageCount] = useState(16);
   const [textModel, setTextModel] = useState('gpt-5.6-terra');
   const [topic, setTopic] = useState('');
   const [tone, setTone] = useState('สนุกและอบอุ่น');
@@ -497,6 +518,10 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
     const selected = new Set((selectedIds || []).map(Number));
     return (allMasterCards || []).filter((card) => selected.has(Number(card.id1 || card.id))).slice(0, 80).map((card) => ({ hanzi: card.cn || card.vocabulary, pinyin: card.pinyin || card.pinyin_vocab, thai: card.th })).filter((word) => word.hanzi);
   }, [allMasterCards, bookFormat, category, selectedIds]);
+
+  useEffect(() => {
+    if (bookFormat === 'series' && !LONG_STORY_LENGTHS.includes(longPageCount)) setLongPageCount(16);
+  }, [bookFormat, longPageCount]);
 
   useEffect(() => {
     if (!submitting) return undefined;
@@ -523,7 +548,7 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
         ? 66 + ((elapsedSeconds - 60) * 0.27)
         : 92;
   const progressLabel = elapsedSeconds < 15
-    ? (isYouthNovel ? 'กำลังส่งงานเข้าสตูดิโอนิยาย…' : isSeries ? 'กำลังส่งซีรีส์เข้าคิวสร้าง…' : 'กำลังเตรียมโครงเรื่อง…')
+    ? (isYouthNovel ? 'กำลังส่งนิยายเข้าคิวสร้าง…' : isSeries ? 'กำลังส่งเรื่องยาวเข้าคิวสร้าง…' : 'กำลังเตรียมโครงเรื่อง…')
     : elapsedSeconds < 60
       ? 'กำลังเขียนภาษาจีน Pinyin และคำแปล…'
       : elapsedSeconds < 150
@@ -547,9 +572,9 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
     }
     setElapsedSeconds(0); setSubmitting(true); setError('');
     try {
-      const functionName = isYouthNovel ? 'generate-youth-novel' : isSeries ? 'generate-series' : 'generate-book';
+      const functionName = isYouthNovel || isSeries ? 'generate-long-book' : 'generate-book';
       const { data, error: invokeError } = await supabase.functions.invoke(functionName, { body: {
-        bookFormat, category, seriesGenre, languageLevel: level, readingMinutes: minutes, textModel, topic: topic.trim(), tone, learnedWords, useReaderProfile,
+        bookFormat, category, seriesGenre, languageLevel: level, readingMinutes: minutes, pageCount: longPageCount, textModel, topic: topic.trim(), tone, learnedWords, useReaderProfile,
         novelOptions: isYouthNovel ? {
           age: novelAge, primaryGenre: novelGenre, secondaryGenre: novelSecondaryGenre,
           primaryTone: novelTone, secondaryTone: novelSecondaryTone, interests: novelInterests,
@@ -591,15 +616,15 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
             <legend className="mb-3 font-black text-slate-800">1. รูปแบบหนังสือ</legend>
             <div className="grid grid-cols-3 gap-2">
               <button type="button" onClick={() => setBookFormat('standalone')} className={`min-w-0 rounded-2xl border-2 px-1 py-3 text-center text-xs font-black sm:text-sm ${bookFormat === 'standalone' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-white bg-white text-slate-700'}`}>📕 เล่มเดียวจบ</button>
-              <button type="button" onClick={() => setBookFormat('series')} className={`min-w-0 rounded-2xl border-2 px-1 py-3 text-center text-xs font-black sm:text-sm ${bookFormat === 'series' ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-white bg-white text-slate-700'}`}>🎬 ซีรีส์ครบ 5 ตอน</button>
-              <button type="button" onClick={() => setBookFormat('youth_novel')} className={`min-w-0 rounded-2xl border-2 px-1 py-3 text-center text-xs font-black sm:text-sm ${isYouthNovel ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-white bg-white text-slate-700'}`}>📗 นิยายเยาวชน</button>
+              <button type="button" onClick={() => { setBookFormat('series'); setLongPageCount(16); }} className={`min-w-0 rounded-2xl border-2 px-1 py-3 text-center text-xs font-black sm:text-sm ${bookFormat === 'series' ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-white bg-white text-slate-700'}`}>🎬 เรื่องยาว</button>
+              <button type="button" onClick={() => { setBookFormat('youth_novel'); setLongPageCount(20); }} className={`min-w-0 rounded-2xl border-2 px-1 py-3 text-center text-xs font-black sm:text-sm ${isYouthNovel ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-white bg-white text-slate-700'}`}>📗 นิยายเยาวชน</button>
             </div>
           </fieldset>
           {bookFormat === 'standalone' && <fieldset><legend className="mb-3 font-black text-slate-800">2. เลือกหมวดหมู่</legend><div className="grid grid-cols-2 gap-2">{CATEGORIES.filter((item) => !item.filterOnly).map((item) => <button key={item.id} type="button" onClick={() => setCategory(item.id)} className={`rounded-2xl border-2 p-3 text-left transition ${category === item.id ? 'border-orange-500 bg-orange-50 shadow-md' : 'border-white bg-white'}`}><span className="mr-2 text-xl">{item.icon}</span><span className="text-sm font-black text-slate-800">{item.label}</span>{item.subtitle && <span className="mt-1 block pl-8 text-[10px] text-slate-400">{item.subtitle}</span>}</button>)}</div></fieldset>}
-          {bookFormat === 'series' && <fieldset><legend className="mb-3 font-black text-slate-800">2. แนวซีรีส์เยาวชน</legend><div className="grid grid-cols-2 gap-2">{SERIES_GENRES.map((item) => <button key={item.id} type="button" onClick={() => setSeriesGenre(item.id)} className={`rounded-2xl border-2 p-3 text-left transition ${seriesGenre === item.id ? 'border-violet-500 bg-violet-50 shadow-md' : 'border-white bg-white'}`}><span className="mr-2 text-xl">{item.icon}</span><span className="text-sm font-black text-slate-800">{item.label}</span></button>)}</div><p className="mt-2 rounded-xl bg-violet-50 p-3 text-xs font-bold leading-relaxed text-violet-700">สร้างครบทั้ง 5 ตอนอัตโนมัติจากโครงเรื่องเดียวกัน คุณเริ่มอ่านตอนที่พร้อมแล้วได้ระหว่างที่ระบบกำลังสร้างตอนถัดไป</p></fieldset>}
+          {bookFormat === 'series' && <fieldset><legend className="mb-3 font-black text-slate-800">2. แนวเรื่องยาว</legend><div className="grid grid-cols-2 gap-2">{SERIES_GENRES.map((item) => <button key={item.id} type="button" onClick={() => setSeriesGenre(item.id)} className={`rounded-2xl border-2 p-3 text-left transition ${seriesGenre === item.id ? 'border-violet-500 bg-violet-50 shadow-md' : 'border-white bg-white'}`}><span className="mr-2 text-xl">{item.icon}</span><span className="text-sm font-black text-slate-800">{item.label}</span></button>)}</div><p className="mt-2 rounded-xl bg-violet-50 p-3 text-xs font-bold leading-relaxed text-violet-700">เรื่องเดียวต่อเนื่องตั้งแต่ต้นจนจบ สร้างและตรวจความต่อเนื่องพร้อมกันทั้งเล่ม</p></fieldset>}
           {isYouthNovel && (
             <div className="space-y-5 rounded-3xl border-2 border-emerald-100 bg-emerald-50/60 p-4">
-              <div><h3 className="font-black text-emerald-900">2. ออกแบบนิยายเยาวชน 8 บท</h3><p className="mt-1 text-xs font-bold text-emerald-700">ช่องที่มี * จำเป็นต้องเลือก ส่วนช่องอื่นให้ AI คิดให้ได้</p></div>
+              <div><h3 className="font-black text-emerald-900">2. ออกแบบนิยายเยาวชนเล่มเดียวจบ</h3><p className="mt-1 text-xs font-bold text-emerald-700">สร้างเนื้อเรื่องต่อเนื่องพร้อมกันทั้งเล่ม ช่องที่มี * จำเป็นต้องเลือก</p></div>
               <fieldset><legend className="mb-2 text-sm font-black text-slate-800">ช่วงอายุ *</legend><div className="grid grid-cols-3 gap-2">{NOVEL_AGES.map((age) => <button key={age} type="button" onClick={() => setNovelAge(age)} className={`rounded-xl border-2 px-1 py-3 text-xs font-black ${novelAge === age ? 'border-emerald-500 bg-white text-emerald-700' : 'border-white bg-white text-slate-600'}`}>{age}</button>)}</div></fieldset>
               <fieldset><legend className="mb-2 text-sm font-black text-slate-800">แนวเรื่องหลัก *</legend><div className="grid grid-cols-2 gap-2">{NOVEL_GENRES.map((item) => <button key={item.id} type="button" onClick={() => setNovelGenre(item.id)} className={`rounded-xl border-2 p-2 text-left text-xs font-black ${novelGenre === item.id ? 'border-emerald-500 bg-white text-emerald-800' : 'border-white bg-white text-slate-700'}`}><span className="mr-1.5 text-base">{item.icon}</span>{item.label}</button>)}</div></fieldset>
               <label className="block text-sm font-black text-slate-800">แนวเรื่องรอง <span className="font-normal text-slate-400">(ไม่บังคับ)</span><select value={novelSecondaryGenre} onChange={(event) => setNovelSecondaryGenre(event.target.value)} className="mt-2 w-full rounded-xl border-2 border-white bg-white p-3 text-sm"><option value="">ให้ AI เลือก</option>{NOVEL_GENRES.filter((item) => item.id !== novelGenre).map((item) => <option key={item.id} value={item.id}>{item.icon} {item.label}</option>)}</select></label>
@@ -617,7 +642,7 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
           )}
           <label className="flex items-center justify-between gap-3 rounded-2xl border-2 border-emerald-100 bg-emerald-50 p-4 text-sm font-black text-slate-700"><span><span className="block">ใช้ข้อมูลความชอบจากการอ่านครั้งก่อน</span><span className="mt-1 block text-xs font-bold text-emerald-700">ใช้เฉพาะประวัติอ่านและรีวิวของบัญชีนี้</span></span><input type="checkbox" checked={useReaderProfile} onChange={(event) => setUseReaderProfile(event.target.checked)} className="h-5 w-5 shrink-0 accent-emerald-500" /></label>
           <fieldset><legend className="mb-3 font-black text-slate-800">3. ระดับภาษาจีน</legend><div className="space-y-2">{LEVELS.map((item) => <button key={item.id} type="button" onClick={() => setLevel(item.id)} className={`flex w-full items-center justify-between rounded-2xl border-2 p-3 text-left ${level === item.id ? 'border-cyan-500 bg-cyan-50' : 'border-white bg-white'}`}><span><span className="block text-sm font-black text-slate-800">{item.label}</span><span className="text-xs text-slate-400">{item.detail}</span></span><span className={`h-5 w-5 rounded-full border-4 ${level === item.id ? 'border-cyan-500 bg-white' : 'border-slate-200'}`} /></button>)}</div></fieldset>
-          {isYouthNovel ? <div className="rounded-2xl border-2 border-violet-200 bg-violet-50 p-4 text-center"><div className="font-black text-violet-900">📚 ความยาว 8 บท</div><div className="mt-1 text-xs font-bold text-violet-600">หนึ่งเล่มจบ · ภาพประกอบทุกบท · แบบทดสอบท้ายเล่ม</div></div> : <fieldset><legend className="mb-3 font-black text-slate-800">4. ความยาว</legend><div className="grid grid-cols-4 gap-2">{LENGTHS.map((item) => <button key={item.minutes} type="button" onClick={() => setMinutes(item.minutes)} className={`min-w-0 rounded-2xl border-2 px-1 py-4 text-center ${minutes === item.minutes ? 'border-violet-500 bg-violet-50' : 'border-white bg-white'}`}><span className="block whitespace-nowrap text-sm font-black text-slate-800 sm:text-base">{item.pages} หน้า</span></button>)}</div></fieldset>}
+          {isYouthNovel || isSeries ? <fieldset><legend className="mb-3 font-black text-slate-800">4. ความยาว</legend><div className={`grid gap-2 ${isYouthNovel ? 'grid-cols-3' : 'grid-cols-2'}`}>{(isYouthNovel ? NOVEL_LENGTHS : LONG_STORY_LENGTHS).map((pages) => <button key={pages} type="button" onClick={() => setLongPageCount(pages)} className={`relative min-w-0 rounded-2xl border-2 px-1 py-4 text-center ${longPageCount === pages ? 'border-violet-500 bg-violet-50' : 'border-white bg-white'}`}>{((isYouthNovel && pages === 20) || (isSeries && pages === 16)) && <span className="absolute -top-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-emerald-500 px-2 py-0.5 text-[8px] font-black text-white">แนะนำ</span>}<span className="block whitespace-nowrap text-sm font-black text-slate-800 sm:text-base">{pages} หน้า</span></button>)}</div><p className="mt-2 text-center text-xs font-bold text-slate-500">{isYouthNovel ? `ปก 1 ภาพ · ภาพประกอบ ${longPageCount === 16 ? 4 : longPageCount === 20 ? 5 : 6} ภาพ · แบบทดสอบท้ายเล่ม` : `ปก 1 ภาพ · ภาพประกอบ ${longPageCount === 12 ? 3 : 4} ภาพ · 1 ตอนจบ`}</p></fieldset> : <fieldset><legend className="mb-3 font-black text-slate-800">4. ความยาว</legend><div className="grid grid-cols-4 gap-2">{LENGTHS.map((item) => <button key={item.minutes} type="button" onClick={() => setMinutes(item.minutes)} className={`min-w-0 rounded-2xl border-2 px-1 py-4 text-center ${minutes === item.minutes ? 'border-violet-500 bg-violet-50' : 'border-white bg-white'}`}><span className="block whitespace-nowrap text-sm font-black text-slate-800 sm:text-base">{item.pages} หน้า</span></button>)}</div></fieldset>}
           <fieldset><legend className="mb-3 font-black text-slate-800">5. โมเดลสร้างเนื้อหา</legend><div className="grid grid-cols-3 gap-2">{TEXT_MODELS.map((item) => <button key={item.id} type="button" onClick={() => setTextModel(item.id)} className={`relative rounded-2xl border-2 px-2 py-3 text-center ${textModel === item.id ? 'border-emerald-500 bg-emerald-50' : 'border-white bg-white'}`}>{item.recommended && <span className="absolute -top-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-emerald-500 px-2 py-0.5 text-[8px] font-black text-white">แนะนำ</span>}<span className="block text-xs font-black text-slate-800">{item.label}</span><span className="mt-1 block text-[10px] text-slate-400">{item.detail}</span></button>)}</div></fieldset>
           <div><label htmlFor="book-topic" className="mb-2 block font-black text-slate-800">6. {isYouthNovel ? 'ไอเดียหรือเหตุการณ์ที่อยากให้มี' : 'อยากอ่านเรื่องอะไร?'} <span className="font-normal text-slate-400">(ไม่บังคับ)</span></label><textarea id="book-topic" value={topic} onChange={(event) => setTopic(event.target.value)} maxLength={240} rows={3} placeholder={isYouthNovel ? 'เว้นว่างเพื่อให้ AI ออกแบบเรื่องให้ทั้งหมด' : 'เช่น แพนด้าตัวน้อยไปเที่ยวกำแพงเมืองจีน'} className="w-full resize-none rounded-2xl border-2 border-white bg-white p-3 text-sm text-slate-800 outline-none focus:border-orange-400" /></div>
           {!isYouthNovel && <div><label htmlFor="book-tone" className="mb-2 block font-black text-slate-800">โทนของหนังสือ</label><select id="book-tone" value={tone} onChange={(event) => setTone(event.target.value)} className="w-full rounded-2xl border-2 border-white bg-white p-3 text-sm font-bold text-slate-800 outline-none focus:border-orange-400"><option>สนุกและอบอุ่น</option><option>ตลก</option><option>ผจญภัย</option><option>น่าตื่นเต้น</option><option>ให้ความรู้</option></select></div>}
@@ -628,10 +653,10 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
               <div className="flex items-center justify-between gap-3"><span className="text-sm font-black text-slate-800">{progressLabel}</span><span className="shrink-0 font-mono text-xs font-bold text-orange-600">{elapsedLabel}</span></div>
               <div className="mt-3 h-3 overflow-hidden rounded-full bg-orange-100"><div className="h-full rounded-full bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-300 transition-[width] duration-1000 ease-linear" style={{ width: `${Math.min(92, progress)}%` }} /></div>
               <div className="mt-2 flex items-center justify-between text-[11px] font-bold text-slate-400"><span>ความคืบหน้าโดยประมาณ</span><span>โดยทั่วไป 1–3 นาที</span></div>
-              <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-center text-xs font-black text-red-600">{isSeries ? 'กรุณารอสักครู่จนระบบรับงานเข้าคิวสำเร็จ แล้วสามารถปิดหรือรีเฟรชได้' : 'กรุณาอย่ากดซ้ำ อย่าปิดหน้าต่าง และอย่ารีเฟรชหน้านี้'}</p>
+              <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-center text-xs font-black text-red-600">{isSeries || isYouthNovel ? 'กรุณารอสักครู่จนระบบรับงานเข้าคิวสำเร็จ แล้วสามารถปิดหรือรีเฟรชได้' : 'กรุณาอย่ากดซ้ำ อย่าปิดหน้าต่าง และอย่ารีเฟรชหน้านี้'}</p>
             </div>
           )}
-          <button type="submit" disabled={submitting || !user?.id || quotaReached} className="w-full rounded-2xl bg-gradient-to-r from-orange-500 to-amber-400 py-4 text-lg font-black text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-60">{submitting ? `${isYouthNovel ? 'กำลังเริ่มสร้างนิยาย' : isSeries ? 'กำลังเริ่มสร้างซีรีส์' : 'กำลังสร้างหนังสือ'}… ${elapsedLabel}` : quotaReached ? 'โควต้าครบแล้ว' : isYouthNovel ? '✨ สร้างนิยายของฉัน' : isSeries ? '✨ สร้างซีรีส์ครบ 5 ตอน' : '✨ สร้างหนังสือ'}</button>
+          <button type="submit" disabled={submitting || !user?.id || quotaReached} className="w-full rounded-2xl bg-gradient-to-r from-orange-500 to-amber-400 py-4 text-lg font-black text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-60">{submitting ? `${isYouthNovel ? 'กำลังเริ่มสร้างนิยาย' : isSeries ? 'กำลังเริ่มสร้างเรื่องยาว' : 'กำลังสร้างหนังสือ'}… ${elapsedLabel}` : quotaReached ? 'โควต้าครบแล้ว' : isYouthNovel ? '✨ สร้างนิยายเล่มเดียวจบ' : isSeries ? '✨ สร้างเรื่องยาว' : '✨ สร้างหนังสือ'}</button>
         </div>
       </form>
     </div>
@@ -651,6 +676,7 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
   const [showQuotaModal, setShowQuotaModal] = useState(false);
   const [activeBook, setActiveBook] = useState(null);
   const [readBookIds, setReadBookIds] = useState(() => new Set());
+  const [bookProgress, setBookProgress] = useState(() => new Map());
   const [completingBookId, setCompletingBookId] = useState(null);
   const [summary, setSummary] = useState(null);
   const [quotaUsed, setQuotaUsed] = useState(null);
@@ -679,13 +705,17 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
     const readsRequest = userId
       ? supabase.from('ai_book_reads').select('book_id').eq('user_id', userId)
       : Promise.resolve({ data: [], error: null });
+    const progressRequest = userId
+      ? supabase.from('ai_book_progress').select('book_id,page_index').eq('user_id', userId)
+      : Promise.resolve({ data: [], error: null });
     const seriesRequest = supabase.from('ai_book_series').select('id, title_cn, title_pinyin, title_th, total_episodes, generation_status, generation_progress, error_message').limit(1000);
-    const [booksResult, summaryResult, quotaResult, readsResult, seriesResult] = await Promise.all([supabase.from('ai_books').select('*').order('created_at', { ascending: false }).limit(1000), supabase.rpc('get_ai_book_cost_summary'), quotaRequest, readsRequest, seriesRequest]);
+    const [booksResult, summaryResult, quotaResult, readsResult, progressResult, seriesResult] = await Promise.all([supabase.from('ai_books').select('*').order('created_at', { ascending: false }).limit(1000), supabase.rpc('get_ai_book_cost_summary'), quotaRequest, readsRequest, progressRequest, seriesRequest]);
     if (booksResult.error) { setLoadError(booksResult.error.code === '42P01' ? 'ยังไม่ได้ติดตั้งฐานข้อมูล Books กรุณารันไฟล์ sql/ai_books.sql ใน Supabase' : booksResult.error.message); setBooks([]); } else setBooks(booksResult.data || []);
     if (!seriesResult.error) setSeriesRows(seriesResult.data || []);
     if (!summaryResult.error) setSummary(Array.isArray(summaryResult.data) ? summaryResult.data[0] : summaryResult.data);
     setQuotaUsed(quotaResult.error ? null : Number(quotaResult.count || 0));
     if (!readsResult.error) setReadBookIds(new Set((readsResult.data || []).map((item) => item.book_id)));
+    if (!progressResult.error) setBookProgress(new Map((progressResult.data || []).map((item) => [item.book_id, Number(item.page_index || 0)])));
     setLoading(false);
   }, [userId]);
   useEffect(() => {
@@ -742,6 +772,17 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
       chapter_number: Number(chapterNumber || 1),
     });
   }, [readBookIds, userId]);
+  const saveBookProgress = useCallback(async (bookId, pageIndex) => {
+    if (!userId || !bookId || !Number.isInteger(pageIndex) || pageIndex < 0) return;
+    setBookProgress((current) => new Map(current).set(bookId, pageIndex));
+    const { error } = await supabase.from('ai_book_progress').upsert({
+      user_id: userId,
+      book_id: bookId,
+      page_index: pageIndex,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,book_id' });
+    if (error && error.code !== '42P01') console.error('save book progress:', error.message);
+  }, [userId]);
   const completeBook = async (book) => {
     if (!userId || completingBookId) return;
     setCompletingBookId(book.id);
@@ -749,6 +790,8 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
     if (!error) {
       try { await recordDailyBookRead(userId, book.id); } catch { /* Keep the reading record even if the mission upgrade is not installed yet. */ }
       setReadBookIds((current) => new Set([...current, book.id]));
+      await supabase.from('ai_book_progress').delete().eq('user_id', userId).eq('book_id', book.id);
+      setBookProgress((current) => { const next = new Map(current); next.delete(book.id); return next; });
       if (book.book_format === 'youth_novel') {
         await recordReadingEvent(book, 'complete', 8);
       }
@@ -930,7 +973,7 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
       {reviewTarget && (
         <div className="fixed inset-0 z-[155] flex items-center justify-center bg-slate-950/75 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="book-review-title">
           <div className="max-h-full w-full max-w-sm overflow-y-auto rounded-[2rem] border-2 border-violet-100 bg-white p-6 shadow-2xl">
-            <div className="text-center"><div className="text-5xl" aria-hidden="true">📚</div><h2 id="book-review-title" className="mt-2 text-xl font-black text-slate-900">{reviewTarget.book_format === 'series' ? 'หนูชอบซีรีส์นี้แค่ไหน?' : 'หนูชอบหนังสือเล่มนี้แค่ไหน?'}</h2><p className="mt-1 text-sm font-bold text-slate-500">{reviewTarget.book_format === 'series' ? `อ่านครบ ${reviewTarget.series_total || 5} ตอนแล้ว ตอบ 2 ข้อสั้น ๆ ได้เลย` : 'อ่านจบแล้ว ตอบ 2 ข้อสั้น ๆ ได้เลย'}</p></div>
+            <div className="text-center"><div className="text-5xl" aria-hidden="true">📚</div><h2 id="book-review-title" className="mt-2 text-xl font-black text-slate-900">{reviewTarget.book_format === 'series' && reviewTarget.series_id ? 'หนูชอบซีรีส์นี้แค่ไหน?' : reviewTarget.book_format === 'series' ? 'หนูชอบเรื่องยาวนี้แค่ไหน?' : 'หนูชอบหนังสือเล่มนี้แค่ไหน?'}</h2><p className="mt-1 text-sm font-bold text-slate-500">{reviewTarget.book_format === 'series' && reviewTarget.series_id ? `อ่านครบ ${reviewTarget.series_total || 5} ตอนแล้ว ตอบ 2 ข้อสั้น ๆ ได้เลย` : 'อ่านจบแล้ว ตอบ 2 ข้อสั้น ๆ ได้เลย'}</p></div>
             <div className="mt-5 grid grid-cols-2 gap-2">{REVIEW_ENJOYMENT.map((item) => <button key={item.id} type="button" onClick={() => setReviewEnjoyment(item.id)} aria-pressed={reviewEnjoyment === item.id} className={`min-h-12 rounded-2xl border-2 px-3 text-sm font-black transition ${reviewEnjoyment === item.id ? 'border-violet-500 bg-violet-50 text-violet-800' : 'border-slate-100 bg-slate-50 text-slate-700'}`}>{item.label}</button>)}</div>
             <h3 className="mt-6 text-center text-base font-black text-slate-900">ชอบอะไรมากที่สุด?</h3>
             <div className="mt-3 grid grid-cols-2 gap-2">{REVIEW_ASPECTS.map((item) => <button key={item.id} type="button" onClick={() => setReviewAspect(item.id)} aria-pressed={reviewAspect === item.id} className={`min-h-12 rounded-2xl border-2 px-3 text-sm font-black transition ${reviewAspect === item.id ? 'border-cyan-500 bg-cyan-50 text-cyan-800' : 'border-slate-100 bg-slate-50 text-slate-700'}`}>{item.label}</button>)}</div>
@@ -940,7 +983,7 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
         </div>
       )}
       {showCreate && <CreateBookModal user={user} allMasterCards={allMasterCards} selectedIds={selectedIds} quotaUsed={quotaUsed} quotaLimit={DAILY_BOOK_LIMIT} onClose={() => setShowCreate(false)} onCreated={async (book) => { setShowCreate(false); setBooks((current) => [book, ...current.filter((item) => item.id !== book.id)]); setTab('mine'); setCurrentPage(1); if (['ready', 'partial'].includes(book.status)) setActiveBook(book); await loadBooks(); }} />}
-      {activeBook && <Reader key={activeBook.id} book={activeBook} seriesEpisodes={activeSeriesEpisodes} readBookIds={readBookIds} onSelectEpisode={(episodeId) => setActiveBook(activeSeriesEpisodes.find((episode) => episode.id === episodeId) || activeBook)} onClose={() => setActiveBook(null)} onComplete={completeBook} completing={completingBookId === activeBook.id} onReadingEvent={recordReadingEvent} onEnsureQuiz={ensureBookQuiz} />}
+      {activeBook && <Reader key={activeBook.id} book={activeBook} seriesEpisodes={activeSeriesEpisodes} readBookIds={readBookIds} savedPageIndex={bookProgress.has(activeBook.id) ? bookProgress.get(activeBook.id) : null} onSaveProgress={saveBookProgress} onSelectEpisode={(episodeId) => setActiveBook(activeSeriesEpisodes.find((episode) => episode.id === episodeId) || activeBook)} onClose={() => setActiveBook(null)} onComplete={completeBook} completing={completingBookId === activeBook.id} onReadingEvent={recordReadingEvent} onEnsureQuiz={ensureBookQuiz} />}
     </div>
   );
 }
