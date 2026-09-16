@@ -104,7 +104,7 @@ create index if not exists ai_books_series_idx
 create table if not exists public.ai_series_generation_jobs (
   id bigint generated always as identity primary key,
   series_id uuid not null references public.ai_book_series(id) on delete cascade,
-  episode_number integer not null check (episode_number between 2 and 5),
+  episode_number integer not null check (episode_number between 1 and 5),
   status text not null default 'waiting' check (status in ('waiting', 'queued', 'processing', 'completed', 'failed', 'canceled')),
   attempts integer not null default 0 check (attempts between 0 and 3),
   last_error text,

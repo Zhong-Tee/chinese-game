@@ -514,6 +514,7 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
   }, [submitting]);
 
   const isYouthNovel = bookFormat === 'youth_novel';
+  const isSeries = bookFormat === 'series';
   const progress = elapsedSeconds < 15
     ? 10 + (elapsedSeconds * 1.3)
     : elapsedSeconds < 60
@@ -522,7 +523,7 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
         ? 66 + ((elapsedSeconds - 60) * 0.27)
         : 92;
   const progressLabel = elapsedSeconds < 15
-    ? (isYouthNovel ? 'กำลังส่งงานเข้าสตูดิโอนิยาย…' : 'กำลังเตรียมโครงเรื่อง…')
+    ? (isYouthNovel ? 'กำลังส่งงานเข้าสตูดิโอนิยาย…' : isSeries ? 'กำลังส่งซีรีส์เข้าคิวสร้าง…' : 'กำลังเตรียมโครงเรื่อง…')
     : elapsedSeconds < 60
       ? 'กำลังเขียนภาษาจีน Pinyin และคำแปล…'
       : elapsedSeconds < 150
@@ -546,7 +547,7 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
     }
     setElapsedSeconds(0); setSubmitting(true); setError('');
     try {
-      const functionName = isYouthNovel ? 'generate-youth-novel' : 'generate-book';
+      const functionName = isYouthNovel ? 'generate-youth-novel' : isSeries ? 'generate-series' : 'generate-book';
       const { data, error: invokeError } = await supabase.functions.invoke(functionName, { body: {
         bookFormat, category, seriesGenre, languageLevel: level, readingMinutes: minutes, textModel, topic: topic.trim(), tone, learnedWords,
         novelOptions: isYouthNovel ? {
@@ -626,10 +627,10 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
               <div className="flex items-center justify-between gap-3"><span className="text-sm font-black text-slate-800">{progressLabel}</span><span className="shrink-0 font-mono text-xs font-bold text-orange-600">{elapsedLabel}</span></div>
               <div className="mt-3 h-3 overflow-hidden rounded-full bg-orange-100"><div className="h-full rounded-full bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-300 transition-[width] duration-1000 ease-linear" style={{ width: `${Math.min(92, progress)}%` }} /></div>
               <div className="mt-2 flex items-center justify-between text-[11px] font-bold text-slate-400"><span>ความคืบหน้าโดยประมาณ</span><span>โดยทั่วไป 1–3 นาที</span></div>
-              <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-center text-xs font-black text-red-600">กรุณาอย่ากดซ้ำ อย่าปิดหน้าต่าง และอย่ารีเฟรชหน้านี้</p>
+              <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-center text-xs font-black text-red-600">{isSeries ? 'กรุณารอสักครู่จนระบบรับงานเข้าคิวสำเร็จ แล้วสามารถปิดหรือรีเฟรชได้' : 'กรุณาอย่ากดซ้ำ อย่าปิดหน้าต่าง และอย่ารีเฟรชหน้านี้'}</p>
             </div>
           )}
-          <button type="submit" disabled={submitting || !user?.id || quotaReached} className="w-full rounded-2xl bg-gradient-to-r from-orange-500 to-amber-400 py-4 text-lg font-black text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-60">{submitting ? `${isYouthNovel ? 'กำลังเริ่มสร้างนิยาย' : 'กำลังสร้างหนังสือ'}… ${elapsedLabel}` : quotaReached ? 'โควต้าครบแล้ว' : isYouthNovel ? '✨ สร้างนิยายของฉัน' : '✨ สร้างหนังสือ'}</button>
+          <button type="submit" disabled={submitting || !user?.id || quotaReached} className="w-full rounded-2xl bg-gradient-to-r from-orange-500 to-amber-400 py-4 text-lg font-black text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-60">{submitting ? `${isYouthNovel ? 'กำลังเริ่มสร้างนิยาย' : isSeries ? 'กำลังเริ่มสร้างซีรีส์' : 'กำลังสร้างหนังสือ'}… ${elapsedLabel}` : quotaReached ? 'โควต้าครบแล้ว' : isYouthNovel ? '✨ สร้างนิยายของฉัน' : isSeries ? '✨ สร้างซีรีส์ครบ 5 ตอน' : '✨ สร้างหนังสือ'}</button>
         </div>
       </form>
     </div>
