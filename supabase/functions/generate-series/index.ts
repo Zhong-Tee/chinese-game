@@ -72,15 +72,16 @@ Deno.serve(async (request) => {
     const useReaderProfile = body.useReaderProfile !== false;
     if (!SERIES_GENRES[genre] || !LEVELS.has(languageLevel) || !MINUTES.has(readingMinutes) || !MODELS.has(textModel)) return json({ error: 'ข้อมูลสำหรับสร้างซีรีส์ไม่ถูกต้อง' }, 400);
 
+    const { data: profile } = await admin.from('profiles').select('username, display_name, email, is_admin').eq('user_id', user.id).maybeSingle();
+    const isAdmin = profile?.is_admin === true;
     const dailyLimit = Number(Deno.env.get('AI_BOOKS_DAILY_LIMIT') || 5);
     const [{ count: recentCount }, { count: activeCount }] = await Promise.all([
       admin.from('ai_books').select('id', { count: 'exact', head: true }).eq('creator_id', user.id).gte('created_at', bangkokDayStartIso()).neq('status', 'canceled').or('series_id.is.null,episode_number.eq.1'),
       admin.from('ai_books').select('id', { count: 'exact', head: true }).eq('creator_id', user.id).in('status', ['generating', 'partial']),
     ]);
     if ((activeCount || 0) > 0) return json({ error: 'คุณมีหนังสือที่กำลังสร้างอยู่ กรุณารอให้เสร็จก่อน' }, 429);
-    if ((recentCount || 0) >= dailyLimit) return json({ error: `สร้างหนังสือได้ไม่เกิน ${dailyLimit} ครั้งต่อวัน` }, 429);
+    if (!isAdmin && (recentCount || 0) >= dailyLimit) return json({ error: `สร้างหนังสือได้ไม่เกิน ${dailyLimit} ครั้งต่อวัน` }, 429);
 
-    const { data: profile } = await admin.from('profiles').select('username, display_name, email').eq('user_id', user.id).maybeSingle();
     const creatorName = profile?.username || profile?.display_name || profile?.email?.split('@')[0] || user.email?.split('@')[0] || 'นักอ่าน Nihao';
     const { data: series, error: seriesError } = await admin.from('ai_book_series').insert({
       creator_id: user.id, creator_name: creatorName, genre, title_cn: '正在创作五集系列', title_pinyin: 'Zhèngzài chuàngzuò wǔ jí xìliè',

@@ -82,6 +82,11 @@ Deno.serve(async (request) => {
       .eq('book_id', bookId)
       .in('status', ['waiting', 'queued', 'processing', 'failed']);
 
+    await admin.from('ai_long_book_content_jobs')
+      .update({ status: 'canceled', updated_at: new Date().toISOString() })
+      .eq('book_id', bookId)
+      .in('status', ['queued', 'processing', 'failed']);
+
     if (!activeSeries) {
       const { data: files } = await admin.storage.from('book-images').list(bookId, { limit: 100 });
       if (files?.length) await admin.storage.from('book-images').remove(files.map((file) => `${bookId}/${file.name}`));

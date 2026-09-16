@@ -108,7 +108,7 @@ async function queueNextOrFinish(admin: AdminClient, supabaseUrl: string, servic
       status: 'ready',
       error_message: failed ? `${failed} image(s) could not be generated` : null,
       generation_progress: {
-        stage: 'complete', completed_pages: Array.isArray(book.pages) ? book.pages.length : 0,
+        stage: 'complete', progress_percent: 100, completed_pages: Array.isArray(book.pages) ? book.pages.length : 0,
         target_pages: Array.isArray(book.pages) ? book.pages.length : 0,
         completed_images: processed, successful_images: completed, failed_images: failed, target_images: total,
         message_th: failed ? `หนังสือพร้อมอ่าน · สร้างภาพสำเร็จ ${completed}/${total}` : 'หนังสือพร้อมอ่านทั้งเล่ม',
@@ -122,10 +122,11 @@ async function queueNextOrFinish(admin: AdminClient, supabaseUrl: string, servic
     .update({ status: 'queued', updated_at: new Date().toISOString() })
     .eq('id', next.id).eq('status', 'waiting').select('id').maybeSingle();
   if (!queued) return;
+  const progressPercent = Math.min(99, 82 + Math.round((processed / Math.max(1, total)) * 18));
   await admin.from('ai_books').update({
     status: 'partial', error_message: null,
     generation_progress: {
-      stage: 'illustrating', completed_pages: Array.isArray(book.pages) ? book.pages.length : 0,
+      stage: 'illustrating', progress_percent: progressPercent, completed_pages: Array.isArray(book.pages) ? book.pages.length : 0,
       target_pages: Array.isArray(book.pages) ? book.pages.length : 0,
       completed_images: processed, successful_images: completed, failed_images: failed, target_images: total,
       active_image: next.image_index + 1, message_th: `เนื้อหาพร้อมอ่าน · กำลังวาดภาพ ${processed}/${total}`,
@@ -139,7 +140,7 @@ async function queueNextOrFinish(admin: AdminClient, supabaseUrl: string, servic
     await admin.from('ai_books').update({
       status: 'partial', error_message: message.slice(0, 500),
       generation_progress: {
-        stage: 'failed', completed_pages: Array.isArray(book.pages) ? book.pages.length : 0,
+        stage: 'failed', progress_percent: progressPercent, completed_pages: Array.isArray(book.pages) ? book.pages.length : 0,
         target_pages: Array.isArray(book.pages) ? book.pages.length : 0,
         completed_images: processed, successful_images: completed, failed_images: failed, target_images: total,
         active_image: next.image_index + 1, message_th: `เนื้อหาพร้อมอ่าน · เริ่มสร้างภาพ ${next.image_index + 1}/${total} ไม่สำเร็จ กรุณายกเลิกแล้วสร้างใหม่`,
@@ -215,10 +216,11 @@ async function processImage(admin: AdminClient, apiKey: string, supabaseUrl: str
       const { data: imageJobs } = await admin.from('ai_long_book_image_jobs').select('status').eq('book_id', bookId);
       const targetImages = imageJobs?.length || 0;
       const completedImages = (imageJobs || []).filter((item) => item.status === 'completed' || item.status === 'failed').length;
+      const progressPercent = Math.min(99, 82 + Math.round((completedImages / Math.max(1, targetImages)) * 18));
       await admin.from('ai_books').update({
         status: 'partial', error_message: message.slice(0, 500),
         generation_progress: {
-          stage: 'retrying_image', completed_pages: Array.isArray(book.pages) ? book.pages.length : 0,
+          stage: 'retrying_image', progress_percent: progressPercent, completed_pages: Array.isArray(book.pages) ? book.pages.length : 0,
           target_pages: Array.isArray(book.pages) ? book.pages.length : 0,
           completed_images: completedImages, target_images: targetImages,
           active_image: imageIndex + 1, message_th: `เนื้อหาพร้อมอ่าน · กำลังลองสร้างภาพ ${imageIndex + 1} ใหม่ (${attempt}/3)`,

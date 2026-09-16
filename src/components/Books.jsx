@@ -133,8 +133,10 @@ function BookCover({ book, onOpen, isRead = book._isRead || false, canSeeCost = 
   const targetImages = Number(book.generation_progress?.target_images || 0);
   const completedImages = Number(book.generation_progress?.completed_images || 0);
   const hasImageProgress = targetImages > 0;
-  const progressMax = isLegacyNovel ? 8 : isSeriesCollection ? 5 : targetImages;
-  const progressValue = isLegacyNovel ? Math.min(8, completedChapters) : isSeriesCollection ? Math.min(5, completedEpisodes) : Math.min(targetImages, completedImages);
+  const progressPercent = Math.max(0, Math.min(100, Number(book.generation_progress?.progress_percent || 0)));
+  const hasPercentProgress = progressPercent > 0 && !isLegacyNovel && !isSeriesCollection;
+  const progressMax = hasPercentProgress ? 100 : isLegacyNovel ? 8 : isSeriesCollection ? 5 : targetImages;
+  const progressValue = hasPercentProgress ? progressPercent : isLegacyNovel ? Math.min(8, completedChapters) : isSeriesCollection ? Math.min(5, completedEpisodes) : Math.min(targetImages, completedImages);
   return (
     <div className="relative">
     <button type="button" onClick={() => onOpen(book)} className="group w-full overflow-hidden rounded-[1.4rem] border-2 border-white bg-white text-left shadow-lg transition active:scale-[0.98]">
@@ -144,7 +146,7 @@ function BookCover({ book, onOpen, isRead = book._isRead || false, canSeeCost = 
         )}
         <span className="absolute left-2 top-2 rounded-full bg-slate-950/75 px-2.5 py-1 text-[10px] font-black text-white backdrop-blur">{isSeriesCollection ? `ซีรีส์ · ${book._seriesEpisodeCount || 0}/5 ตอน` : isLongStory ? `เรื่องยาว · ${pageCount || book.generation_progress?.target_pages || 16} หน้า` : book.book_format === 'series' ? `ซีรีส์ · ตอน ${book.episode_number || 1}/${book.series_total || 5}` : isLegacyNovel ? 'นิยายเยาวชน · 8 บท' : isYouthNovel ? `นิยายเยาวชน · ${pageCount || book.generation_progress?.target_pages || 16} หน้า` : category.label}</span>
         {isRead && <span className="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-emerald-500 text-lg font-black text-white shadow-lg" aria-label="อ่านจบแล้ว" title="อ่านจบแล้ว">✓</span>}
-        {book.status !== 'ready' && <span className="absolute inset-x-2 bottom-2 rounded-xl bg-amber-400/95 px-2 py-1.5 text-xs font-black text-slate-900"><span className="flex items-center justify-between gap-2"><span className="min-w-0 flex-1 text-center">{book.status === 'failed' ? 'สร้างไม่สำเร็จ' : book.status === 'canceled' ? 'ยกเลิกการสร้างแล้ว' : book.generation_progress?.message_th || (book.status === 'partial' ? 'เนื้อหาพร้อมอ่าน · กำลังสร้างภาพ' : 'กำลังสร้าง...')}</span>{(isLegacyNovel || isSeriesCollection || hasImageProgress) && <span className="shrink-0 rounded-lg bg-white/70 px-1.5 py-0.5 font-mono text-[10px] text-emerald-800">{`${progressValue}/${progressMax}`}</span>}</span>{(isLegacyNovel || isSeriesCollection || hasImageProgress) && <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-black/10" role="progressbar" aria-label={hasImageProgress ? 'ความคืบหน้าการสร้างภาพ' : isLegacyNovel ? 'ความคืบหน้าการสร้างนิยาย' : 'ความคืบหน้าการสร้างซีรีส์'} aria-valuemin="0" aria-valuemax={progressMax} aria-valuenow={progressValue}><span className="block h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.max(5, (progressValue / Math.max(1, progressMax)) * 100)}%` }} /></span>}</span>}
+        {book.status !== 'ready' && <span className="absolute inset-x-2 bottom-2 rounded-xl bg-amber-400/95 px-2 py-1.5 text-xs font-black text-slate-900"><span className="flex items-center justify-between gap-2"><span className="min-w-0 flex-1 text-center">{book.status === 'failed' ? 'สร้างไม่สำเร็จ' : book.status === 'canceled' ? 'ยกเลิกการสร้างแล้ว' : book.generation_progress?.message_th || (book.status === 'partial' ? 'เนื้อหาพร้อมอ่าน · กำลังสร้างภาพ' : 'กำลังสร้าง...')}</span>{(hasPercentProgress || isLegacyNovel || isSeriesCollection || hasImageProgress) && <span className="shrink-0 rounded-lg bg-white/70 px-1.5 py-0.5 font-mono text-[10px] text-emerald-800">{hasPercentProgress ? `${progressValue}%` : `${progressValue}/${progressMax}`}</span>}</span>{(hasPercentProgress || isLegacyNovel || isSeriesCollection || hasImageProgress) && <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-black/10" role="progressbar" aria-label={hasPercentProgress ? 'ความคืบหน้าการสร้างหนังสือ' : hasImageProgress ? 'ความคืบหน้าการสร้างภาพ' : isLegacyNovel ? 'ความคืบหน้าการสร้างนิยาย' : 'ความคืบหน้าการสร้างซีรีส์'} aria-valuemin="0" aria-valuemax={progressMax} aria-valuenow={progressValue}><span className="block h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.max(5, (progressValue / Math.max(1, progressMax)) * 100)}%` }} /></span>}</span>}
       </div>
       <div className="space-y-1 p-3">
         <h3 className="line-clamp-1 text-base font-black text-slate-900">{book.title_cn || 'หนังสือเล่มใหม่'}</h3>
@@ -472,16 +474,20 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
         </div>
       )}
       <footer className="shrink-0 border-t border-orange-200 bg-[#FBF4E6] px-4 pb-[max(0.8rem,env(safe-area-inset-bottom))] pt-3">
-        <div className="mx-auto flex max-w-3xl items-center gap-1 sm:gap-2">
+        <div className="mx-auto flex max-w-3xl items-center justify-center gap-1 sm:gap-2">
           <button type="button" onClick={() => setPageIndex(0)} disabled={pageIndex === 0} className="flex h-12 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 disabled:opacity-30 sm:w-11" aria-label="ไปหน้าแรก" title="หน้าแรก">
             <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path d="M6 5v14M18 6l-6 6 6 6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
-          <button type="button" onClick={() => setPageIndex((value) => Math.max(0, value - 1))} disabled={pageIndex === 0} className="h-12 min-w-0 flex-1 whitespace-nowrap rounded-2xl bg-slate-200 px-2 text-xs font-black text-slate-700 disabled:opacity-30 sm:text-sm">← ก่อนหน้า</button>
+          <button type="button" onClick={() => setPageIndex((value) => Math.max(0, value - 1))} disabled={pageIndex === 0} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-200 text-slate-700 transition active:scale-95 disabled:opacity-30" aria-label="หน้าก่อนหน้า" title="ก่อนหน้า">
+            <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true"><path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>
           <div className="flex min-w-0 shrink gap-1 overflow-hidden" aria-hidden="true">{Array.from({ length: targetPageCount + (novelInProgress ? 0 : 1) }, (_, index) => <span key={index} className={`h-2 shrink-0 rounded-full transition-all ${index === pageIndex ? 'w-5 bg-orange-500' : index >= pages.length ? 'w-2 bg-slate-100' : 'w-2 bg-slate-200'}`} />)}</div>
           {isQuizPage
             ? <button type="button" onClick={() => onComplete?.(book)} disabled={completing || !allQuizAnswered} className="h-12 min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-2xl bg-emerald-500 px-2 text-xs font-black text-white disabled:opacity-40 sm:text-sm">{completing ? 'กำลังบันทึก…' : allQuizAnswered ? 'อ่านจบแล้ว ✓' : `ตอบแล้ว ${answeredCount}/3`}</button>
             : pageIndex < pages.length - 1
-              ? <button type="button" onClick={() => setPageIndex((value) => Math.min(pages.length - 1, value + 1))} className="h-12 min-w-0 flex-1 whitespace-nowrap rounded-2xl bg-orange-500 px-2 text-xs font-black text-white sm:text-sm">ถัดไป →</button>
+              ? <button type="button" onClick={() => setPageIndex((value) => Math.min(pages.length - 1, value + 1))} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-sm transition active:scale-95" aria-label="หน้าถัดไป" title="ถัดไป">
+                  <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </button>
               : novelInProgress
                 ? <button type="button" disabled className="h-12 min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-2xl bg-amber-400 px-2 text-[10px] font-black text-slate-800 opacity-80 sm:text-xs">กำลังเขียนบทถัดไป…</button>
                 : <button type="button" onClick={openQuiz} disabled={quizLoading} className="h-12 min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-2xl bg-violet-600 px-2 text-xs font-black text-white disabled:opacity-60 sm:text-sm">{quizLoading ? 'กำลังสร้างคำถาม…' : 'ทำแบบทดสอบ →'}</button>}
@@ -494,7 +500,7 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
   );
 }
 
-function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLimit, onClose, onCreated }) {
+function CreateBookModal({ user, isAdmin = false, allMasterCards, selectedIds, quotaUsed, quotaLimit, onClose, onCreated }) {
   const [bookFormat, setBookFormat] = useState('standalone');
   const [category, setCategory] = useState('daily-life');
   const [seriesGenre, setSeriesGenre] = useState('adventure');
@@ -560,7 +566,7 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
         ? 'กำลังวาดภาพปกและภาพประกอบ…'
         : 'กำลังบันทึกและตรวจสอบหนังสือ…';
   const elapsedLabel = `${Math.floor(elapsedSeconds / 60)}:${String(elapsedSeconds % 60).padStart(2, '0')}`;
-  const quotaReached = Number.isFinite(quotaUsed) && quotaUsed >= quotaLimit;
+  const quotaReached = !isAdmin && Number.isFinite(quotaUsed) && quotaUsed >= quotaLimit;
   const toggleNovelInterest = (interest) => setNovelInterests((current) => current.includes(interest)
     ? current.filter((item) => item !== interest)
     : [...current, interest].slice(0, 5));
@@ -699,12 +705,13 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
   const [reviewError, setReviewError] = useState('');
   const refreshQuota = useCallback(async () => {
     if (!userId) { setQuotaUsed(0); return; }
+    if (isAdmin) { setQuotaUsed(null); return; }
     const { count, error } = await supabase.from('ai_books').select('id', { count: 'exact', head: true }).eq('creator_id', userId).gte('created_at', bangkokDayStartIso()).neq('status', 'canceled').or('series_id.is.null,episode_number.eq.1');
     setQuotaUsed(error ? null : Number(count || 0));
-  }, [userId]);
+  }, [isAdmin, userId]);
   const loadBooks = useCallback(async () => {
     setLoading(true); setLoadError('');
-    const quotaRequest = userId
+    const quotaRequest = userId && !isAdmin
       ? supabase.from('ai_books').select('id', { count: 'exact', head: true }).eq('creator_id', userId).gte('created_at', bangkokDayStartIso()).neq('status', 'canceled').or('series_id.is.null,episode_number.eq.1')
       : Promise.resolve({ count: 0, error: null });
     const readsRequest = userId
@@ -718,11 +725,11 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
     if (booksResult.error) { setLoadError(booksResult.error.code === '42P01' ? 'ยังไม่ได้ติดตั้งฐานข้อมูล Books กรุณารันไฟล์ sql/ai_books.sql ใน Supabase' : booksResult.error.message); setBooks([]); } else setBooks(booksResult.data || []);
     if (!seriesResult.error) setSeriesRows(seriesResult.data || []);
     if (!summaryResult.error) setSummary(Array.isArray(summaryResult.data) ? summaryResult.data[0] : summaryResult.data);
-    setQuotaUsed(quotaResult.error ? null : Number(quotaResult.count || 0));
+    setQuotaUsed(isAdmin ? null : quotaResult.error ? null : Number(quotaResult.count || 0));
     if (!readsResult.error) setReadBookIds(new Set((readsResult.data || []).map((item) => item.book_id)));
     if (!progressResult.error) setBookProgress(new Map((progressResult.data || []).map((item) => [item.book_id, Number(item.page_index || 0)])));
     setLoading(false);
-  }, [userId]);
+  }, [isAdmin, userId]);
   useEffect(() => {
     // The async callback owns the initial loading lifecycle for this server-backed screen.
     loadBooks();
@@ -893,8 +900,8 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
     setCurrentPage(Math.max(1, Math.min(totalPages, nextPage)));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-  const quotaReached = Number.isFinite(quotaUsed) && quotaUsed >= DAILY_BOOK_LIMIT;
-  const quotaRemaining = Number.isFinite(quotaUsed) ? Math.max(0, DAILY_BOOK_LIMIT - quotaUsed) : null;
+  const quotaReached = !isAdmin && Number.isFinite(quotaUsed) && quotaUsed >= DAILY_BOOK_LIMIT;
+  const quotaRemaining = isAdmin ? '∞' : Number.isFinite(quotaUsed) ? Math.max(0, DAILY_BOOK_LIMIT - quotaUsed) : null;
   const openCreateBook = () => {
     if (quotaReached) {
       setShowQuotaModal(true);
@@ -919,7 +926,7 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
         <button type="button" onClick={() => setPage('dashboard')} className="min-h-11 touch-manipulation rounded-xl px-2 text-xs font-black uppercase italic text-orange-600 underline [-webkit-tap-highlight-color:transparent]">← กลับหน้าหลัก</button>
         <div className="flex shrink-0 items-center gap-2">
           <button type="button" onClick={openCreateBook} className="min-h-11 shrink-0 touch-manipulation whitespace-nowrap rounded-2xl bg-orange-500 px-4 py-2.5 text-sm font-black text-white shadow-lg active:scale-95 [-webkit-tap-highlight-color:transparent]">＋ สร้างหนังสือ</button>
-          <span className={`flex h-11 min-w-11 items-center justify-center rounded-2xl border-2 px-2 text-lg font-black shadow-sm ${quotaReached ? 'border-red-200 bg-red-50 text-red-600' : 'border-orange-200 bg-white text-orange-600'}`} aria-label={`โควต้าสร้างหนังสือคงเหลือ ${quotaRemaining ?? 'กำลังตรวจสอบ'}`} title="จำนวนโควต้าสร้างหนังสือคงเหลือ">{quotaRemaining ?? '–'}</span>
+          <span className={`flex h-11 min-w-11 items-center justify-center rounded-2xl border-2 px-2 text-lg font-black shadow-sm ${quotaReached ? 'border-red-200 bg-red-50 text-red-600' : 'border-orange-200 bg-white text-orange-600'}`} aria-label={isAdmin ? 'Admin สร้างหนังสือได้ไม่จำกัด' : `โควต้าสร้างหนังสือคงเหลือ ${quotaRemaining ?? 'กำลังตรวจสอบ'}`} title={isAdmin ? 'Admin · ไม่จำกัดจำนวนหนังสือต่อวัน' : 'จำนวนโควต้าสร้างหนังสือคงเหลือ'}>{quotaRemaining ?? '–'}</span>
         </div>
       </div>
       <section className="mb-5 overflow-hidden rounded-[2rem] bg-gradient-to-br from-slate-900 via-indigo-950 to-violet-950 p-5 text-white shadow-xl">
@@ -987,7 +994,7 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
           </div>
         </div>
       )}
-      {showCreate && <CreateBookModal user={user} allMasterCards={allMasterCards} selectedIds={selectedIds} quotaUsed={quotaUsed} quotaLimit={DAILY_BOOK_LIMIT} onClose={() => setShowCreate(false)} onCreated={async (book) => { setShowCreate(false); setBooks((current) => [book, ...current.filter((item) => item.id !== book.id)]); setTab('mine'); setCurrentPage(1); if (['ready', 'partial'].includes(book.status)) setActiveBook(book); await loadBooks(); }} />}
+      {showCreate && <CreateBookModal user={user} isAdmin={isAdmin} allMasterCards={allMasterCards} selectedIds={selectedIds} quotaUsed={quotaUsed} quotaLimit={DAILY_BOOK_LIMIT} onClose={() => setShowCreate(false)} onCreated={async (book) => { setShowCreate(false); setBooks((current) => [book, ...current.filter((item) => item.id !== book.id)]); setTab('mine'); setCurrentPage(1); if (['ready', 'partial'].includes(book.status)) setActiveBook(book); await loadBooks(); }} />}
       {activeBook && <Reader key={activeBook.id} book={activeBook} seriesEpisodes={activeSeriesEpisodes} readBookIds={readBookIds} savedPageIndex={bookProgress.has(activeBook.id) ? bookProgress.get(activeBook.id) : null} onSaveProgress={saveBookProgress} onSelectEpisode={(episodeId) => setActiveBook(activeSeriesEpisodes.find((episode) => episode.id === episodeId) || activeBook)} onClose={() => setActiveBook(null)} onComplete={completeBook} completing={completingBookId === activeBook.id} onReadingEvent={recordReadingEvent} onEnsureQuiz={ensureBookQuiz} />}
     </div>
   );

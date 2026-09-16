@@ -301,14 +301,15 @@ Deno.serve(async (request) => {
     if (!['7–9 ปี', '10–12 ปี', '13 ปีขึ้นไป'].includes(options.age)) return json({ error: 'กรุณาเลือกช่วงอายุ' }, 400);
     const admin = createClient(supabaseUrl, serviceKey);
     const since = new Date(Date.now() + 7 * 3600000); since.setUTCHours(0, 0, 0, 0); const sinceIso = new Date(since.getTime() - 7 * 3600000).toISOString();
+    const { data: profile } = await admin.from('profiles').select('username, display_name, email, is_admin').eq('user_id', user.id).maybeSingle();
+    const isAdmin = profile?.is_admin === true;
     const dailyLimit = Number(Deno.env.get('AI_BOOKS_DAILY_LIMIT') || 5);
     const [{ count }, { count: activeCount }] = await Promise.all([
       admin.from('ai_books').select('id', { count: 'exact', head: true }).eq('creator_id', user.id).gte('created_at', sinceIso).neq('status', 'canceled').or('series_id.is.null,episode_number.eq.1'),
       admin.from('ai_books').select('id', { count: 'exact', head: true }).eq('creator_id', user.id).in('status', ['generating', 'partial']),
     ]);
     if ((activeCount || 0) > 0) return json({ error: 'คุณมีหนังสือที่กำลังสร้างอยู่ กรุณารอให้เสร็จก่อน' }, 429);
-    if ((count || 0) >= dailyLimit) return json({ error: `สร้างหนังสือได้ไม่เกิน ${dailyLimit} เล่มต่อวัน` }, 429);
-    const { data: profile } = await admin.from('profiles').select('username, display_name, email').eq('user_id', user.id).maybeSingle();
+    if (!isAdmin && (count || 0) >= dailyLimit) return json({ error: `สร้างหนังสือได้ไม่เกิน ${dailyLimit} เล่มต่อวัน` }, 429);
     const creatorName = profile?.username || profile?.display_name || profile?.email?.split('@')[0] || user.email?.split('@')[0] || 'นักอ่าน Nihao';
     const sanitized = {
       age: String(options.age), primaryGenre: String(options.primaryGenre), secondaryGenre: String(options.secondaryGenre || ''),

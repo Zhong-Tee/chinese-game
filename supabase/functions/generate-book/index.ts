@@ -205,6 +205,8 @@ Deno.serve(async (request) => {
   let newSeriesId = '';
   try {
     const body = await request.json();
+    const { data: profile } = await admin.from('profiles').select('username, display_name, email, is_admin').eq('user_id', user.id).maybeSingle();
+    const isAdmin = profile?.is_admin === true;
     const dailyLimit = Number(Deno.env.get('AI_BOOKS_DAILY_LIMIT') || 5);
     const since = bangkokDayStartIso();
     const [{ count: recentCount }, { count: activeCount }] = await Promise.all([
@@ -212,9 +214,8 @@ Deno.serve(async (request) => {
       admin.from('ai_books').select('id', { count: 'exact', head: true }).eq('creator_id', user.id).in('status', ['generating', 'partial']),
     ]);
     if ((activeCount || 0) > 0) return json({ error: 'คุณมีหนังสือที่กำลังสร้างอยู่ กรุณารอให้เสร็จก่อน' }, 429);
-    if ((recentCount || 0) >= dailyLimit) return json({ error: `สร้างหนังสือได้ไม่เกิน ${dailyLimit} เล่มต่อวัน โควต้าจะรีเซ็ตเวลา 00:00 น. ตามเวลาไทย` }, 429);
+    if (!isAdmin && (recentCount || 0) >= dailyLimit) return json({ error: `สร้างหนังสือได้ไม่เกิน ${dailyLimit} เล่มต่อวัน โควต้าจะรีเซ็ตเวลา 00:00 น. ตามเวลาไทย` }, 429);
 
-    const { data: profile } = await admin.from('profiles').select('username, display_name, email, is_admin').eq('user_id', user.id).maybeSingle();
     const creatorName = profile?.username || profile?.display_name || profile?.email?.split('@')[0] || user.email?.split('@')[0] || 'นักอ่าน Nihao';
     const requestedSeriesId = String(body.seriesId || '');
     let series: Record<string, any> | null = null;
