@@ -107,11 +107,11 @@ function levelLabel(id) {
 }
 
 async function functionErrorMessage(data, invokeError, fallback) {
-  if (data?.error) return data.error;
+  if (data?.error) return typeof data.error === 'string' ? data.error : data.error.message || JSON.stringify(data.error);
   if (invokeError?.context?.json) {
     try {
       const errorBody = await invokeError.context.json();
-      if (errorBody?.error) return errorBody.error;
+      if (errorBody?.error) return typeof errorBody.error === 'string' ? errorBody.error : errorBody.error.message || JSON.stringify(errorBody.error);
     } catch {
       // The response body may already have been consumed by the Supabase client.
     }
@@ -567,7 +567,8 @@ function CreateBookModal({ user, allMasterCards, selectedIds, quotaUsed, quotaLi
             // The response body may already have been consumed by the Supabase client.
           }
         }
-        const message = serverMessage || invokeError?.message || 'ไม่สามารถสร้างหนังสือได้';
+        const rawMessage = serverMessage || invokeError?.message || 'ไม่สามารถสร้างหนังสือได้';
+        const message = typeof rawMessage === 'string' ? rawMessage : rawMessage?.message || JSON.stringify(rawMessage);
         setError(message.includes('Failed to send')
           ? 'เชื่อมต่อระบบสร้างหนังสือไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ต แล้วรอสักครู่ก่อนลองใหม่เพื่อป้องกันการสร้างซ้ำ'
           : message);

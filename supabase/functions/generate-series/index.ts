@@ -17,6 +17,12 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 }
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) return String((error as { message?: unknown }).message || 'Unknown error');
+  try { return JSON.stringify(error); } catch { return String(error); }
+}
+
 function bangkokDayStartIso(now = Date.now()) {
   const bangkokTime = new Date(now + BANGKOK_UTC_OFFSET_MS);
   bangkokTime.setUTCHours(0, 0, 0, 0);
@@ -54,6 +60,7 @@ Deno.serve(async (request) => {
 
   const admin = createClient(supabaseUrl, serviceKey);
   let seriesId = '';
+  let bookId = '';
   try {
     const body = await request.json();
     const genre = String(body.seriesGenre || '');
@@ -89,6 +96,7 @@ Deno.serve(async (request) => {
       status: 'generating', visibility: 'public', generation_progress: { stage: 'queued', completed_episodes: 0, target_episodes: 5, active_episode: 1, message_th: 'กำลังรอเริ่มสร้างตอนที่ 1' },
     }).select().single();
     if (bookError) throw bookError;
+    bookId = book.id;
 
     const jobs = Array.from({ length: 5 }, (_, index) => ({ series_id: series.id, episode_number: index + 1, status: index === 0 ? 'queued' : 'waiting' }));
     const { error: jobsError } = await admin.from('ai_series_generation_jobs').insert(jobs);
@@ -96,9 +104,10 @@ Deno.serve(async (request) => {
     await dispatchWorker(supabaseUrl, serviceKey, series.id);
     return json({ book, series, accepted: true }, 202);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorMessage(error);
     console.error('generate-series:', message);
     if (seriesId) await admin.from('ai_book_series').update({ generation_status: 'failed', error_message: message.slice(0, 500), generation_progress: { stage: 'failed', completed_episodes: 0, target_episodes: 5, active_episode: 1, message_th: 'เริ่มสร้างซีรีส์ไม่สำเร็จ' }, updated_at: new Date().toISOString() }).eq('id', seriesId);
+    if (bookId) await admin.from('ai_books').update({ status: 'failed', error_message: message.slice(0, 500), generation_progress: { stage: 'failed', completed_episodes: 0, target_episodes: 5, active_episode: 1, message_th: 'เริ่มสร้างซีรีส์ไม่สำเร็จ' }, updated_at: new Date().toISOString() }).eq('id', bookId);
     return json({ error: message || 'เริ่มสร้างซีรีส์ไม่สำเร็จ' }, 500);
   }
 });
