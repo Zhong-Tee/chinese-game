@@ -26,7 +26,6 @@ const TEXT_PRICES: Record<string, { input: number; cached: number; output: numbe
   'gpt-5.6-terra': { input: 2, cached: 0.2, output: 12 },
   'gpt-5.6-sol': { input: 4, cached: 0.4, output: 20 },
 };
-const IMAGE_MODEL = Deno.env.get('OPENAI_IMAGE_MODEL') || 'gpt-image-2.5-flare';
 const PRICING_VERSION = Deno.env.get('OPENAI_PRICING_VERSION') || '2026-09-16';
 const BANGKOK_UTC_OFFSET_MS = 7 * 60 * 60 * 1000;
 
@@ -51,7 +50,7 @@ function outputText(response: JsonObject) {
 
 async function callOpenAI(path: string, apiKey: string, body: JsonObject) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), path === 'images/generations' ? 150000 : 240000);
+  const timeoutId = setTimeout(() => controller.abort(), 240000);
   try {
     const response = await fetch(`https://api.openai.com/v1/${path}`, {
       method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal,
@@ -68,15 +67,6 @@ function textCost(model: string, usage: JsonObject = {}) {
   const price = TEXT_PRICES[model] || TEXT_PRICES['gpt-5.6-terra'];
   const input = Number(usage.input_tokens || 0); const cached = Number(usage.input_tokens_details?.cached_tokens || 0); const output = Number(usage.output_tokens || 0);
   return ((Math.max(0, input - cached) * price.input) + (cached * price.cached) + (output * price.output)) / 1_000_000;
-}
-
-function imageCost(usage: JsonObject = {}) {
-  const textInput = Number(usage.input_tokens_details?.text_tokens || usage.input_tokens || 0);
-  const imageInput = Number(usage.input_tokens_details?.image_tokens || 0);
-  const imageOutput = Number(usage.output_tokens || usage.output_tokens_details?.image_tokens || 0);
-  return ((textInput * Number(Deno.env.get('OPENAI_IMAGE_TEXT_INPUT_USD_PER_M') || 5))
-    + (imageInput * Number(Deno.env.get('OPENAI_IMAGE_INPUT_USD_PER_M') || 8))
-    + (imageOutput * Number(Deno.env.get('OPENAI_IMAGE_OUTPUT_USD_PER_M') || 30))) / 1_000_000;
 }
 
 async function logRun(admin: AdminClient, bookId: string, userId: string, operation: string, model: string, response: JsonObject, costUsd: number) {
@@ -137,26 +127,29 @@ function editorialSchema(pageCount: number, imageCount: number, isNovel = false)
   };
 }
 
-async function uploadImage(admin: AdminClient, bookId: string, kind: string, base64: string) {
-  if (!base64) throw new Error(`OpenAI did not return ${kind} image data`);
-  const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
-  const path = `${bookId}/${kind}-${crypto.randomUUID()}.png`;
-  const { error } = await admin.storage.from('book-images').upload(path, bytes, { contentType: 'image/png', upsert: false });
-  if (error) throw error;
-  return admin.storage.from('book-images').getPublicUrl(path).data.publicUrl;
-}
-
 async function ensureActive(admin: AdminClient, bookId: string) {
   const { data } = await admin.from('ai_books').select('status').eq('id', bookId).maybeSingle();
   if (!data || data.status === 'canceled') throw new Error('__BOOK_CANCELED__');
 }
 
-async function removeBookImages(admin: AdminClient, bookId: string) {
-  const { data: files } = await admin.storage.from('book-images').list(bookId, { limit: 100 });
-  if (files?.length) await admin.storage.from('book-images').remove(files.map((file: JsonObject) => `${bookId}/${file.name}`));
+async function dispatchImageWorker(supabaseUrl: string, serviceKey: string, bookId: string, imageIndex: number) {
+  let lastError = '';
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(`${supabaseUrl}/functions/v1/generate-long-book-worker`, {
+        method: 'POST', headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookId, imageIndex }),
+      });
+      if (response.ok) return;
+      lastError = `Long-book image worker dispatch failed (${response.status})`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  throw new Error(lastError || 'Long-book image worker dispatch failed');
 }
 
-async function processBook(admin: AdminClient, apiKey: string, book: JsonObject, options: JsonObject) {
+async function processBook(admin: AdminClient, apiKey: string, book: JsonObject, options: JsonObject, supabaseUrl: string, serviceKey: string) {
   const bookId = book.id; const userId = book.creator_id; const model = book.text_model;
   const pageCount = Number(options.pageCount); const imageCount = ({ 12: 3, 16: 4, 20: 5, 24: 6 } as Record<number, number>)[pageCount];
   const isNovel = book.book_format === 'youth_novel';
@@ -181,9 +174,12 @@ Create exactly 3 unambiguous comprehension questions grounded only in the book. 
     const draftCost = textCost(model, draftResponse.usage || {}); totalUsd += draftCost;
     await logRun(admin, bookId, userId, 'long_book_draft', model, draftResponse, draftCost);
     const draft = JSON.parse(outputText(draftResponse));
+    const draftPages = draft.pages.map((page: JsonObject) => ({ ...page }));
+    if (draftPages.length) draftPages[draftPages.length - 1] = { ...draftPages[draftPages.length - 1], quiz_questions: draft.quiz_questions };
     await ensureActive(admin, bookId);
     await admin.from('ai_books').update({
-      title_cn: draft.title_cn, title_pinyin: draft.title_pinyin, title_th: draft.title_th, summary_th: draft.summary_th, story_bible: draft.story_bible,
+      title_cn: draft.title_cn, title_pinyin: draft.title_pinyin, title_th: draft.title_th, summary_th: draft.summary_th, story_bible: draft.story_bible, pages: draftPages,
+      status: 'partial', generation_cost_usd: totalUsd, generation_cost_thb: totalUsd * exchangeRate, exchange_rate: exchangeRate,
       generation_progress: { stage: 'editing', completed_pages: pageCount, target_pages: pageCount, message_th: 'กำลังตรวจความต่อเนื่องทั้งเล่ม' }, updated_at: new Date().toISOString(),
     }).eq('id', bookId);
 
@@ -202,48 +198,49 @@ Create exactly 3 unambiguous comprehension questions grounded only in the book. 
       console.error('long book editor fallback:', error);
     }
     await ensureActive(admin, bookId);
-    await admin.from('ai_books').update({ generation_progress: { stage: 'illustrating', completed_pages: pageCount, target_pages: pageCount, message_th: 'กำลังวาดปกและฉากสำคัญ' }, updated_at: new Date().toISOString() }).eq('id', bookId);
-
     const visualBible = finalBook.story_bible?.visual_bible || '';
     const imageTasks = [
       { kind: 'cover', pageNumber: 0, prompt: `${finalBook.cover_image_prompt}. ${visualBible}. Premium vertical youth book cover composition, no text, letters, logo, or watermark.`, size: '1024x1536' },
-      ...finalBook.image_scenes.map((scene: JsonObject, index: number) => ({ kind: `scene-${index + 1}`, pageNumber: Number(scene.page_number), prompt: `${scene.prompt}. ${visualBible}. Consistent youth-book interior illustration, no text, letters, logo, or watermark.`, size: '1536x1024' })),
+      ...finalBook.image_scenes.map((scene: JsonObject) => ({ kind: 'content', pageNumber: Number(scene.page_number), prompt: `${scene.prompt}. ${visualBible}. Consistent youth-book interior illustration, no text, letters, logo, or watermark.`, size: '1536x1024' })),
     ];
-    const imageResults = await Promise.allSettled(imageTasks.map((task) => callOpenAI('images/generations', apiKey, { model: IMAGE_MODEL, prompt: task.prompt, size: task.size, quality: 'medium', output_format: 'png' })));
-    const uploaded: { kind: string; pageNumber: number; url: string }[] = [];
-    for (let index = 0; index < imageResults.length; index += 1) {
-      const result = imageResults[index]; const task = imageTasks[index];
-      if (result.status !== 'fulfilled') continue;
-      const cost = imageCost(result.value.usage || {}); totalUsd += cost;
-      await logRun(admin, bookId, userId, `long_book_${task.kind}_image`, IMAGE_MODEL, result.value, cost);
-      try { uploaded.push({ kind: task.kind, pageNumber: task.pageNumber, url: await uploadImage(admin, bookId, task.kind, result.value.data?.[0]?.b64_json) }); } catch (error) { console.error('long book image upload:', error); }
-    }
-    await ensureActive(admin, bookId);
-    const coverUrl = uploaded.find((item) => item.kind === 'cover')?.url || null;
-    const contentImages = uploaded.filter((item) => item.kind !== 'cover');
     const pages = finalBook.pages.map((page: JsonObject) => ({ ...page }));
-    for (const image of contentImages) {
-      const pageIndex = Math.max(0, Math.min(pages.length - 1, image.pageNumber - 1));
-      pages[pageIndex] = { ...pages[pageIndex], image_url: image.url };
-    }
     if (pages.length) pages[pages.length - 1] = { ...pages[pages.length - 1], quiz_questions: finalBook.quiz_questions };
+    const totalImages = imageTasks.length;
     const { error: updateError } = await admin.from('ai_books').update({
       title_cn: finalBook.title_cn, title_pinyin: finalBook.title_pinyin, title_th: finalBook.title_th, summary_th: finalBook.summary_th,
-      story_bible: finalBook.story_bible, pages, cover_url: coverUrl, content_image_url: contentImages[0]?.url || null,
-      content_image_page: contentImages.length ? Math.max(0, contentImages[0].pageNumber - 1) : 0, editorial_scores: [editorialReview],
+      story_bible: finalBook.story_bible, pages, editorial_scores: [editorialReview],
       generation_cost_usd: totalUsd, generation_cost_thb: totalUsd * exchangeRate, exchange_rate: exchangeRate,
-      status: 'ready', generation_progress: { stage: 'complete', completed_pages: pageCount, target_pages: pageCount, message_th: 'หนังสือพร้อมอ่านทั้งเล่ม' },
-      published_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      status: 'partial', generation_progress: { stage: 'illustrating', completed_pages: pageCount, target_pages: pageCount, completed_images: 0, target_images: totalImages, active_image: 1, message_th: `เนื้อหาพร้อมอ่าน · กำลังวาดภาพ 0/${totalImages}` },
+      updated_at: new Date().toISOString(),
     }).eq('id', bookId).neq('status', 'canceled');
     if (updateError) throw updateError;
+    const jobs = imageTasks.map((task, index) => ({
+      book_id: bookId, image_index: index, kind: task.kind, page_number: task.pageNumber, prompt: task.prompt, image_size: task.size,
+      status: index === 0 ? 'queued' : 'waiting',
+    }));
+    const { error: jobsError } = await admin.from('ai_long_book_image_jobs').insert(jobs);
+    if (jobsError) throw jobsError;
+    try {
+      await dispatchImageWorker(supabaseUrl, serviceKey, bookId, 0);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await admin.from('ai_books').update({
+        status: 'partial', error_message: message.slice(0, 500),
+        generation_progress: { stage: 'failed', completed_pages: pageCount, target_pages: pageCount, completed_images: 0, target_images: totalImages, active_image: 1, message_th: 'เนื้อหาพร้อมอ่าน · เริ่มสร้างภาพไม่สำเร็จ กรุณายกเลิกแล้วสร้างใหม่' },
+        updated_at: new Date().toISOString(),
+      }).eq('id', bookId).neq('status', 'canceled');
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('generate-long-book background:', message);
-    if (message === '__BOOK_CANCELED__') await removeBookImages(admin, bookId);
-    else await admin.from('ai_books').update({
-      status: 'failed', error_message: message.slice(0, 500), generation_cost_usd: totalUsd, generation_cost_thb: totalUsd * exchangeRate,
-      generation_progress: { stage: 'failed', completed_pages: 0, target_pages: pageCount, message_th: 'สร้างหนังสือไม่สำเร็จ' }, updated_at: new Date().toISOString(),
-    }).eq('id', bookId).neq('status', 'canceled');
+    if (message !== '__BOOK_CANCELED__') {
+      const { data: existing } = await admin.from('ai_books').select('pages').eq('id', bookId).maybeSingle();
+      const hasReadablePages = Array.isArray(existing?.pages) && existing.pages.length > 0;
+      await admin.from('ai_books').update({
+        status: hasReadablePages ? 'partial' : 'failed', error_message: message.slice(0, 500), generation_cost_usd: totalUsd, generation_cost_thb: totalUsd * exchangeRate,
+        generation_progress: { stage: 'failed', completed_pages: hasReadablePages ? existing.pages.length : 0, target_pages: pageCount, message_th: hasReadablePages ? 'เนื้อหาพร้อมอ่าน · สร้างส่วนที่เหลือไม่สำเร็จ' : 'สร้างหนังสือไม่สำเร็จ' }, updated_at: new Date().toISOString(),
+      }).eq('id', bookId).neq('status', 'canceled');
+    }
   }
 }
 
@@ -293,7 +290,7 @@ Deno.serve(async (request) => {
     };
     const { data: book, error: createError } = await admin.from('ai_books').insert(row).select().single();
     if (createError) throw createError;
-    const task = processBook(admin, apiKey, book, options);
+    const task = processBook(admin, apiKey, book, options, supabaseUrl, serviceKey);
     const edgeRuntime = (globalThis as unknown as { EdgeRuntime?: { waitUntil: (promise: Promise<unknown>) => void } }).EdgeRuntime;
     if (edgeRuntime?.waitUntil) { edgeRuntime.waitUntil(task); return json({ book, accepted: true }, 202); }
     await task;
