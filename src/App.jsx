@@ -1303,7 +1303,7 @@ export default function App() {
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}
         {page === 'books' && <Books user={user} isAdmin={isAdmin} setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} />}
         {page === 'word-match' && <WordMatchGame user={user} setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} />}
-        {page === 'class-schedule' && <ClassSchedule user={user} setPage={setPage} />}
+        {page === 'class-schedule' && <ClassSchedule user={user} isAdmin={isAdmin} setPage={setPage} />}
         {page === 'maths' && (
           <MathHub
             user={user}

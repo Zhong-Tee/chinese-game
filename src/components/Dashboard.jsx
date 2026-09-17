@@ -11,7 +11,7 @@ import { HubNavIcon } from './HubNavIcons';
 import fightBtnImg from '../../game/icon/fight-btn.png';
 import gameLogoImg from '../../game/word fighter.png?v=3';
 import packageInfo from '../../package.json';
-import { getDailyMissionCompletion, localDateKey, syncTodayMissionProgress } from '../utils/dailyMissionStorage';
+import { syncTodayMissionProgress } from '../utils/dailyMissionStorage';
 import { SCHEDULED_LEVEL_KEYS, isKeyLevelPlayableToday } from '../utils/levelScheduleMeta';
 
 const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️', add_time: '⏳', bomb: '💣' };
@@ -55,7 +55,6 @@ export default function Dashboard({
   const [savingEquip, setSavingEquip] = useState(false);
   const [luckyPending, setLuckyPending] = useState(false);
   const [dailyMission, setDailyMission] = useState(null);
-  const [missionToast, setMissionToast] = useState(null);
   const [missionCollapsed, setMissionCollapsed] = useState(true);
   const [showWordFighterLogo, setShowWordFighterLogo] = useState(true);
 
@@ -74,17 +73,6 @@ export default function Dashboard({
     const applyMission = (mission) => {
       if (!alive) return;
       setDailyMission(mission);
-      if (!mission) return;
-      const completeStates = getDailyMissionCompletion(mission);
-      const completed = completeStates.filter(Boolean).length;
-      const storageKey = `daily-mission-stars:${user.id}:${localDateKey()}`;
-      const previous = Number(sessionStorage.getItem(storageKey));
-      if (Number.isFinite(previous) && completed > previous) {
-        const gained = completed - previous;
-        setMissionToast(`ภารกิจสำเร็จ! ได้รับดาว ${gained} ดวง ⭐`);
-        setTimeout(() => setMissionToast(null), 3500);
-      }
-      sessionStorage.setItem(storageKey, String(completed));
     };
     const refresh = () => syncTodayMissionProgress(user.id).then(applyMission).catch((error) => console.error('dashboard daily mission:', error));
     const onMissionUpdated = (event) => applyMission(event.detail);
@@ -289,12 +277,6 @@ export default function Dashboard({
       )}
       <div className="hub-bg" style={{ opacity: coverUrl ? 0.2 : 1 }} />
       <div className="hub-scanlines" />
-
-      {missionToast && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[120] rounded-2xl border-2 border-amber-300 bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-3 text-center text-sm font-black text-white shadow-2xl animate-bounce whitespace-nowrap">
-          {missionToast}
-        </div>
-      )}
 
       {/* Top HUD */}
       <header className="relative z-20 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-2 shrink-0">

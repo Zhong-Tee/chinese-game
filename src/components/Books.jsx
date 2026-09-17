@@ -429,10 +429,9 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
             <div className="text-[10px] font-bold text-slate-400">{isQuizPage ? 'แบบทดสอบท้ายเล่ม' : `${isLegacyNovel ? 'บท' : 'หน้า'} ${pageIndex + 1} / ${targetPageCount}${novelInProgress ? ' · กำลังสร้างต่อ' : ''}`}</div>
           </div>
         </div>
-        <div className="grid w-full shrink-0 grid-cols-[1.2fr_0.9fr_0.65fr_0.65fr_0.65fr_0.65fr_0.65fr] gap-1.5 sm:w-auto sm:min-w-[33rem] sm:gap-2">
+        <div className="grid w-full shrink-0 grid-cols-[1.2fr_0.9fr_0.65fr_0.65fr_0.65fr_0.65fr] gap-1.5 sm:w-auto sm:min-w-[29rem] sm:gap-2">
           <button type="button" onClick={() => saveToggle('book-reader-pinyin', setShowPinyin)} aria-pressed={showPinyin} className={`h-10 rounded-xl px-2 text-xs font-black ${showPinyin ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-500'}`}>拼 Pinyin</button>
           <button type="button" onClick={() => saveToggle('book-reader-thai', setShowThai)} aria-pressed={showThai} className={`h-10 rounded-xl px-2 text-xs font-black ${showThai ? 'bg-cyan-500 text-white' : 'bg-slate-100 text-slate-500'}`}>ไทย</button>
-          <button type="button" onClick={saveCurrentPage} disabled={isQuizPage} aria-label="บันทึกหน้าปัจจุบัน" title="บันทึกไว้อ่านต่อ" className={`h-10 rounded-xl border-2 text-lg transition active:scale-95 disabled:opacity-30 ${savedPageIndex !== null && Number(savedPageIndex) === pageIndex ? 'border-amber-500 bg-amber-400 text-white' : 'border-amber-200 bg-white text-amber-600'}`}>🔖</button>
           <button type="button" onClick={toggleManualAudio} disabled={isQuizPage} aria-label={isSpeaking ? 'หยุดเสียง' : 'เล่นเสียงหน้าปัจจุบัน'} title={isSpeaking ? 'หยุดเสียง' : 'เล่น'} aria-pressed={isSpeaking} className={`h-10 rounded-xl border-2 text-lg transition active:scale-95 disabled:opacity-30 ${isSpeaking ? 'border-orange-500 bg-orange-500 text-white' : 'border-orange-200 bg-white text-orange-600'}`}>{isSpeaking ? '⏹️' : '🔊'}</button>
           <button type="button" onClick={toggleAutoAudio} disabled={isQuizPage} aria-label={audioMode === 'auto' ? 'ปิดการเล่นเสียงอัตโนมัติ' : 'เปิดการเล่นเสียงอัตโนมัติเมื่อเปลี่ยนหน้า'} title={audioMode === 'auto' ? 'ปิดเล่นอัตโนมัติ' : 'เล่นอัตโนมัติ'} aria-pressed={audioMode === 'auto'} className={`h-10 rounded-xl border-2 text-lg transition active:scale-95 disabled:opacity-30 ${audioMode === 'auto' ? 'border-cyan-500 bg-cyan-500 text-white' : 'border-cyan-200 bg-white text-cyan-700'}`}>🔁</button>
           <button type="button" onClick={() => changeFont(-1)} disabled={fontIndex === 0} className="h-10 rounded-xl bg-slate-100 font-black disabled:opacity-30" aria-label="ลดขนาดอักษร">A−</button>
@@ -467,6 +466,7 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
                 })}
               </div>
               {allQuizAnswered && <div className="mt-6 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 p-5 text-center text-white"><p className="text-sm font-bold text-white/75">คะแนนของคุณ</p><p className="mt-1 text-4xl font-black">{quizScore} / 3</p><button type="button" onClick={() => setQuizAnswers({})} className="mt-3 rounded-xl bg-white/15 px-4 py-2 text-sm font-black">ลองอีกครั้ง</button></div>}
+              <button type="button" onClick={() => onComplete?.(book)} disabled={completing || !allQuizAnswered} className="mt-6 min-h-14 w-full rounded-2xl bg-emerald-500 px-5 py-3 text-base font-black text-white shadow-lg shadow-emerald-100 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40">{completing ? 'กำลังบันทึก…' : allQuizAnswered ? 'อ่านจบแล้ว ✓' : `ตอบคำถามให้ครบ (${answeredCount}/3)`}</button>
             </div>
           ) : <>
           {(pageIndex === 0 || isLegacyNovel) && (
@@ -494,6 +494,9 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
             ))}
           </div>
           {pageIndex === pages.length - 1 && quizError && <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-center text-sm font-bold text-red-600">{quizError}</p>}
+          {pageIndex === pages.length - 1 && (novelInProgress
+            ? <div className="mt-6 rounded-2xl bg-amber-100 px-5 py-4 text-center text-sm font-black text-amber-800">กำลังเขียนบทถัดไป…</div>
+            : <button type="button" onClick={openQuiz} disabled={quizLoading} className="mt-6 min-h-14 w-full rounded-2xl bg-violet-600 px-5 py-3 text-base font-black text-white shadow-lg shadow-violet-100 transition active:scale-[0.99] disabled:opacity-60">{quizLoading ? 'กำลังสร้างคำถาม…' : 'ทำแบบทดสอบ →'}</button>)}
           </>}
         </article>
       </main>
@@ -513,17 +516,11 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
           <button type="button" onClick={() => setPageIndex((value) => Math.max(0, value - 1))} disabled={pageIndex === 0} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-200 text-slate-700 transition active:scale-95 disabled:opacity-30" aria-label="หน้าก่อนหน้า" title="ก่อนหน้า">
             <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true"><path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
-          <div className="flex min-w-0 shrink gap-1 overflow-hidden" aria-hidden="true">{Array.from({ length: targetPageCount + (novelInProgress ? 0 : 1) }, (_, index) => <span key={index} className={`h-2 shrink-0 rounded-full transition-all ${index === pageIndex ? 'w-5 bg-orange-500' : index >= pages.length ? 'w-2 bg-slate-100' : 'w-2 bg-slate-200'}`} />)}</div>
-          {isQuizPage
-            ? <button type="button" onClick={() => onComplete?.(book)} disabled={completing || !allQuizAnswered} className="h-12 min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-2xl bg-emerald-500 px-2 text-xs font-black text-white disabled:opacity-40 sm:text-sm">{completing ? 'กำลังบันทึก…' : allQuizAnswered ? 'อ่านจบแล้ว ✓' : `ตอบแล้ว ${answeredCount}/3`}</button>
-            : pageIndex < pages.length - 1
-              ? <button type="button" onClick={() => setPageIndex((value) => Math.min(pages.length - 1, value + 1))} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-sm transition active:scale-95" aria-label="หน้าถัดไป" title="ถัดไป">
-                  <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                </button>
-              : novelInProgress
-                ? <button type="button" disabled className="h-12 min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-2xl bg-amber-400 px-2 text-[10px] font-black text-slate-800 opacity-80 sm:text-xs">กำลังเขียนบทถัดไป…</button>
-                : <button type="button" onClick={openQuiz} disabled={quizLoading} className="h-12 min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-2xl bg-violet-600 px-2 text-xs font-black text-white disabled:opacity-60 sm:text-sm">{quizLoading ? 'กำลังสร้างคำถาม…' : 'ทำแบบทดสอบ →'}</button>}
-          <button type="button" onClick={() => novelInProgress ? setPageIndex(Math.max(0, pages.length - 1)) : openQuiz()} disabled={quizLoading || (novelInProgress ? pageIndex >= pages.length - 1 : isQuizPage)} className="flex h-12 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 disabled:opacity-30 sm:w-11" aria-label="ไปหน้าสุดท้าย" title="สุดท้าย">
+          <div className="min-w-20 flex-1 text-center text-sm font-black tabular-nums text-slate-600" aria-live="polite">{isLegacyNovel ? 'บท' : 'หน้า'} {Math.min(pageIndex + 1, targetPageCount)} / {targetPageCount}</div>
+          <button type="button" onClick={() => setPageIndex((value) => Math.min(pages.length - 1, value + 1))} disabled={isQuizPage || pageIndex >= pages.length - 1} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-sm transition active:scale-95 disabled:bg-slate-100 disabled:text-slate-600 disabled:opacity-30" aria-label="หน้าถัดไป" title="ถัดไป">
+            <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>
+          <button type="button" onClick={() => setPageIndex(Math.max(0, pages.length - 1))} disabled={isQuizPage || pageIndex >= pages.length - 1} className="flex h-12 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 disabled:opacity-30 sm:w-11" aria-label="ไปหน้าสุดท้าย" title="สุดท้าย">
             <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path d="M18 5v14M6 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
         </div>

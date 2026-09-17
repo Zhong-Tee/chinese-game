@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createEmptyClassSchedule, loadClassSchedule, saveClassSchedule, WEEK_DAYS } from '../utils/classScheduleStorage';
+import { supabase } from '../supabaseClient';
 
 const COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
 const OUTFIT_OPTIONS = [
@@ -107,10 +108,10 @@ function lessonHighlight(lesson) {
   return 'border border-slate-100';
 }
 
-function LunchBreakRow({ lesson, onOpen }) {
+function LunchBreakRow({ lesson, onOpen, readOnly = false }) {
   return <div className="py-2">
     <div className="flex items-center gap-3" aria-hidden="true"><span className="h-px flex-1 bg-gradient-to-r from-transparent to-amber-300"/><span className="text-[10px] font-black tracking-[0.2em] text-amber-600">LUNCH BREAK</span><span className="h-px flex-1 bg-gradient-to-l from-transparent to-amber-300"/></div>
-    <div onClick={onOpen} className="mt-2 flex items-center gap-3 rounded-2xl bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 px-4 py-3 ring-1 ring-amber-200/80 transition active:scale-[0.99]" role="button" tabIndex="0">
+    <div onClick={onOpen} className={`mt-2 flex items-center gap-3 rounded-2xl bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 px-4 py-3 ring-1 ring-amber-200/80 transition ${readOnly ? '' : 'active:scale-[0.99]'}`} role={readOnly ? undefined : 'button'} tabIndex={readOnly ? undefined : 0}>
       <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white text-2xl shadow-sm ring-1 ring-amber-200">🍱</span>
       <div className="min-w-0 flex-1"><p className="text-xs font-bold text-amber-600">เวลาพักผ่อนและรับประทานอาหาร</p><h3 className="text-lg font-black text-amber-950">พักเที่ยง</h3></div>
       <span className="shrink-0 rounded-xl bg-white/90 px-3 py-2 text-sm font-black text-amber-700 shadow-sm">{lesson.start}–{lesson.end}</span>
@@ -118,39 +119,94 @@ function LunchBreakRow({ lesson, onOpen }) {
   </div>;
 }
 
-export default function ClassSchedule({ user, setPage }) {
+const profileName = (profile) => profile?.username?.trim()
+  || profile?.display_name?.trim()
+  || `ผู้ใช้ ${String(profile?.user_id || '').slice(0, 6)}`;
+
+export default function ClassSchedule({ user, isAdmin = false, setPage }) {
   const currentWeekDay = new Date().getDay();
   const todayDayId = currentWeekDay >= 1 && currentWeekDay <= 5 ? WEEK_DAYS[currentWeekDay - 1].id : null;
   const [day, setDay] = useState(todayDayId || WEEK_DAYS[0].id);
   const [data, setData] = useState(createEmptyClassSchedule);
   const [dataReady, setDataReady] = useState(false);
+  const [loadedUserId, setLoadedUserId] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState(user?.id || '');
+  const [scheduleUsers, setScheduleUsers] = useState(() => user?.id
+    ? [{ user_id: user.id, username: user.user_metadata?.username, display_name: user.user_metadata?.display_name, is_admin: isAdmin }]
+    : []);
+  const [usersLoading, setUsersLoading] = useState(isAdmin);
+  const [loadError, setLoadError] = useState('');
   const [, setSaveStatus] = useState('loading');
   const [editing, setEditing] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
   const [form, setForm] = useState(blank);
   const [today, setToday] = useState(() => dateKey(new Date()));
+  const targetUserId = isAdmin ? (selectedUserId || user?.id || '') : (user?.id || '');
+  const canEdit = Boolean(user?.id && targetUserId === user.id);
+  const selectedUser = scheduleUsers.find((item) => item.user_id === targetUserId);
+  const selectedUserName = targetUserId === user?.id
+    ? (selectedUser ? profileName(selectedUser) : 'ฉัน')
+    : profileName(selectedUser);
+
+  useEffect(() => {
+    if (!isAdmin || !user?.id) return undefined;
+    let active = true;
+    supabase
+      .from('profiles')
+      .select('user_id, username, display_name, is_admin')
+      .order('username')
+      .then(({ data: profiles, error }) => {
+        if (!active) return;
+        if (error) {
+          console.error('load class schedule users:', error);
+          setScheduleUsers([{ user_id: user.id, username: user.user_metadata?.username, display_name: user.user_metadata?.display_name, is_admin: true }]);
+          return;
+        }
+        const rows = profiles || [];
+        setScheduleUsers(rows.some((item) => item.user_id === user.id)
+          ? rows
+          : [{ user_id: user.id, username: user.user_metadata?.username, display_name: user.user_metadata?.display_name, is_admin: true }, ...rows]);
+      })
+      .finally(() => { if (active) setUsersLoading(false); });
+    return () => { active = false; };
+  }, [isAdmin, user?.id, user?.user_metadata?.display_name, user?.user_metadata?.username]);
+
   useEffect(() => {
     let active = true;
-    loadClassSchedule(user?.id).then((schedule) => {
+    loadClassSchedule(targetUserId, { allowLegacyMigration: targetUserId === user?.id }).then((schedule) => {
       if (!active) return;
       setData(synchronizeWeeklyLunch(schedule));
+      setLoadedUserId(targetUserId);
       setDataReady(true);
       setSaveStatus('saved');
     }).catch((error) => {
       console.error('load class schedule:', error);
-      if (active) setSaveStatus('error');
+      if (active) {
+        setData(createEmptyClassSchedule());
+        setLoadError(error?.message || 'ไม่สามารถโหลดตารางเรียนได้');
+        setSaveStatus('error');
+      }
     });
     return () => { active = false; };
-  }, [user?.id]);
+  }, [targetUserId, user?.id]);
+
+  const changeScheduleUser = (nextUserId) => {
+    setDataReady(false);
+    setData(createEmptyClassSchedule());
+    setLoadedUserId('');
+    setLoadError('');
+    setEditing(null);
+    setSelectedUserId(nextUserId);
+  };
   useEffect(() => {
-    if (!dataReady || !user?.id) return undefined;
+    if (!dataReady || !canEdit || loadedUserId !== targetUserId) return undefined;
     const timer = setTimeout(() => {
-      saveClassSchedule(user.id, data)
+      saveClassSchedule(targetUserId, data)
         .then(() => setSaveStatus('saved'))
         .catch((error) => { console.error('save class schedule:', error); setSaveStatus('error'); });
     }, 500);
     return () => clearTimeout(timer);
-  }, [data, dataReady, user?.id]);
+  }, [canEdit, data, dataReady, loadedUserId, targetUserId]);
   useEffect(() => {
     const nextMidnight = new Date();
     nextMidnight.setHours(24, 0, 0, 50);
@@ -231,6 +287,14 @@ export default function ClassSchedule({ user, setPage }) {
   };
   return <div className="min-h-full bg-[#f5f7ff] text-slate-800 -m-4 p-4 select-none" style={{ paddingTop: 'max(1rem, calc(env(safe-area-inset-top) + 0.75rem))', paddingBottom: 'max(2rem, calc(env(safe-area-inset-bottom) + 1rem))', paddingLeft: 'max(1rem, calc(env(safe-area-inset-left) + 0.5rem))', paddingRight: 'max(1rem, calc(env(safe-area-inset-right) + 0.5rem))' }}>
     <header className="flex items-center gap-3 pt-1 mb-5"><button onClick={() => setPage('dashboard')} className="w-11 h-11 rounded-2xl bg-white shadow-sm border border-slate-200 text-2xl" aria-label="กลับ">‹</button><div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white grid place-items-center shadow-lg shadow-indigo-200"><Icon/></div><h1 className="text-xl font-black">ตารางเรียน</h1></header>
+    {isAdmin && <section className="mb-5 rounded-3xl border border-indigo-100 bg-white p-4 shadow-sm">
+      <label className="block text-sm font-black text-slate-700" htmlFor="class-schedule-user">เลือกผู้ใช้</label>
+      <select id="class-schedule-user" value={targetUserId} disabled={usersLoading} onChange={(event) => changeScheduleUser(event.target.value)} className="mt-2 h-12 w-full rounded-2xl border-2 border-indigo-100 bg-indigo-50 px-4 font-black text-indigo-900 outline-none focus:border-indigo-400 disabled:opacity-60">
+        {scheduleUsers.map((profile) => <option key={profile.user_id} value={profile.user_id}>{profileName(profile)}{profile.user_id === user?.id ? ' (ฉัน)' : ''}{profile.is_admin && profile.user_id !== user?.id ? ' · Admin' : ''}</option>)}
+      </select>
+      {!canEdit && <p className="mt-2 text-xs font-bold text-amber-700">กำลังดูตารางของ {selectedUserName} แบบอ่านอย่างเดียว</p>}
+    </section>}
+    {loadError && <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">โหลดตารางเรียนไม่สำเร็จ: {loadError}</div>}
     <nav className="grid grid-cols-5 gap-2 mb-5">{WEEK_DAYS.map((x) => <button key={x.id} onClick={() => setDay(x.id)} className={`relative rounded-xl py-2.5 text-xs font-black ${day === x.id ? 'bg-indigo-600 text-white shadow-lg -translate-y-0.5' : 'bg-white text-slate-500 border border-slate-200'}`}>{x.short}{x.id === todayDayId && <span className={`absolute bottom-1 left-1/2 w-1 h-1 rounded-full ${day === x.id ? 'bg-white' : 'bg-indigo-500'}`}/>}</button>)}</nav>
     <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
       <h2 className="min-w-0 text-2xl font-black">{WEEK_DAYS.find((x) => x.id === day).label}</h2>
@@ -238,20 +302,20 @@ export default function ClassSchedule({ user, setPage }) {
         <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
           <label className="relative min-w-0">
             <span className="sr-only">เครื่องแต่งกายวันปกติ</span>
-            <select disabled={!dataReady} value={selectedOutfit} onChange={(event) => selectOutfit(event.target.value)} className="block h-11 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-3 pr-8 text-sm font-black text-slate-700 shadow-sm disabled:bg-slate-200 sm:w-56 sm:text-base" aria-label="เลือกเครื่องแต่งกายวันปกติ" title={selectedOutfit || 'เครื่องแต่งกาย'}><option value="" hidden>เครื่องแต่งกาย</option>{OUTFIT_OPTIONS.map((outfit) => <option key={outfit} value={outfit}>{outfit}</option>)}</select>
+            <select disabled={!dataReady || !canEdit} value={selectedOutfit} onChange={(event) => selectOutfit(event.target.value)} className="block h-11 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-3 pr-8 text-sm font-black text-slate-700 shadow-sm disabled:bg-slate-200 sm:w-56 sm:text-base" aria-label="เลือกเครื่องแต่งกายวันปกติ" title={selectedOutfit || 'เครื่องแต่งกาย'}><option value="" hidden>เครื่องแต่งกาย</option>{OUTFIT_OPTIONS.map((outfit) => <option key={outfit} value={outfit}>{outfit}</option>)}</select>
           </label>
           <label className="relative min-w-0">
             <span className="sr-only">เครื่องแต่งกายเฉพาะกิจ</span>
-            <select disabled={!dataReady} value={activeSpecialOutfit?.outfit || ''} onChange={(event) => selectSpecialOutfit(event.target.value)} className="block h-11 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-3 pr-8 text-sm font-black text-slate-700 shadow-sm disabled:bg-slate-200 sm:w-56 sm:text-base" aria-label="เลือกเครื่องแต่งกายเฉพาะกิจ" title={activeSpecialOutfit ? `${activeSpecialOutfit.outfit} (${activeSpecialOutfit.date})` : 'เครื่องแต่งกายเฉพาะกิจ'}><option value="" hidden>เครื่องแต่งกายเฉพาะกิจ</option>{OUTFIT_OPTIONS.map((outfit) => <option key={outfit} value={outfit}>{outfit}</option>)}</select>
+            <select disabled={!dataReady || !canEdit} value={activeSpecialOutfit?.outfit || ''} onChange={(event) => selectSpecialOutfit(event.target.value)} className="block h-11 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-3 pr-8 text-sm font-black text-slate-700 shadow-sm disabled:bg-slate-200 sm:w-56 sm:text-base" aria-label="เลือกเครื่องแต่งกายเฉพาะกิจ" title={activeSpecialOutfit ? `${activeSpecialOutfit.outfit} (${activeSpecialOutfit.date})` : 'เครื่องแต่งกายเฉพาะกิจ'}><option value="" hidden>เครื่องแต่งกายเฉพาะกิจ</option>{OUTFIT_OPTIONS.map((outfit) => <option key={outfit} value={outfit}>{outfit}</option>)}</select>
           </label>
         </div>
-        <div className="flex justify-end gap-2">
+        {canEdit && <div className="flex justify-end gap-2">
           <button disabled={!dataReady} onClick={openNewLunchBreak} className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-amber-500 text-xl disabled:bg-slate-300 text-white font-black shadow-lg shadow-amber-100 sm:flex sm:h-auto sm:w-auto sm:items-center sm:px-3 sm:py-2.5 sm:text-base" aria-label="ตั้งค่าพักเที่ยง" title="ตั้งค่าพักเที่ยง"><span aria-hidden="true">🍱</span><span className="hidden sm:inline">ตั้งค่าพักเที่ยง</span></button>
           <button disabled={!dataReady} onClick={openNew} className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-indigo-600 text-2xl disabled:bg-slate-300 text-white font-black shadow-lg shadow-indigo-200 sm:flex sm:h-auto sm:w-auto sm:items-center sm:px-4 sm:py-2.5 sm:text-base" aria-label="เพิ่มวิชา" title="เพิ่มวิชา"><span aria-hidden="true">＋</span><span className="hidden sm:inline">เพิ่มวิชา</span></button>
-        </div>
+        </div>}
       </div>
     </div>
-    {!lessons.length ? <div className="mt-8 rounded-3xl border-2 border-dashed border-indigo-200 bg-white/70 p-8 text-center"><div className="mx-auto mb-3 w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-400 grid place-items-center"><Icon className="w-9 h-9"/></div><p className="font-black">ยังไม่มีวิชาในวันนี้</p><p className="text-sm text-slate-400">กด “เพิ่มวิชา” เพื่อเริ่มจัดตาราง</p></div> : <div className="space-y-3">{lessons.map((x, i) => { const period = lessonPeriods[i]; if (x.type === 'break') return <LunchBreakRow key={x.id} lesson={x} onOpen={() => openEdit(x)}/>; return <div key={x.id} onClick={() => openEdit(x)} className={`w-full text-left bg-white rounded-3xl p-3.5 sm:p-4 shadow-sm transition active:scale-[0.99] ${lessonHighlight(x)}`} role="button" tabIndex="0"><div className="flex gap-3"><i className="w-1.5 rounded-full shrink-0" style={{background: COLORS[i % COLORS.length]}}/>{x.bookImage && <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setPreviewImage({ src: x.bookImage, title: x.book || x.subject }); }} className="group relative h-20 w-16 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-sm" aria-label={`ดูรูปหนังสือ ${x.subject}`}><img src={x.bookImage} alt={`ปกหนังสือ ${x.subject}`} className="h-full w-full object-cover transition group-hover:scale-105" loading="lazy" draggable="false"/></button>}<div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><div className="min-w-0 flex items-center gap-1.5 sm:gap-2"><span className="shrink-0 rounded-lg bg-indigo-50 px-2 py-1 text-xs font-black text-indigo-600">คาบ {period.startPeriod}{period.endPeriod > period.startPeriod ? `–${period.endPeriod}` : ''}</span><span className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-xs font-black text-slate-600">ป.{x.gradeLevel || 5}</span><h3 className="hidden min-w-0 truncate text-lg font-black sm:block">{x.subject}</h3>{period?.count > 1 && <span className="hidden shrink-0 rounded-full bg-violet-100 text-violet-700 px-2 py-1 text-[10px] font-black sm:inline">{period.count} คาบติด</span>}</div><span className="shrink-0 text-xs font-bold text-indigo-600 sm:text-sm">{x.start}–{x.end}</span></div><div className="mt-1 flex min-w-0 items-center gap-2 sm:hidden"><h3 className="min-w-0 flex-1 text-lg font-black leading-snug break-words">{x.subject}</h3>{period?.count > 1 && <span className="shrink-0 rounded-full bg-violet-100 px-2 py-1 text-[10px] font-black text-violet-700">{period.count} คาบติด</span>}</div><div className="mt-2 flex flex-wrap gap-2 text-xs font-bold"><span className="rounded-lg bg-amber-50 text-amber-700 px-2.5 py-1">📚 {x.book || 'ไม่ต้องใช้หนังสือ'}</span>{x.supplies && <span className="rounded-lg bg-violet-50 text-violet-700 px-2.5 py-1">🎒 {x.supplies}</span>}{x.book && <span className={`rounded-lg px-2.5 py-1 ${x.location === 'home' ? 'bg-emerald-50 text-emerald-700' : 'bg-sky-50 text-sky-700'}`}>{x.location === 'home' ? '🏠 อยู่บ้าน' : '🏫 อยู่โรงเรียน'}</span>}</div></div></div></div>; })}</div>}
+    {!lessons.length ? <div className="mt-8 rounded-3xl border-2 border-dashed border-indigo-200 bg-white/70 p-8 text-center"><div className="mx-auto mb-3 w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-400 grid place-items-center"><Icon className="w-9 h-9"/></div><p className="font-black">ยังไม่มีวิชาในวันนี้</p><p className="text-sm text-slate-400">{canEdit ? 'กด “เพิ่มวิชา” เพื่อเริ่มจัดตาราง' : `${selectedUserName} ยังไม่ได้เพิ่มวิชาในวันนี้`}</p></div> : <div className="space-y-3">{lessons.map((x, i) => { const period = lessonPeriods[i]; if (x.type === 'break') return <LunchBreakRow key={x.id} lesson={x} onOpen={canEdit ? () => openEdit(x) : undefined} readOnly={!canEdit}/>; return <div key={x.id} onClick={canEdit ? () => openEdit(x) : undefined} className={`w-full text-left bg-white rounded-3xl p-3.5 sm:p-4 shadow-sm transition ${canEdit ? 'active:scale-[0.99]' : ''} ${lessonHighlight(x)}`} role={canEdit ? 'button' : undefined} tabIndex={canEdit ? 0 : undefined}><div className="flex gap-3"><i className="w-1.5 rounded-full shrink-0" style={{background: COLORS[i % COLORS.length]}}/>{x.bookImage && <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setPreviewImage({ src: x.bookImage, title: x.book || x.subject }); }} className="group relative h-20 w-16 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-sm" aria-label={`ดูรูปหนังสือ ${x.subject}`}><img src={x.bookImage} alt={`ปกหนังสือ ${x.subject}`} className="h-full w-full object-cover transition group-hover:scale-105" loading="lazy" draggable="false"/></button>}<div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><div className="min-w-0 flex items-center gap-1.5 sm:gap-2"><span className="shrink-0 rounded-lg bg-indigo-50 px-2 py-1 text-xs font-black text-indigo-600">คาบ {period.startPeriod}{period.endPeriod > period.startPeriod ? `–${period.endPeriod}` : ''}</span><span className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-xs font-black text-slate-600">ป.{x.gradeLevel || 5}</span><h3 className="hidden min-w-0 truncate text-lg font-black sm:block">{x.subject}</h3>{period?.count > 1 && <span className="hidden shrink-0 rounded-full bg-violet-100 text-violet-700 px-2 py-1 text-[10px] font-black sm:inline">{period.count} คาบติด</span>}</div><span className="shrink-0 text-xs font-bold text-indigo-600 sm:text-sm">{x.start}–{x.end}</span></div><div className="mt-1 flex min-w-0 items-center gap-2 sm:hidden"><h3 className="min-w-0 flex-1 text-lg font-black leading-snug break-words">{x.subject}</h3>{period?.count > 1 && <span className="shrink-0 rounded-full bg-violet-100 px-2 py-1 text-[10px] font-black text-violet-700">{period.count} คาบติด</span>}</div><div className="mt-2 flex flex-wrap gap-2 text-xs font-bold"><span className="rounded-lg bg-amber-50 text-amber-700 px-2.5 py-1">📚 {x.book || 'ไม่ต้องใช้หนังสือ'}</span>{x.supplies && <span className="rounded-lg bg-violet-50 text-violet-700 px-2.5 py-1">🎒 {x.supplies}</span>}{x.book && <span className={`rounded-lg px-2.5 py-1 ${x.location === 'home' ? 'bg-emerald-50 text-emerald-700' : 'bg-sky-50 text-sky-700'}`}>{x.location === 'home' ? '🏠 อยู่บ้าน' : '🏫 อยู่โรงเรียน'}</span>}</div></div></div></div>; })}</div>}
     <div className="h-24 shrink-0" aria-hidden="true"/>
     {editing && <div className="fixed inset-0 z-[100] bg-slate-950/55 flex items-end sm:items-center justify-center sm:p-4" onMouseDown={(e) => e.target === e.currentTarget && setEditing(null)}><form onSubmit={save} className="w-full max-w-md sm:max-w-2xl lg:max-w-3xl max-h-[calc(100dvh-env(safe-area-inset-top)-0.5rem)] overflow-y-auto rounded-t-[2rem] sm:rounded-[2rem] bg-white p-5 sm:p-7 pb-[max(1.25rem,env(safe-area-inset-bottom))]"><div className="flex justify-between mb-4"><h2 className="text-xl font-black">{form.type === 'break' ? (editing === 'new' ? 'เพิ่มเวลาพักเที่ยง' : 'แก้ไขเวลาพักเที่ยง') : (editing === 'new' ? 'เพิ่มวิชาใหม่' : 'แก้ไขวิชา')}</h2><button type="button" onClick={() => setEditing(null)} className="w-9 h-9 rounded-full bg-slate-100 text-xl">×</button></div>
       {form.type === 'break' && <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800 ring-1 ring-amber-200">เวลานี้จะใช้กับวันจันทร์–ศุกร์ทั้งสัปดาห์ และจัดตำแหน่งตามเวลาให้อัตโนมัติ</div>}

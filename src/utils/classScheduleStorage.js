@@ -40,7 +40,7 @@ function loadLegacySchedule(userId) {
 
 const hasLessons = (schedule) => WEEK_DAYS.some(({ id }) => schedule[id]?.length > 0);
 
-export async function loadClassSchedule(userId) {
+export async function loadClassSchedule(userId, { allowLegacyMigration = true } = {}) {
   if (!userId) return createEmptyClassSchedule();
   const { data, error } = await supabase
     .from('user_class_schedules')
@@ -51,6 +51,8 @@ export async function loadClassSchedule(userId) {
   if (data?.schedule) return normalize(data.schedule);
 
   // ย้ายข้อมูลเดิมในเครื่องขึ้น Supabase อัตโนมัติครั้งแรก
+  if (!allowLegacyMigration) return createEmptyClassSchedule();
+
   const legacy = loadLegacySchedule(userId);
   if (hasLessons(legacy)) await saveClassSchedule(userId, legacy);
   return legacy;

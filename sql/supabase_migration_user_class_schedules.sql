@@ -14,6 +14,12 @@ create policy "Users can read own class schedule"
   to authenticated
   using ((select auth.uid()) = user_id);
 
+drop policy if exists "Admins can read all class schedules" on public.user_class_schedules;
+create policy "Admins can read all class schedules"
+  on public.user_class_schedules for select
+  to authenticated
+  using (public.is_admin());
+
 drop policy if exists "Users can insert own class schedule" on public.user_class_schedules;
 create policy "Users can insert own class schedule"
   on public.user_class_schedules for insert
