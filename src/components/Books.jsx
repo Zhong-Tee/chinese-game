@@ -480,7 +480,6 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
           {showContentImage && (
             <button type="button" onClick={() => setShowExpandedImage(true)} className="group relative mb-6 block w-full overflow-hidden rounded-2xl shadow-md" aria-label="ขยายภาพประกอบ">
               <img src={pageImageUrl} alt={`ภาพประกอบ${isLegacyNovel ? `บทที่ ${pageIndex + 1}` : 'เนื้อหา'}`} className="aspect-[4/3] w-full object-cover transition duration-300 group-hover:scale-[1.02]" />
-              <span className="absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-slate-950/65 text-lg text-white shadow-lg backdrop-blur" aria-hidden="true">🔍</span>
             </button>
           )}
           <div className="space-y-6">
