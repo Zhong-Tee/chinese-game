@@ -43,6 +43,29 @@ import {
   compareTypingAnswer,
 } from './utils/sentenceTokens';
 
+const SUPABASE_PAGE_SIZE = 1000;
+
+async function fetchAllPages(buildQuery) {
+  const rows = [];
+
+  for (let from = 0; ; from += SUPABASE_PAGE_SIZE) {
+    const { data, error } = await buildQuery().range(from, from + SUPABASE_PAGE_SIZE - 1);
+    if (error) throw error;
+    if (!data?.length) break;
+    rows.push(...data);
+    if (data.length < SUPABASE_PAGE_SIZE) break;
+  }
+
+  return rows;
+}
+
+async function insertInBatches(table, rows, batchSize = 500) {
+  for (let from = 0; from < rows.length; from += batchSize) {
+    const { error } = await supabase.from(table).insert(rows.slice(from, from + batchSize));
+    if (error) throw error;
+  }
+}
+
 export default function App() {
   const [page, setPage] = useState('login');
   const [user, setUser] = useState(null);
@@ -296,30 +319,18 @@ export default function App() {
         .catch(() => {});
 
       // ดึง flashcards ทั้งหมดแบบแบ่งหน้า (Supabase จำกัด 1000 แถว/คำขอ) วนจนครบทุกแถว
-      const PAGE_SIZE = 1000;
-      let master = [];
-      for (let from = 0; ; from += PAGE_SIZE) {
-        const { data: page, error: masterError } = await supabase
+      const master = await fetchAllPages(() => supabase
           .from('flashcards')
           .select('*')
-          .order('id1', { ascending: true })
-          .range(from, from + PAGE_SIZE - 1);
-        if (masterError) {
-          console.error('Error fetching flashcards:', masterError);
-          return;
-        }
-        if (!page || page.length === 0) break;
-        master = master.concat(page);
-        if (page.length < PAGE_SIZE) break;
-      }
+          .order('id1', { ascending: true }));
       console.log('Fetched flashcards:', master.length, 'items');
       setAllMasterCards(master);
       
-      const { data: progress, error: progressError } = await supabase.from('user_progress').select('level, wrong_count, flashcard_id').eq('user_id', userId);
-      if (progressError) {
-        console.error('Error fetching progress:', progressError);
-        return;
-      }
+      const progress = await fetchAllPages(() => supabase
+        .from('user_progress')
+        .select('level, wrong_count, flashcard_id')
+        .eq('user_id', userId)
+        .order('flashcard_id', { ascending: true }));
       if (progress) {
         // แปลง flashcard_id เป็น number ทั้งหมดเพื่อให้ type ตรงกัน
         const selectedIdsNums = progress.map(p => Number(p.flashcard_id)).filter(id => !isNaN(id));
@@ -356,17 +367,18 @@ export default function App() {
         return null;
       }
 
-      const { data: allCards } = await supabase
+      const allCards = await fetchAllPages(() => supabase
         .from('flashcards')
         .select('id1, cn, pinyin, th')
-        .order('id1', { ascending: true });
+        .order('id1', { ascending: true }));
 
       if (!allCards || allCards.length === 0) return null;
 
-      const { data: progress } = await supabase
+      const progress = await fetchAllPages(() => supabase
         .from('user_progress')
         .select('flashcard_id')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('flashcard_id', { ascending: true }));
 
       const selectedSet = new Set((progress || []).map(p => Number(p.flashcard_id)));
       const unselected = allCards.filter(c => !selectedSet.has(Number(c.id1)));
@@ -378,14 +390,12 @@ export default function App() {
       const dailyTarget = Math.max(1, Number(missionConfig.new_words_target) || 5);
       const toAdd = unselected.slice(0, Math.min(dailyTarget, unselected.length));
 
-      const { error: insertError } = await supabase.from('user_progress').insert(
-        toAdd.map(card => ({ user_id: userId, flashcard_id: card.id1, level: 1, wrong_count: 0 }))
-      );
-
-      if (insertError) {
-        console.error('Error inserting daily words:', insertError);
-        return null;
-      }
+      await insertInBatches('user_progress', toAdd.map(card => ({
+        user_id: userId,
+        flashcard_id: card.id1,
+        level: 1,
+        wrong_count: 0,
+      })));
 
       await supabase
         .from('user_settings')
@@ -435,7 +445,7 @@ export default function App() {
     if (dragSelectMode === 'add') {
       const toAdd = ids.filter(id => !selectedIds.includes(id));
       if (toAdd.length > 0) {
-        await supabase.from('user_progress').insert(toAdd.map(id => ({ user_id: user.id, flashcard_id: id, level: 1, wrong_count: 0 })));
+        await insertInBatches('user_progress', toAdd.map(id => ({ user_id: user.id, flashcard_id: id, level: 1, wrong_count: 0 })));
         setSelectedIds(prev => [...new Set([...prev, ...toAdd])]);
       }
     } else {
@@ -554,15 +564,12 @@ export default function App() {
         return;
       }
       setActiveLevel(level);
-      let query = supabase.from('user_progress').select('flashcard_id').eq('user_id', user.id);
-      if (level === 'mistakes') query = query.gte('wrong_count', 3); 
-      else query = query.eq('level', level).lt('wrong_count', 3);
-      const { data: progress, error: progressError } = await query;
-      if (progressError) {
-        console.error('Error fetching progress:', progressError);
-        alert("เกิดข้อผิดพลาด: " + progressError.message);
-        return;
-      }
+      const progress = await fetchAllPages(() => {
+        let query = supabase.from('user_progress').select('flashcard_id').eq('user_id', user.id);
+        if (level === 'mistakes') query = query.gte('wrong_count', 3);
+        else query = query.eq('level', level).lt('wrong_count', 3);
+        return query.order('flashcard_id', { ascending: true });
+      });
       if (!progress || progress.length === 0) { 
         setAppNoticeModal({
           title: 'ไม่พบคำศัพท์',
@@ -587,12 +594,8 @@ export default function App() {
       // แปลง flashcard_id เป็น number ก่อน query
       const flashcardIds = progress.map(p => Number(p.flashcard_id)).filter(id => !isNaN(id));
       console.log('Flashcard IDs for game:', flashcardIds);
-      const { data: cards, error: cardsError } = await supabase.from('flashcards').select('*').in('id1', flashcardIds);
-      if (cardsError) {
-        console.error('Error fetching cards:', cardsError);
-        alert("เกิดข้อผิดพลาด: " + cardsError.message);
-        return;
-      }
+      const flashcardIdSet = new Set(flashcardIds);
+      const cards = allMasterCards.filter((card) => flashcardIdSet.has(Number(card.id1)));
       if (!cards || cards.length === 0) {
         setAppNoticeModal({
           title: 'ไม่พบคำศัพท์',
@@ -1520,7 +1523,7 @@ export default function App() {
                       return;
                     }
                     const inserts = toSelect.map(id => ({ user_id: user.id, flashcard_id: id, level: 1, wrong_count: 0 }));
-                    await supabase.from('user_progress').insert(inserts);
+                    await insertInBatches('user_progress', inserts);
                     await fetchInitialData(user.id);
                     if (input) input.value = '';
                     alert(`เลือก ${toSelect.length} คำศัพท์เรียบร้อยแล้ว`);

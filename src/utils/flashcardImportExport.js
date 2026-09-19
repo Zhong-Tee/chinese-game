@@ -22,6 +22,27 @@ const COMPARE_FIELDS = [
   'translate',
 ];
 
+const SUPABASE_PAGE_SIZE = 1000;
+
+async function fetchAllFlashcardPages(supabase, columns) {
+  const rows = [];
+
+  for (let from = 0; ; from += SUPABASE_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('flashcards')
+      .select(columns)
+      .order('id1', { ascending: true })
+      .range(from, from + SUPABASE_PAGE_SIZE - 1);
+
+    if (error) throw error;
+    if (!data?.length) break;
+    rows.push(...data);
+    if (data.length < SUPABASE_PAGE_SIZE) break;
+  }
+
+  return rows;
+}
+
 function normCell(value) {
   if (value == null) return '';
   return String(value).trim();
@@ -120,13 +141,7 @@ export function flashcardsToCsv(rows) {
 }
 
 export async function fetchAllFlashcardsForExport(supabase) {
-  const { data, error } = await supabase
-    .from('flashcards')
-    .select(FLASHCARD_EXPORT_COLUMNS.join(', '))
-    .order('id1', { ascending: true });
-
-  if (error) throw error;
-  return data || [];
+  return fetchAllFlashcardPages(supabase, FLASHCARD_EXPORT_COLUMNS.join(', '));
 }
 
 export function downloadFlashcardCsv(rows, filename = 'flashcards_export.csv') {
@@ -173,11 +188,10 @@ export async function importFlashcardsFromRecords(supabase, records, onProgress)
 
   emit({ phase: 'loading', label: 'กำลังโหลดข้อมูลเดิมจากระบบ...', percent: 5 });
 
-  const { data: existingRows, error: fetchError } = await supabase
-    .from('flashcards')
-    .select(`id1, ${COMPARE_FIELDS.join(', ')}`);
-
-  if (fetchError) {
+  let existingRows;
+  try {
+    existingRows = await fetchAllFlashcardPages(supabase, `id1, ${COMPARE_FIELDS.join(', ')}`);
+  } catch (fetchError) {
     result.errors.push(`โหลดข้อมูลเดิมล้มเหลว: ${fetchError.message}`);
     emit({ phase: 'done', label: 'Import ล้มเหลว', percent: 100, ...result });
     return result;
