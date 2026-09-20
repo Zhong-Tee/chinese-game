@@ -14,6 +14,63 @@ export const localDateKey = (date = new Date()) => {
   return new Date(date.getTime() - offset).toISOString().slice(0, 10);
 };
 
+const PAGE_SIZE = 1000;
+
+// Supabase คืนค่าสูงสุด 1000 แถว/คำขอ ถ้าไม่วนอ่านจะได้ข้อมูลไม่ครบ
+// แล้วสรุปสถานะผิด (เช่น นึกว่าไม่มีคำค้าง LV1/LV2 ทั้งที่มี)
+async function fetchAllRows(buildQuery) {
+  const rows = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    if (!data?.length) break;
+    rows.push(...data);
+    if (data.length < PAGE_SIZE) break;
+  }
+  return rows;
+}
+
+const isMissingDailyWordIdsColumn = (error) => {
+  if (!error) return false;
+  const raw = `${error.message || ''} ${error.details || ''} ${error.hint || ''}`;
+  return raw.includes('last_daily_word_ids')
+    && ['42703', 'PGRST204', 'PGRST205'].includes(error.code || '');
+};
+
+// บันทึก/อ่าน "คำใหม่ที่แจกไปแล้ววันนี้" คู่กับวันที่แบบ atomic
+// เพื่อให้ซ่อมภารกิจได้จาก ID จริง ไม่ต้องเดาจาก Level ของคำเก่า
+export async function fetchDailyWordsStamp(userId) {
+  if (!userId) return { date: null, ids: [] };
+  const { data, error } = await supabase.from('user_settings')
+    .select('last_daily_words_date, last_daily_word_ids').eq('user_id', userId).maybeSingle();
+  if (!error) {
+    return {
+      date: data?.last_daily_words_date || null,
+      ids: (data?.last_daily_word_ids || []).map(Number).filter(Number.isFinite),
+    };
+  }
+  if (!isMissingDailyWordIdsColumn(error)) throw error;
+
+  // ยังไม่ได้รัน sql/daily_words_ids_column.sql → ใช้ได้เฉพาะวันที่ (ซ่อมภารกิจไม่ได้)
+  const { data: legacy, error: legacyError } = await supabase.from('user_settings')
+    .select('last_daily_words_date').eq('user_id', userId).maybeSingle();
+  if (legacyError) throw legacyError;
+  return { date: legacy?.last_daily_words_date || null, ids: [] };
+}
+
+export async function saveDailyWordsStamp(userId, date, wordIds = []) {
+  const ids = wordIds.map(Number).filter(Number.isFinite);
+  const { error } = await supabase.from('user_settings')
+    .upsert({ user_id: userId, last_daily_words_date: date, last_daily_word_ids: ids }, { onConflict: 'user_id' });
+  if (!error) return true;
+  if (!isMissingDailyWordIdsColumn(error)) throw error;
+
+  const { error: legacyError } = await supabase.from('user_settings')
+    .upsert({ user_id: userId, last_daily_words_date: date }, { onConflict: 'user_id' });
+  if (legacyError) throw legacyError;
+  return false;
+}
+
 export const dailyMissionErrorMessage = (error) => {
   const raw = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
   if (error?.code === '42501' || raw.includes('row-level security')) {
@@ -121,27 +178,19 @@ export async function syncTodayMissionProgress(userId) {
   if (!mission) return null;
   let newWordIds = (mission.new_word_ids || []).map(Number);
 
-  // รองรับบัญชีที่เพิ่มคำประจำวันไปก่อนติดตั้ง migration ภารกิจ:
-  // ตอนนั้น last_daily_words_date ถูกบันทึกแล้ว แต่ ID คำใหม่ยังไม่ได้เก็บใน mission
+  // ซ่อมกรณีแจกคำใหม่สำเร็จแต่บันทึก ID ลงภารกิจไม่ทัน (เครือข่ายหลุด/สร้างแถวชนกัน)
+  // ใช้ ID ที่แจกจริงจาก user_settings เท่านั้น และเติมแค่รายการเป้าหมาย
+  // ห้ามติ๊กว่าผ่าน — ดาวต้องมาจาก Level จริงของคำเสมอ
   if (!newWordIds.length) {
-    const { data: settings, error: settingsError } = await supabase.from('user_settings')
-      .select('last_daily_words_date').eq('user_id', userId).maybeSingle();
-    if (settingsError) throw settingsError;
-    if (settings?.last_daily_words_date !== localDateKey()) return syncReviewMissionProgress(userId, mission);
-
-    const target = Math.max(1, Number(mission.config_snapshot?.new_words_target) || 5);
-    const { data: recovered, error: recoveredError } = await supabase.from('user_progress')
-      .select('flashcard_id, level').eq('user_id', userId)
-      .gte('level', 3).order('flashcard_id', { ascending: false }).limit(target);
-    if (recoveredError) throw recoveredError;
-    newWordIds = (recovered || []).map((row) => Number(row.flashcard_id));
-    if (!newWordIds.length) return syncReviewMissionProgress(userId, mission);
+    const stamp = await fetchDailyWordsStamp(userId);
+    if (stamp.date !== localDateKey() || !stamp.ids.length) return syncReviewMissionProgress(userId, mission);
 
     const { data: repaired, error: repairError } = await supabase.from('daily_mission_progress')
-      .update({ new_word_ids: newWordIds, new_words_completed_ids: newWordIds })
+      .update({ new_word_ids: stamp.ids })
       .eq('user_id', userId).eq('mission_date', localDateKey()).select().single();
     if (repairError) throw repairError;
     mission = repaired;
+    newWordIds = stamp.ids;
     announceMissionUpdate(mission);
   }
 
@@ -152,21 +201,11 @@ export async function syncTodayMissionProgress(userId) {
     .in('flashcard_id', newWordIds);
   if (progressError) throw progressError;
 
-  let reachedLevel3 = (progress || [])
+  // นับเฉพาะคำที่ขึ้นถึง LV3 จริงเท่านั้น ห้ามเดาจากสถานะรวมของบัญชี
+  const reachedLevel3 = (progress || [])
     .filter((row) => Number(row.level) >= 3)
     .map((row) => Number(row.flashcard_id));
 
-  // ซ่อมภารกิจจากระบบเก่าที่ new_word_ids อ้างถึงแถวที่หายไปหรือบันทึกไม่ครบ:
-  // หากไม่พบคำเป้าหมายครบ แต่บัญชีไม่มีคำใดค้างใน LV1/LV2 แล้ว ถือว่าชุดคำใหม่ผ่าน LV3 ครบ
-  if ((progress || []).length < newWordIds.length) {
-    const { data: allProgress, error: allProgressError } = await supabase
-      .from('user_progress')
-      .select('level')
-      .eq('user_id', userId);
-    if (allProgressError) throw allProgressError;
-    const hasWordsBelowLevel3 = (allProgress || []).some((row) => Number(row.level) < 3);
-    if (!hasWordsBelowLevel3) reachedLevel3 = newWordIds;
-  }
   const completedIds = [...new Set([
     ...(mission.new_words_completed_ids || []).map(Number),
     ...reachedLevel3,
@@ -208,7 +247,7 @@ const announceMissionUpdate = (mission) => {
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('daily-mission-updated', { detail: mission }));
 };
 
-export async function initializeTodayMission(userId, newWordIds = []) {
+export async function initializeTodayMission(userId, newWordIds = [], retryOnConflict = true) {
   if (!userId) return null;
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError || !authData?.user) {
@@ -221,12 +260,12 @@ export async function initializeTodayMission(userId, newWordIds = []) {
   if (!config.enabled) return null;
   const today = localDateKey();
   const existing = await fetchTodayMission(userId);
-  const { data: readyRows, error: readyError } = await supabase
-    .from('character_words').select('flashcard_id').eq('sort_order', 2);
-  if (readyError) throw readyError;
-  const { data: learnedRows, error: learnedError } = await supabase
-    .from('user_progress').select('flashcard_id').eq('user_id', userId);
-  if (learnedError) throw learnedError;
+  const readyRows = await fetchAllRows(() => supabase
+    .from('character_words').select('flashcard_id').eq('sort_order', 2)
+    .order('flashcard_id', { ascending: true }));
+  const learnedRows = await fetchAllRows(() => supabase
+    .from('user_progress').select('flashcard_id').eq('user_id', userId)
+    .order('flashcard_id', { ascending: true }));
 
   const learnedIds = new Set((learnedRows || []).map((row) => Number(row.flashcard_id)));
   const readyIds = [...new Set((readyRows || [])
@@ -247,8 +286,10 @@ export async function initializeTodayMission(userId, newWordIds = []) {
     const matchTarget = Math.max(0, Number(existing.config_snapshot?.match_words_target) || 10);
     const repairedMatchIds = matchingCandidates.slice(0, matchTarget);
     const existingMatchIds = (existing.matching_card_ids || []).map(Number);
-    const matchingSetChanged = repairedMatchIds.length !== existingMatchIds.length
-      || repairedMatchIds.some((id) => !existingMatchIds.includes(id));
+    // ยังไม่รู้ชุดคำใหม่ของวันนี้ (ถูกเรียกแบบไม่ส่ง ID) → ห้ามล้างเกมจับคู่ที่สร้างไว้แล้ว
+    const matchingSetChanged = missionNewWordIds.length > 0
+      && (repairedMatchIds.length !== existingMatchIds.length
+        || repairedMatchIds.some((id) => !existingMatchIds.includes(id)));
     if (matchingSetChanged) {
       patch.matching_card_ids = repairedMatchIds;
       const repairedSet = new Set(repairedMatchIds);
@@ -271,8 +312,13 @@ export async function initializeTodayMission(userId, newWordIds = []) {
     new_word_ids: newWordIds,
     matching_card_ids: matchIds,
   }).select().single();
-  if (error && error.code !== '23505') throw error;
-  return data || fetchTodayMission(userId);
+  if (!error) return data;
+  if (error.code !== '23505') throw error;
+
+  // มีคนสร้างแถวของวันนี้ชนกันพอดี (เช่น Dashboard ซิงก์พร้อมกัน)
+  // ต้องเขียน ID คำใหม่ลงแถวที่มีอยู่ต่อ ไม่อย่างนั้นภารกิจจะว่างทั้งวัน
+  if (!retryOnConflict) return fetchTodayMission(userId);
+  return initializeTodayMission(userId, newWordIds, false);
 }
 
 export async function startDailyReviewMission(userId, level, wordIds) {

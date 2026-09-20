@@ -26,7 +26,7 @@ import {
   consumeLevelKey,
 } from './utils/levelScheduleMeta';
 import AdminPanel from './components/AdminPanel';
-import { fetchDailyMissionConfig, initializeTodayMission, localDateKey, recordDailyWordResult, startDailyReviewMission, syncTodayMissionProgress } from './utils/dailyMissionStorage';
+import { fetchDailyMissionConfig, fetchDailyWordsStamp, initializeTodayMission, localDateKey, recordDailyWordResult, saveDailyWordsStamp, startDailyReviewMission, syncTodayMissionProgress } from './utils/dailyMissionStorage';
 import { saveWrongWord } from './utils/wrongWordsStorage';
 import { createFlashcardSessionTracker, recordFlashcardWrongAnswer } from './utils/flashcardStatsStorage';
 import { getGameState, addCurrency, getExpForLevel, getStageProgress, saveStageProgress, getSfxMap } from './utils/gameStorage';
@@ -354,13 +354,9 @@ export default function App() {
       // (toISOString เป็น UTC และจะเป็นคนละวันกับไทยในช่วงก่อน 07:00 น.)
       const today = localDateKey();
 
-      const { data: settings } = await supabase
-        .from('user_settings')
-        .select('last_daily_words_date')
-        .eq('user_id', userId)
-        .maybeSingle();
+      const stamp = await fetchDailyWordsStamp(userId);
 
-      if (settings?.last_daily_words_date === today) {
+      if (stamp.date === today) {
         // รอให้แถวภารกิจพร้อมก่อนโหลดข้อมูลหน้าเกม ป้องกัน Dashboard
         // อ่านเร็วกว่าการสร้างภารกิจแล้วแสดงดาวเป็นศูนย์ตลอดทั้งวัน
         await initializeTodayMission(userId).catch(console.error);
@@ -397,12 +393,14 @@ export default function App() {
         wrong_count: 0,
       })));
 
-      await supabase
-        .from('user_settings')
-        .upsert({ user_id: userId, last_daily_words_date: today }, { onConflict: 'user_id' });
+      const newWordIds = toAdd.map((card) => Number(card.id1));
+
+      // บันทึกวันที่พร้อม ID คำใหม่ในคำสั่งเดียว เพื่อให้ syncTodayMissionProgress
+      // ซ่อมภารกิจจาก ID ที่แจกจริงได้ หากขั้นตอนสร้างภารกิจด้านล่างล้มเหลว
+      await saveDailyWordsStamp(userId, today, newWordIds);
 
       // ต้องบันทึก ID ของคำใหม่ให้เสร็จก่อน ผู้เล่นจึงเริ่มเล่นและสะสมดาวได้
-      await initializeTodayMission(userId, toAdd.map((card) => Number(card.id1))).catch(console.error);
+      await initializeTodayMission(userId, newWordIds).catch(console.error);
 
       return toAdd;
     } catch (err) {
