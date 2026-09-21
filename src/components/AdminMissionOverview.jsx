@@ -77,9 +77,20 @@ function missionTasks(mission) {
 function missionStatus(mission) {
   if (!mission) return { kind: 'none', percent: 0, done: 0, total: 0, tasks: [] };
   const tasks = missionTasks(mission);
-  const done = tasks.filter((task) => task.complete).length;
-  const percent = tasks.length ? Math.round(tasks.reduce((sum, task) => sum + task.percent, 0) / tasks.length) : 0;
-  return { kind: done === tasks.length && tasks.length ? 'complete' : 'partial', percent, done, total: tasks.length, tasks };
+  // A task without an assigned item is informational only. It must not lower
+  // the student's percentage or prevent the day from being marked complete.
+  const requiredTasks = tasks.filter((task) => !task.waiting);
+  const done = requiredTasks.filter((task) => task.complete).length;
+  const percent = requiredTasks.length
+    ? Math.round(requiredTasks.reduce((sum, task) => sum + task.percent, 0) / requiredTasks.length)
+    : 0;
+  return {
+    kind: done === requiredTasks.length && requiredTasks.length ? 'complete' : 'partial',
+    percent,
+    done,
+    total: requiredTasks.length,
+    tasks,
+  };
 }
 
 function statusStyle(kind) {
@@ -104,12 +115,12 @@ function DetailPanel({ item, studentName, onClose }) {
       </div>
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         {status.tasks.map((task) => (
-          <div key={task.key} className={`rounded-2xl border-2 p-3 ${task.complete ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+          <div key={task.key} className={`rounded-2xl border-2 p-3 ${task.waiting ? 'border-slate-200 bg-slate-50 opacity-70' : task.complete ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-black text-slate-700"><span className="mr-1.5">{task.icon}</span>{task.label}</span>
-              <span className={`shrink-0 text-xs font-black ${task.complete ? 'text-emerald-600' : 'text-amber-600'}`}>{task.waiting ? 'ยังไม่เปิด' : `${task.done}/${task.total}`}</span>
+              <span className={`shrink-0 text-xs font-black ${task.waiting ? 'text-slate-400' : task.complete ? 'text-emerald-600' : 'text-amber-600'}`}>{task.waiting ? 'ไม่ต้องทำ' : `${task.done}/${task.total}`}</span>
             </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200"><div className={`h-full rounded-full ${task.complete ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${task.percent}%` }} /></div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200"><div className={`h-full rounded-full ${task.waiting ? 'bg-slate-300' : task.complete ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${task.percent}%` }} /></div>
           </div>
         ))}
       </div>

@@ -909,6 +909,30 @@ export default function App() {
     setFlashcardRearrangeAssembled((prev) => prev.filter((_, i) => i !== index));
   }, [flashcardStageAnswered]);
 
+  const handleRearrangeInsertToken = useCallback((tokenId, index) => {
+    if (flashcardStageAnswered) return;
+    setFlashcardRearrangeAssembled((prev) => {
+      if (prev.includes(tokenId)) return prev;
+      const next = [...prev];
+      const safeIndex = Math.max(0, Math.min(Number(index) || 0, next.length));
+      next.splice(safeIndex, 0, tokenId);
+      return next;
+    });
+  }, [flashcardStageAnswered]);
+
+  const handleRearrangeMoveToken = useCallback((fromIndex, insertIndex) => {
+    if (flashcardStageAnswered) return;
+    setFlashcardRearrangeAssembled((prev) => {
+      if (fromIndex < 0 || fromIndex >= prev.length) return prev;
+      const next = [...prev];
+      const [tokenId] = next.splice(fromIndex, 1);
+      const adjustedIndex = fromIndex < insertIndex ? insertIndex - 1 : insertIndex;
+      const safeIndex = Math.max(0, Math.min(adjustedIndex, next.length));
+      next.splice(safeIndex, 0, tokenId);
+      return next;
+    });
+  }, [flashcardStageAnswered]);
+
   const handleRearrangeBackspace = useCallback(() => {
     if (flashcardStageAnswered) return;
     setFlashcardRearrangeAssembled((prev) => prev.slice(0, -1));
@@ -1248,7 +1272,7 @@ export default function App() {
         </div>
       )}
 
-      <main className={`app-main ${isHubPage ? 'app-main--hub' : isSelectWordsPage ? 'overflow-hidden flex flex-col' : 'overflow-y-auto'} ${page === 'admin' ? 'mx-auto max-w-5xl p-4' : isHubPage ? 'p-0' : page === 'class-schedule' ? 'mx-auto w-full max-w-3xl bg-[#f5f7ff] px-4 pt-4 pb-0' : 'mx-auto max-w-md p-4 pb-10'}`} style={{ touchAction: 'pan-y' }}>
+      <main className={`app-main ${isHubPage ? 'app-main--hub' : isSelectWordsPage ? 'overflow-hidden flex flex-col' : 'overflow-y-auto'} ${page === 'admin' ? 'mx-auto max-w-5xl p-4' : isHubPage ? 'p-0' : page === 'class-schedule' ? 'mx-auto w-full max-w-3xl bg-[#f5f7ff] px-4 pt-4 pb-0' : page === 'statistics' ? 'mx-auto w-full max-w-6xl p-4 pb-10' : 'mx-auto max-w-md p-4 pb-10'}`} style={{ touchAction: 'pan-y' }}>
         {page === 'dashboard' && (
           <Dashboard
             setPage={setPage}
@@ -1293,6 +1317,8 @@ export default function App() {
             rearrangeAssembled={flashcardRearrangeAssembled}
             onRearrangeTapToken={handleRearrangeTapToken}
             onRearrangeRemoveAt={handleRearrangeRemoveAt}
+            onRearrangeInsertToken={handleRearrangeInsertToken}
+            onRearrangeMoveToken={handleRearrangeMoveToken}
             onRearrangeBackspace={handleRearrangeBackspace}
             onRearrangeReset={handleRearrangeReset}
             onSubmitRearrange={handleRearrangeSubmit}

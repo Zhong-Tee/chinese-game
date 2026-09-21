@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import SpeakerButton from './SpeakerButton';
 import { preloadChineseSpeech } from '../utils/chineseSpeech';
 import { shouldFlashcardRearrange } from '../utils/sentenceTokens';
@@ -23,6 +23,8 @@ export default function FlashcardGame({
   rearrangeAssembled = [],
   onRearrangeTapToken,
   onRearrangeRemoveAt,
+  onRearrangeInsertToken,
+  onRearrangeMoveToken,
   onRearrangeBackspace,
   onRearrangeReset,
   onSubmitRearrange,
@@ -31,6 +33,11 @@ export default function FlashcardGame({
   onSubmitTyping,
 }) {
   const typingInputRef = useRef(null);
+  const rearrangeAnswerRef = useRef(null);
+  const rearrangeDragRef = useRef(null);
+  const suppressRearrangeClickRef = useRef(false);
+  const [rearrangeDrag, setRearrangeDrag] = useState(null);
+  const [rearrangeDropIndex, setRearrangeDropIndex] = useState(null);
 
   const showWrongToast = (msg) => {
     if (setWrongWordToast) {
@@ -98,6 +105,89 @@ export default function FlashcardGame({
       return () => clearTimeout(t);
     }
   }, [isTyping, isStageAnswered]);
+
+  const rearrangeTokenText = (tokenId) => rearrangeTokens.find((token) => token.id === tokenId)?.text || '';
+
+  const findRearrangeDropIndex = (clientX, clientY) => {
+    const container = rearrangeAnswerRef.current;
+    if (!container) return null;
+    const containerRect = container.getBoundingClientRect();
+    const margin = 18;
+    if (
+      clientX < containerRect.left - margin
+      || clientX > containerRect.right + margin
+      || clientY < containerRect.top - margin
+      || clientY > containerRect.bottom + margin
+    ) return null;
+
+    const itemRects = [...container.querySelectorAll('[data-rearrange-answer-token]')]
+      .map((element, index) => ({ index, rect: element.getBoundingClientRect() }));
+    if (!itemRects.length) return 0;
+
+    const rows = itemRects.reduce((groups, item) => {
+      const centerY = item.rect.top + item.rect.height / 2;
+      const row = groups.find((group) => Math.abs(group.centerY - centerY) < 8);
+      if (row) row.items.push(item);
+      else groups.push({ centerY, items: [item] });
+      return groups;
+    }, []);
+    const rowItems = rows.reduce((closest, row) => (
+      Math.abs(row.centerY - clientY) < Math.abs(closest.centerY - clientY) ? row : closest
+    )).items;
+    const firstAfterPointer = rowItems.find(({ rect }) => clientX < rect.left + rect.width / 2);
+    return firstAfterPointer ? firstAfterPointer.index : rowItems[rowItems.length - 1].index + 1;
+  };
+
+  const beginRearrangeDrag = (event, payload) => {
+    if (isStageAnswered || event.button > 0) return;
+    rearrangeDragRef.current = {
+      ...payload,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      started: false,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const moveRearrangeDrag = (event) => {
+    const activeDrag = rearrangeDragRef.current;
+    if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
+    const distance = Math.hypot(event.clientX - activeDrag.startX, event.clientY - activeDrag.startY);
+    if (!activeDrag.started && distance < 7) return;
+    if (!activeDrag.started) {
+      activeDrag.started = true;
+      setRearrangeDrag({ ...activeDrag, x: event.clientX, y: event.clientY });
+    } else {
+      setRearrangeDrag((current) => current ? { ...current, x: event.clientX, y: event.clientY } : current);
+    }
+    event.preventDefault();
+    setRearrangeDropIndex(findRearrangeDropIndex(event.clientX, event.clientY));
+  };
+
+  const endRearrangeDrag = (event) => {
+    const activeDrag = rearrangeDragRef.current;
+    if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
+    if (activeDrag.started) {
+      event.preventDefault();
+      const insertIndex = findRearrangeDropIndex(event.clientX, event.clientY);
+      if (insertIndex !== null) {
+        if (activeDrag.source === 'bank') onRearrangeInsertToken?.(activeDrag.tokenId, insertIndex);
+        else onRearrangeMoveToken?.(activeDrag.fromIndex, insertIndex);
+      }
+      suppressRearrangeClickRef.current = true;
+      window.setTimeout(() => { suppressRearrangeClickRef.current = false; }, 0);
+    }
+    rearrangeDragRef.current = null;
+    setRearrangeDrag(null);
+    setRearrangeDropIndex(null);
+  };
+
+  const cancelRearrangeDrag = () => {
+    rearrangeDragRef.current = null;
+    setRearrangeDrag(null);
+    setRearrangeDropIndex(null);
+  };
 
   return (
     <div
@@ -262,6 +352,7 @@ export default function FlashcardGame({
           {isRearrange ? (
             <>
               <div
+                ref={rearrangeAnswerRef}
                 className={`min-h-[3.25rem] rounded-2xl border-2 p-2 mb-2 flex flex-wrap gap-1.5 items-center justify-center transition-colors ${
                   canShowStageFeedback
                     ? isStageCorrect
@@ -271,20 +362,34 @@ export default function FlashcardGame({
                 }`}
               >
                 {rearrangeAssembled.length === 0 ? (
-                  <span className="text-slate-400 text-sm italic font-bold">แตะคำด้านล่างเพื่อเรียงประโยค</span>
+                  <span className={`text-sm italic font-bold ${rearrangeDropIndex === 0 ? 'text-orange-600' : 'text-slate-400'}`}>
+                    {rearrangeDropIndex === 0 ? 'ปล่อยคำที่นี่' : 'แตะหรือลากคำขึ้นมาเพื่อเรียงประโยค'}
+                  </span>
                 ) : (
                   rearrangeAssembled.map((id, i) => (
-                    <button
-                      key={`${id}-${i}`}
-                      type="button"
-                      onClick={() => onRearrangeRemoveAt?.(i)}
-                      disabled={isStageAnswered}
-                      className="bg-white border-2 border-orange-400 text-slate-800 px-2.5 py-1 rounded-xl font-black text-lg active:scale-95 disabled:opacity-90"
-                    >
-                      {rearrangeTokens.find((t) => t.id === id)?.text}
-                    </button>
+                    <React.Fragment key={id}>
+                      {rearrangeDropIndex === i && <span className="h-9 w-1 shrink-0 rounded-full bg-orange-500 shadow-[0_0_0_2px_rgba(255,255,255,0.9)]" aria-hidden="true" />}
+                      <button
+                        type="button"
+                        data-rearrange-answer-token
+                        onClick={() => {
+                          if (!suppressRearrangeClickRef.current) onRearrangeRemoveAt?.(i);
+                        }}
+                        onPointerDown={(event) => beginRearrangeDrag(event, { source: 'answer', tokenId: id, fromIndex: i })}
+                        onPointerMove={moveRearrangeDrag}
+                        onPointerUp={endRearrangeDrag}
+                        onPointerCancel={cancelRearrangeDrag}
+                        disabled={isStageAnswered}
+                        style={{ touchAction: 'none' }}
+                        className={`cursor-grab bg-white border-2 border-orange-400 text-slate-800 px-2.5 py-1 rounded-xl font-black text-lg active:cursor-grabbing active:scale-95 disabled:opacity-90 ${rearrangeDrag?.source === 'answer' && rearrangeDrag.tokenId === id ? 'opacity-35' : ''}`}
+                        aria-label={`${rearrangeTokenText(id)} ลากเพื่อย้ายลำดับ หรือแตะเพื่อนำออก`}
+                      >
+                        {rearrangeTokenText(id)}
+                      </button>
+                    </React.Fragment>
                   ))
                 )}
+                {rearrangeAssembled.length > 0 && rearrangeDropIndex === rearrangeAssembled.length && <span className="h-9 w-1 shrink-0 rounded-full bg-orange-500 shadow-[0_0_0_2px_rgba(255,255,255,0.9)]" aria-hidden="true" />}
               </div>
 
               {!isStageAnswered && (
@@ -320,6 +425,12 @@ export default function FlashcardGame({
                 </div>
               )}
 
+              {!isStageAnswered && (
+                <p className="mb-2 text-center text-[11px] font-bold text-slate-500">
+                  แตะเพื่อเพิ่ม · ลากขึ้นเพื่อแทรก · ลากคำด้านบนเพื่อย้ายลำดับ
+                </p>
+              )}
+
               <div className="flex flex-wrap gap-2 justify-center">
                 {rearrangeTokens.map((tk) => {
                   const used = rearrangeAssembled.includes(tk.id);
@@ -327,19 +438,36 @@ export default function FlashcardGame({
                     <button
                       key={tk.id}
                       type="button"
-                      onClick={() => onRearrangeTapToken?.(tk.id)}
+                      onClick={() => {
+                        if (!suppressRearrangeClickRef.current) onRearrangeTapToken?.(tk.id);
+                      }}
+                      onPointerDown={(event) => beginRearrangeDrag(event, { source: 'bank', tokenId: tk.id })}
+                      onPointerMove={moveRearrangeDrag}
+                      onPointerUp={endRearrangeDrag}
+                      onPointerCancel={cancelRearrangeDrag}
                       disabled={used || isStageAnswered}
-                      className={`px-3.5 py-2 rounded-xl font-black text-lg border-2 transition-all active:scale-95 ${
+                      style={{ touchAction: 'none' }}
+                      className={`cursor-grab px-3.5 py-2 rounded-xl font-black text-lg border-2 transition-all active:cursor-grabbing active:scale-95 ${
                         used
                           ? 'opacity-25 bg-slate-100 border-slate-200 text-slate-400'
-                          : 'bg-white border-slate-200 text-slate-800 shadow-sm hover:border-orange-300'
+                          : `bg-white border-slate-200 text-slate-800 shadow-sm hover:border-orange-300 ${rearrangeDrag?.source === 'bank' && rearrangeDrag.tokenId === tk.id ? 'opacity-35' : ''}`
                       }`}
+                      aria-label={`${tk.text} แตะเพื่อเพิ่ม หรือลากไปวางด้านบน`}
                     >
                       {tk.text}
                     </button>
                   );
                 })}
               </div>
+              {rearrangeDrag && (
+                <div
+                  className="pointer-events-none fixed z-[200] -translate-x-1/2 -translate-y-1/2 rounded-xl border-2 border-orange-500 bg-white px-3.5 py-2 text-lg font-black text-slate-800 shadow-2xl"
+                  style={{ left: rearrangeDrag.x, top: rearrangeDrag.y }}
+                  aria-hidden="true"
+                >
+                  {rearrangeTokenText(rearrangeDrag.tokenId)}
+                </div>
+              )}
             </>
           ) : isTyping ? (
             <div className="flex items-stretch gap-2">
