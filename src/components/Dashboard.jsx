@@ -55,6 +55,7 @@ export default function Dashboard({
   const [savingEquip, setSavingEquip] = useState(false);
   const [luckyPending, setLuckyPending] = useState(false);
   const [dailyMission, setDailyMission] = useState(null);
+  const [missionLoaded, setMissionLoaded] = useState(false);
   const [missionCollapsed, setMissionCollapsed] = useState(true);
   const [showWordFighterLogo, setShowWordFighterLogo] = useState(true);
 
@@ -73,6 +74,7 @@ export default function Dashboard({
     const applyMission = (mission) => {
       if (!alive) return;
       setDailyMission(mission);
+      setMissionLoaded(true);
     };
     const refresh = () => syncTodayMissionProgress(user.id).then(applyMission).catch((error) => console.error('dashboard daily mission:', error));
     const onMissionUpdated = (event) => applyMission(event.detail);
@@ -264,6 +266,10 @@ export default function Dashboard({
     addMissionRow({ star: 5, label: 'อ่านหนังสือ 1 เล่ม', done: Math.min(1, booksRead), total: 1 });
   }
 
+  const activeMissionRows = missionRows.filter((mission) => !mission.unavailable);
+  const completedMissionCount = activeMissionRows.filter((mission) => mission.completed).length;
+  const activeMissionCount = activeMissionRows.length;
+
   const handleBottomNav = (action) => {
     if (action === 'home') return;
     if (action === 'hero') { openCharModal(); return; }
@@ -341,39 +347,47 @@ export default function Dashboard({
             )}
           </div>
         </div>
-        {missionRows.length > 0 && (
+        {missionLoaded && (
           <div
             className="mt-2 ml-auto block w-full max-w-[195px] rounded-2xl border border-amber-300/25 bg-slate-950/65 p-1.5 shadow-lg backdrop-blur-sm active:scale-[0.98] transition-transform"
           >
             <button
               type="button"
-              onClick={() => setMissionCollapsed((current) => !current)}
-              className={`flex w-full items-center justify-between gap-2 px-1 py-0.5 text-left ${missionCollapsed ? '' : 'mb-1'}`}
-              aria-expanded={!missionCollapsed}
+              onClick={() => missionRows.length > 0 && setMissionCollapsed((current) => !current)}
+              disabled={missionRows.length === 0}
+              className={`flex w-full items-center justify-between gap-2 px-1 py-0.5 text-left ${missionRows.length > 0 && !missionCollapsed ? 'mb-1' : ''}`}
+              aria-expanded={missionRows.length > 0 && !missionCollapsed}
               aria-controls="daily-mission-progress"
             >
-              <span className="shrink-0 whitespace-nowrap text-[9px] font-black uppercase tracking-normal text-white/45">ภารกิจวันนี้</span>
+              <span className="shrink-0 whitespace-nowrap text-[9px] font-black uppercase tracking-normal text-white/45">
+                {activeMissionCount > 0 ? 'ภารกิจวันนี้' : 'ไม่มีภารกิจในตอนนี้'}
+              </span>
               <span className="flex items-center gap-1.5">
-                {missionCollapsed && (
+                {missionCollapsed && activeMissionCount > 0 && (
                   <span className="flex items-center gap-0.5" aria-label="สถานะดาวภารกิจประจำวัน">
-                    {missionRows.map((mission) => (
+                    {activeMissionRows.map((mission) => (
                       <span
                         key={mission.star}
-                        className={`text-base leading-none ${mission.unavailable ? 'text-white/15 line-through grayscale' : mission.completed ? 'text-amber-300 drop-shadow-[0_0_5px_rgba(251,191,36,0.9)]' : 'text-white/20 grayscale'}`}
+                        className={`text-base leading-none ${mission.completed ? 'text-amber-300 drop-shadow-[0_0_5px_rgba(251,191,36,0.9)]' : 'text-white/20 grayscale'}`}
                       >
                         ★
                       </span>
                     ))}
+                    <span className="ml-0.5 whitespace-nowrap text-[9px] font-black text-white/70">
+                      {completedMissionCount}/{activeMissionCount}
+                    </span>
                   </span>
                 )}
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/60">
-                  <svg viewBox="0 0 20 20" className={`h-3 w-3 transition-transform ${missionCollapsed ? '' : 'rotate-180'}`} aria-hidden="true">
-                    <path d="M5 7.5 10 12.5 15 7.5" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </span>
+                {missionRows.length > 0 && (
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/60">
+                    <svg viewBox="0 0 20 20" className={`h-3 w-3 transition-transform ${missionCollapsed ? '' : 'rotate-180'}`} aria-hidden="true">
+                      <path d="M5 7.5 10 12.5 15 7.5" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                )}
               </span>
             </button>
-            {!missionCollapsed && (
+            {!missionCollapsed && missionRows.length > 0 && (
               <button
                 id="daily-mission-progress"
                 type="button"
