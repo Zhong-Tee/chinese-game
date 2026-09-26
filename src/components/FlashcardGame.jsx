@@ -5,7 +5,8 @@ import { shouldFlashcardRearrange } from '../utils/sentenceTokens';
 
 export default function FlashcardGame({
   onExitGame,
-  onFinishGame,
+  finishAfterCurrent = false,
+  onToggleFinishAfterCurrent,
   setWrongWordToast,
   onAddCurrentToWrongList,
   activeLevel,
@@ -246,8 +247,14 @@ export default function FlashcardGame({
           </button>
           <button
             type="button"
-            onClick={() => requestExit(onFinishGame)}
-            className="rounded-full border-2 border-red-700 bg-red-600 px-2.5 py-1 text-[10px] font-black italic text-white shadow-md active:scale-90"
+            onClick={() => onToggleFinishAfterCurrent?.()}
+            aria-pressed={finishAfterCurrent}
+            title={finishAfterCurrent ? 'จะจบเกมหลังคำนี้ กดอีกครั้งเพื่อยกเลิก' : 'จบเกมหลังเล่นคำนี้ครบทุกช่วง'}
+            className={`rounded-full border-2 border-red-600 px-2.5 py-1 text-[10px] font-black italic shadow-md transition-all active:scale-90 ${
+              finishAfterCurrent
+                ? 'bg-red-600 text-white ring-2 ring-red-200'
+                : 'bg-transparent text-red-600 shadow-none'
+            }`}
           >
             จบ
           </button>

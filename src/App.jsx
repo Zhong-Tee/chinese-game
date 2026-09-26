@@ -118,6 +118,7 @@ export default function App() {
   const [flashcardStageAnswered, setFlashcardStageAnswered] = useState(false);
   const [flashcardStageResults, setFlashcardStageResults] = useState({ pinyin: null, meaning: null, rearrange: null, typing: null });
   const [flashcardTimedOut, setFlashcardTimedOut] = useState(false);
+  const [finishFlashcardAfterCurrent, setFinishFlashcardAfterCurrent] = useState(false);
   const [flashcardRearrangeTokens, setFlashcardRearrangeTokens] = useState([]);
   const [flashcardRearrangeAssembled, setFlashcardRearrangeAssembled] = useState([]);
   const [flashcardRearrangeCorrect, setFlashcardRearrangeCorrect] = useState('');
@@ -147,16 +148,13 @@ export default function App() {
     await endFlashcardSession();
     cardPenaltyRef.current = null;
     cardPenaltyPromiseRef.current = null;
+    setFinishFlashcardAfterCurrent(false);
     setPage(destination);
     setGameActive(false);
     setCurrentCard(null);
     setGameQueue([]);
     if (user?.id) fetchInitialData(user.id);
   }, [endFlashcardSession, user?.id]);
-
-  const handleFinishFlashcardGame = useCallback(async () => {
-    await handleExitFlashcardGame('dashboard');
-  }, [handleExitFlashcardGame]);
 
   // Daily new-words popup
   const [dailyNewWords, setDailyNewWords] = useState(null);
@@ -634,6 +632,7 @@ export default function App() {
         persistLevelKeys(user.id, nextKeys);
       }
       setGameQueue(shuffleArray(cards));
+      setFinishFlashcardAfterCurrent(false);
       flashcardSessionRef.current?.start(level);
       setPage('fc-play');
       setGameActive(true);
@@ -773,10 +772,20 @@ export default function App() {
     }
 
     await flashcardSessionRef.current?.recordWord();
+    if (finishFlashcardAfterCurrent) {
+      await endFlashcardSession();
+      setFinishFlashcardAfterCurrent(false);
+      setGameQueue([]);
+      setCurrentCard(null);
+      setGameActive(false);
+      setPage('dashboard');
+      fetchInitialData(user.id);
+      return;
+    }
     setGameQueue(prev => prev.slice(1));
     setCurrentCard(null);
     fetchInitialData(user.id);
-  }, [activeLevel, currentCard, user?.id]);
+  }, [activeLevel, currentCard, endFlashcardSession, finishFlashcardAfterCurrent, user?.id]);
 
   const handleStageAnswer = useCallback((choice) => {
     if (!currentCard || flashcardStageAnswered) return;
@@ -1319,7 +1328,8 @@ export default function App() {
         {page === 'fc-play' && currentCard && (
           <FlashcardGame
             onExitGame={handleExitFlashcardGame}
-            onFinishGame={handleFinishFlashcardGame}
+            finishAfterCurrent={finishFlashcardAfterCurrent}
+            onToggleFinishAfterCurrent={() => setFinishFlashcardAfterCurrent((current) => !current)}
             setWrongWordToast={setWrongWordToast}
             onAddCurrentToWrongList={async () => {
               if (currentCard && user?.id) {
