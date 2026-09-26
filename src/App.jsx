@@ -42,6 +42,7 @@ import {
   shouldFlashcardTyping,
   compareTypingAnswer,
 } from './utils/sentenceTokens';
+import { didPassFlashcard, getNextFlashcardProgress } from './utils/flashcardProgress';
 
 const SUPABASE_PAGE_SIZE = 1000;
 
@@ -125,6 +126,7 @@ export default function App() {
   const flashcardSessionRef = useRef(null);
   // กันโกงกด Cancel/back/refresh หนีกลางการ์ด: หักคำลง LV1 ทันทีที่ตอบช่วงแรก (ดู applyCardEntryPenalty)
   const cardPenaltyRef = useRef(null); // { cardId, baseWrong } = wrong_count เดิมก่อนหักโทษ
+  const cardPenaltyPromiseRef = useRef(null);
   const flashcardSfxRef = useRef({});
   const flashcardTimerWarnAtRef = useRef(null);
   if (!flashcardSessionRef.current) {
@@ -135,17 +137,26 @@ export default function App() {
     await flashcardSessionRef.current?.end();
   }, []);
 
-  const handleExitFlashcardGame = useCallback(async () => {
+  const handleExitFlashcardGame = useCallback(async (destination = 'fc-chars') => {
     // ถ้าตอบช่วงแรกของการ์ดไปแล้ว คำถูกหักลง LV1 แล้ว (applyCardEntryPenalty) — ออกกลางคันจึงไม่รอด
+    try {
+      await cardPenaltyPromiseRef.current;
+    } catch {
+      // applyCardEntryPenalty บันทึกและแจ้ง error ของตัวเองแล้ว จึงยังอนุญาตให้ออกจากเกมได้
+    }
     await endFlashcardSession();
     cardPenaltyRef.current = null;
-    setPage('fc-chars');
+    cardPenaltyPromiseRef.current = null;
+    setPage(destination);
     setGameActive(false);
     setCurrentCard(null);
     setGameQueue([]);
     if (user?.id) fetchInitialData(user.id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endFlashcardSession, user?.id]);
+
+  const handleFinishFlashcardGame = useCallback(async () => {
+    await handleExitFlashcardGame('dashboard');
+  }, [handleExitFlashcardGame]);
 
   // Daily new-words popup
   const [dailyNewWords, setDailyNewWords] = useState(null);
@@ -157,7 +168,6 @@ export default function App() {
 
   const [libraryDetail, setLibraryDetail] = useState(null);
   const [libFlipped, setLibFlipped] = useState(false);
-  const [username, setUsername] = useState('');
   const [wrongWordToast, setWrongWordToast] = useState(null); // popup "ได้เพิ่มคำผิดไว้ใน list ให้แล้ว"
   // ลากนิ้ว/เมาส์เพื่อเลือกคำ (Select Study Words) — ต้องกดค้าง 2 วินาทีก่อนถึงจะลากได้
   const [isDragSelecting, setIsDragSelecting] = useState(false);
@@ -170,7 +180,6 @@ export default function App() {
   const pageRef = useRef('login');        // หน้าปัจจุบัน (ให้ popstate handler อ่านค่าล่าสุดได้)
 
   // Audio Context สำหรับเสียงเตือนเวลา
-  const audioContextRef = useRef(null);
   const selectWordsContainerRef = useRef(null);
   const justFinishedDragRef = useRef(false);
   const longPressTimerRef = useRef(null);
@@ -356,7 +365,30 @@ export default function App() {
 
       const stamp = await fetchDailyWordsStamp(userId);
 
+      const ensureReservedWordsExist = async (wordIds) => {
+        const reservedIds = [...new Set((wordIds || []).map(Number).filter(Number.isFinite))];
+        if (!reservedIds.length) return;
+        const { data: existingRows, error: existingError } = await supabase
+          .from('user_progress')
+          .select('flashcard_id')
+          .eq('user_id', userId)
+          .in('flashcard_id', reservedIds);
+        if (existingError) throw existingError;
+        const existingIds = new Set((existingRows || []).map((row) => Number(row.flashcard_id)));
+        const missingIds = reservedIds.filter((id) => !existingIds.has(id));
+        if (missingIds.length) {
+          await insertInBatches('user_progress', missingIds.map((id) => ({
+            user_id: userId,
+            flashcard_id: id,
+            level: 1,
+            wrong_count: 0,
+          })));
+        }
+      };
+
       if (stamp.date === today) {
+        // ถ้ารอบก่อนจองชุดคำแล้วแต่อินเทอร์เน็ตหลุดระหว่าง insert ให้เติมเฉพาะคำที่ขาด
+        await ensureReservedWordsExist(stamp.ids);
         // รอให้แถวภารกิจพร้อมก่อนโหลดข้อมูลหน้าเกม ป้องกัน Dashboard
         // อ่านเร็วกว่าการสร้างภารกิจแล้วแสดงดาวเป็นศูนย์ตลอดทั้งวัน
         await initializeTodayMission(userId).catch(console.error);
@@ -386,18 +418,12 @@ export default function App() {
       const dailyTarget = Math.max(1, Number(missionConfig.new_words_target) || 5);
       const toAdd = unselected.slice(0, Math.min(dailyTarget, unselected.length));
 
-      await insertInBatches('user_progress', toAdd.map(card => ({
-        user_id: userId,
-        flashcard_id: card.id1,
-        level: 1,
-        wrong_count: 0,
-      })));
-
       const newWordIds = toAdd.map((card) => Number(card.id1));
 
-      // บันทึกวันที่พร้อม ID คำใหม่ในคำสั่งเดียว เพื่อให้ syncTodayMissionProgress
-      // ซ่อมภารกิจจาก ID ที่แจกจริงได้ หากขั้นตอนสร้างภารกิจด้านล่างล้มเหลว
+      // จองชุดคำก่อน insert เสมอ หาก insert ล้มเหลว รอบถัดไปจะเติมชุดเดิม
+      // จึงไม่ข้ามไปแจกชุดใหม่จนเกินเป้าหมายรายวัน
       await saveDailyWordsStamp(userId, today, newWordIds);
+      await ensureReservedWordsExist(newWordIds);
 
       // ต้องบันทึก ID ของคำใหม่ให้เสร็จก่อน ผู้เล่นจึงเริ่มเล่นและสะสมดาวได้
       await initializeTodayMission(userId, newWordIds).catch(console.error);
@@ -417,7 +443,6 @@ export default function App() {
       if (alive && newWords?.length) setDailyNewWords(newWords);
     });
     return () => { alive = false; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, user?.id]);
 
   const toggleWordSelection = async (cardId) => {
@@ -499,7 +524,7 @@ export default function App() {
 
   // ฟัง mouseup/touchend ที่ window: ยกเลิก long-press หรือจบการลาก
   useEffect(() => {
-    const end = (e) => {
+    const end = () => {
       if (longPressTimerRef.current != null) {
         clearLongPressTimer();
         return;
@@ -639,24 +664,35 @@ export default function App() {
   // ดังนั้นเมื่อเริ่มตอบแล้วหนีกลางคัน (Cancel / ปุ่ม back / refresh / ปิดแอพ) = คำค้างอยู่ LV1 เสมอ
   // (ยังไม่ตอบช่วงแรกแล้วออก = ไม่โดนโทษ)
   const applyCardEntryPenalty = useCallback(async (card) => {
-    if (!user?.id || !card) return;
+    if (!user?.id || !card) return Promise.resolve();
     const cardId = card.id1 || card.id;
-    if (cardPenaltyRef.current?.cardId === cardId) return; // กัน effect ยิงซ้ำ (StrictMode)
+    if (cardPenaltyRef.current?.cardId === cardId) return cardPenaltyPromiseRef.current || Promise.resolve(); // กัน effect ยิงซ้ำ (StrictMode)
     cardPenaltyRef.current = { cardId, baseWrong: 0 };
-    const { data } = await supabase
-      .from('user_progress')
-      .select('wrong_count')
-      .eq('user_id', user.id)
-      .eq('flashcard_id', cardId)
-      .single();
-    const baseWrong = data?.wrong_count || 0;
-    cardPenaltyRef.current = { cardId, baseWrong };
-    const { error } = await supabase
-      .from('user_progress')
-      .update({ level: 1, wrong_count: baseWrong + 1 })
-      .eq('user_id', user.id)
-      .eq('flashcard_id', cardId);
-    if (error) console.error('[applyCardEntryPenalty] UPDATE error:', error, { cardId });
+    const penaltyPromise = (async () => {
+      const { data, error: readError } = await supabase
+        .from('user_progress')
+        .select('wrong_count')
+        .eq('user_id', user.id)
+        .eq('flashcard_id', cardId)
+        .single();
+      if (readError) throw readError;
+      const baseWrong = data?.wrong_count || 0;
+      cardPenaltyRef.current = { cardId, baseWrong };
+      const { error } = await supabase
+        .from('user_progress')
+        .update({ level: 1, wrong_count: baseWrong + 1 })
+        .eq('user_id', user.id)
+        .eq('flashcard_id', cardId);
+      if (error) throw error;
+      return true;
+    })().catch((error) => {
+      console.error('[applyCardEntryPenalty] failed:', error, { cardId });
+      setWrongWordToast('บันทึกโทษไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต');
+      setTimeout(() => setWrongWordToast(null), 4000);
+      return false;
+    });
+    cardPenaltyPromiseRef.current = penaltyPromise;
+    return penaltyPromise;
   }, [user?.id]);
 
   const moveToNextCard = useCallback(async (isCardPassed) => {
@@ -666,35 +702,32 @@ export default function App() {
     let nextWrongCount;
     const cardId = currentCard.id1 || currentCard.id;
 
+    const penaltyApplied = cardPenaltyPromiseRef.current
+      ? await cardPenaltyPromiseRef.current
+      : false;
+    cardPenaltyPromiseRef.current = null;
+
     // ใช้ wrong_count เดิมที่จำไว้ตอนหักโทษเข้าการ์ด (ใน DB ตอนนี้ถูก +1 ไปแล้ว จึงห้ามอ่านกลับมาบวกซ้ำ)
     const penalty = cardPenaltyRef.current?.cardId === cardId ? cardPenaltyRef.current : null;
     cardPenaltyRef.current = null;
     let currentWrong;
-    if (penalty) {
+    if (penalty && penaltyApplied) {
       currentWrong = penalty.baseWrong;
     } else {
-      // fallback (ไม่ควรเกิด): อ่านจาก DB ซึ่งรวมโทษ +1 ไว้แล้ว จึงลบออกก่อน
+      // fallback: อ่านค่าจริงจาก DB หากการหักโทษล่วงหน้าล้มเหลว
       const { data: currentProgress } = await supabase
         .from('user_progress')
         .select('wrong_count, level')
         .eq('user_id', user.id)
         .eq('flashcard_id', cardId)
         .single();
-      currentWrong = Math.max((currentProgress?.wrong_count || 1) - 1, 0);
+      const storedWrong = Number(currentProgress?.wrong_count) || 0;
+      currentWrong = penaltyApplied ? Math.max(storedWrong - 1, 0) : storedWrong;
     }
 
-    if (isCardPassed) {
-      if (activeLevel === 'mistakes') {
-        nextLevel = 1;
-        nextWrongCount = 0;
-      } else {
-        nextLevel = Math.min(activeLevel + 1, 7);
-        nextWrongCount = 0;
-      }
-    } else {
-      nextLevel = 1;
-      nextWrongCount = currentWrong + 1;
-    }
+    const nextProgress = getNextFlashcardProgress({ activeLevel, currentWrong, passed: isCardPassed });
+    nextLevel = nextProgress.level;
+    nextWrongCount = nextProgress.wrongCount;
 
     const { data: updatedRows, error: updateError } = await supabase
       .from('user_progress')
@@ -703,6 +736,7 @@ export default function App() {
       .eq('flashcard_id', cardId)
       .select('flashcard_id, level, wrong_count');
 
+    const progressSaved = !updateError && updatedRows?.length > 0;
     if (updateError) {
       console.error('[moveToNextCard] UPDATE error:', updateError, { userId: user.id, cardId, nextLevel, nextWrongCount });
       setWrongWordToast?.(`บันทึกผลไม่สำเร็จ: ${updateError.message || updateError.code || 'unknown'}`);
@@ -723,7 +757,7 @@ export default function App() {
     }
 
     // ตอบถูกครบ → ได้รับ Coin ตาม LV ของคำนั้น (ค่ามาจากตาราง exp_rewards)
-    if (isCardPassed) {
+    if (isCardPassed && progressSaved) {
       const rewardLevel = activeLevel === 'mistakes' ? 1 : activeLevel;
       const gained = await getExpForLevel(rewardLevel);
       if (gained > 0) {
@@ -800,11 +834,7 @@ export default function App() {
   const submitCurrentCard = useCallback(async () => {
     const needsRearrange = shouldFlashcardRearrange(activeLevel, currentCard);
     const needsTyping = shouldFlashcardTyping(activeLevel, currentCard);
-    const passed =
-      flashcardStageResults.pinyin === true &&
-      flashcardStageResults.meaning === true &&
-      (!needsRearrange || flashcardStageResults.rearrange === true) &&
-      (!needsTyping || flashcardStageResults.typing === true);
+    const passed = didPassFlashcard(flashcardStageResults, { needsRearrange, needsTyping });
     await moveToNextCard(passed);
   }, [activeLevel, currentCard, flashcardStageResults, moveToNextCard]);
 
@@ -1018,7 +1048,6 @@ export default function App() {
     setCurrentCard(null);
     setGameQueue([]);
     if (user?.id) fetchInitialData(user.id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, gameActive, endFlashcardSession, user?.id]);
 
   useEffect(() => {
@@ -1075,7 +1104,6 @@ export default function App() {
   const handleDailyWordsConfirm = useCallback(() => {
     setDailyNewWords(null);
     if (user?.id) fetchInitialData(user.id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   const handleLogout = async () => {
@@ -1291,11 +1319,16 @@ export default function App() {
         {page === 'fc-play' && currentCard && (
           <FlashcardGame
             onExitGame={handleExitFlashcardGame}
+            onFinishGame={handleFinishFlashcardGame}
             setWrongWordToast={setWrongWordToast}
-            onAddCurrentToWrongList={() => {
+            onAddCurrentToWrongList={async () => {
               if (currentCard && user?.id) {
-                saveWrongWord(user.id, currentCard.id1 || currentCard.id, 'flashcard', currentCard);
-                setWrongWordToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว ดูรายการได้ที่ Settings');
+                const result = await saveWrongWord(user.id, currentCard.id1 || currentCard.id, 'flashcard', currentCard);
+                setWrongWordToast(result === 'saved'
+                  ? 'ได้เพิ่มคำผิดไว้ใน list ให้แล้ว ดูรายการได้ที่ Settings'
+                  : result === 'duplicate'
+                    ? 'คำนี้มีอยู่ในรายการคำผิดแล้ว'
+                    : 'บันทึกคำผิดไม่สำเร็จ กรุณาลองใหม่');
                 setTimeout(() => setWrongWordToast(null), 2500);
               }
             }}
@@ -1303,6 +1336,8 @@ export default function App() {
             currentCard={currentCard}
             setCurrentCard={setCurrentCard}
             timer={timer}
+            remainingCount={gameQueue.length}
+            hasCardStarted={flashcardStageResults.pinyin !== null}
             gameQueue={gameQueue}
             stage={flashcardStage}
             choices={flashcardChoices}

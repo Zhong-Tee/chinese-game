@@ -32,10 +32,6 @@ export default function Library({
     });
 
   useEffect(() => {
-    if (libraryDetail) setLibView('front');
-  }, [libraryDetail]);
-
-  useEffect(() => {
     preloadChineseSpeech();
   }, []);
 
@@ -82,7 +78,7 @@ export default function Library({
           libraryCards.length > 0 ? libraryCards.map(card => (
           <div
             key={card?.id1 || card?.id}
-            onClick={() => { setLibraryDetail(card); setLibFlipped(false); }}
+            onClick={() => { setLibView('front'); setLibraryDetail(card); setLibFlipped(false); }}
             className="aspect-[3/4] rounded-xl shadow-md border-2 border-white active:scale-95 transition p-2.5 flex flex-col justify-between bg-white"
           >
             <div className="text-[10px] text-right text-slate-500 font-bold">{card?.id1 || card?.id}</div>

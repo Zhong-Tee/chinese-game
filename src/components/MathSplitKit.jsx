@@ -7,26 +7,6 @@ import React from 'react';
  * (12.5% / 37.5% / 62.5% / 87.5%) กล่องตัวเลขจัดกึ่งกลางคอลัมน์ด้วย -translate-x-1/2
  * ส่วน SVG ใช้พิกัด X ชุดเดียวกัน เส้นเชื่อมจึงตรงกับกล่องเสมอทุกความกว้างหน้าจอ
  */
-export const BOARD_W = 272;
-export const COL = { a: '12.5%', b: '37.5%', c: '62.5%', d: '87.5%' };
-export const X = { a: 34, b: 102, c: 170, d: 238 };
-
-export const boxBase = 'absolute flex h-[3.25rem] w-[3.25rem] -translate-x-1/2 items-center justify-center rounded-2xl text-2xl font-black transition-all duration-300';
-export const signBase = 'absolute flex h-[3.25rem] -translate-x-1/2 items-center justify-center text-2xl font-black transition-colors duration-300';
-// ความกว้างเท่ากล่องตัวเลข เพื่อไม่ให้ล้นขอบกระดานบนจอแคบสุด (320px)
-export const tagBase = 'absolute flex h-6 w-[3.25rem] -translate-x-1/2 items-center justify-center rounded-full text-xs font-black transition-colors duration-300';
-
-/** เส้นหักฉากแตกกิ่งจากกล่องด้านบน (จุด from) ลงไปยังสองคอลัมน์ล่าง */
-export function branchPath(fromX, fromY, leftX, rightX, toY) {
-  const midY = fromY + Math.round((toY - fromY) / 2);
-  return `M${fromX} ${fromY} V${midY} M${leftX} ${midY} H${rightX} M${leftX} ${midY} V${toY - 4} M${rightX} ${midY} V${toY - 4}`;
-}
-
-/** หัวลูกศรชี้ลงที่ปลายเส้น */
-export function arrowDown(x, y) {
-  return `M${x - 6} ${y - 11} L${x} ${y} L${x + 6} ${y - 11}`;
-}
-
 export function StepChip({ index, label, state, tone }) {
   const tones = {
     emerald: { active: 'bg-emerald-500 text-white shadow-emerald-200', done: 'bg-emerald-100 text-emerald-600' },

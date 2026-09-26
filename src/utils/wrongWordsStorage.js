@@ -10,17 +10,28 @@ import { supabase } from '../supabaseClient';
  * @param {number} flashcardId
  * @param {string} gameType 'th' | 'pinyin' | 'vol' | 'type' | 'flashcard'
  * @param {object} cardData ข้อมูลคำศัพท์จาก flashcards
+ * @returns {Promise<'saved' | 'duplicate' | 'error'>}
  */
 export async function saveWrongWord(userId, flashcardId, gameType, cardData = {}) {
-  if (!userId || flashcardId == null) return;
+  if (!userId || flashcardId == null) return 'error';
   const fid = Number(flashcardId);
-  if (isNaN(fid)) return;
+  if (isNaN(fid)) return 'error';
   const normalizeText = (value) => {
     if (value == null) return null;
     const text = String(value).trim();
     return text === '' ? null : text;
   };
   try {
+    const { data: existing, error: lookupError } = await supabase
+      .from('user_wrong_words')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('flashcard_id', fid)
+      .limit(1)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (existing) return 'duplicate';
+
     const { data, error } = await supabase
       .from('user_wrong_words')
       .insert({
@@ -38,13 +49,14 @@ export async function saveWrongWord(userId, flashcardId, gameType, cardData = {}
       .select('id')
       .maybeSingle();
     if (error) {
+      if (error.code === '23505') return 'duplicate';
       console.warn('wrongWordsStorage saveWrongWord failed:', error.message, 'code:', error.code, 'details:', error.details);
-      return false;
+      return 'error';
     }
-    return !!data;
+    return data ? 'saved' : 'error';
   } catch (err) {
     console.warn('wrongWordsStorage saveWrongWord failed', err?.message);
-    return false;
+    return err?.code === '23505' ? 'duplicate' : 'error';
   }
 }
 

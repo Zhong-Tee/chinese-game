@@ -5,11 +5,14 @@ import { shouldFlashcardRearrange } from '../utils/sentenceTokens';
 
 export default function FlashcardGame({
   onExitGame,
+  onFinishGame,
   setWrongWordToast,
   onAddCurrentToWrongList,
   activeLevel,
   currentCard,
   timer,
+  remainingCount = 0,
+  hasCardStarted = false,
   stage,
   choices,
   selectedAnswer,
@@ -38,6 +41,7 @@ export default function FlashcardGame({
   const suppressRearrangeClickRef = useRef(false);
   const [rearrangeDrag, setRearrangeDrag] = useState(null);
   const [rearrangeDropIndex, setRearrangeDropIndex] = useState(null);
+  const [pendingExit, setPendingExit] = useState(null);
 
   const showWrongToast = (msg) => {
     if (setWrongWordToast) {
@@ -45,9 +49,20 @@ export default function FlashcardGame({
       setTimeout(() => setWrongWordToast(null), 2500);
     }
   };
-  const handleWrongButton = () => {
-    if (onAddCurrentToWrongList) onAddCurrentToWrongList();
+  const handleWrongButton = async () => {
+    if (onAddCurrentToWrongList) await onAddCurrentToWrongList();
     else showWrongToast('ได้เพิ่มคำผิดไว้ใน list ให้แล้ว ดูรายการได้ที่ Settings');
+  };
+
+  const requestExit = (action) => {
+    if (hasCardStarted) setPendingExit(() => action);
+    else action?.();
+  };
+
+  const confirmExit = async () => {
+    const action = pendingExit;
+    setPendingExit(null);
+    await action?.();
   };
 
   const isRearrange = stage === 'rearrange';
@@ -195,10 +210,30 @@ export default function FlashcardGame({
       style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
       onDragStart={(e) => e.preventDefault()}
     >
-      <div className="w-full flex justify-between items-center mb-4 px-1 flex-wrap gap-2">
-        <div className="flex items-center gap-2">
+      {pendingExit && (
+        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-slate-950/75 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="flashcard-exit-title">
+          <div className="w-full max-w-sm overflow-hidden rounded-[2rem] border-2 border-red-300 bg-white text-center shadow-2xl">
+            <div className="bg-gradient-to-br from-red-500 to-red-700 px-6 py-6 text-white">
+              <div className="text-5xl" aria-hidden="true">⚠️</div>
+              <h2 id="flashcard-exit-title" className="mt-2 text-2xl font-black">ออกจากเกมตอนนี้?</h2>
+            </div>
+            <div className="px-6 py-6">
+              <p className="font-bold text-slate-700">คำที่กำลังเล่นจะถูกนับว่าตอบผิดและกลับไป LV1</p>
+              <div className={`my-4 text-5xl font-black italic ${timer < 3 ? 'text-red-600 animate-pulse' : 'text-slate-800'}`}>{timer}s</div>
+              <p className="text-xs font-bold text-slate-400">เวลายังคงเดินต่อระหว่างที่หน้าต่างนี้เปิดอยู่</p>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <button type="button" onClick={() => setPendingExit(null)} className="rounded-2xl border-2 border-slate-300 bg-white py-3 font-black text-slate-700 active:scale-95">เล่นต่อ</button>
+                <button type="button" onClick={confirmExit} className="rounded-2xl border-2 border-red-700 bg-red-600 py-3 font-black text-white shadow-lg active:scale-95">ยืนยันออก</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mb-4 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 px-1">
+        <div className="flex min-w-0 items-center gap-1.5 justify-self-start">
           <button
-            onClick={() => onExitGame?.()}
+            onClick={() => requestExit(onExitGame)}
             className="text-slate-800 font-black text-xs underline italic uppercase"
           >
             Cancel
@@ -209,9 +244,20 @@ export default function FlashcardGame({
           >
             คำผิด
           </button>
+          <button
+            type="button"
+            onClick={() => requestExit(onFinishGame)}
+            className="rounded-full border-2 border-red-700 bg-red-600 px-2.5 py-1 text-[10px] font-black italic text-white shadow-md active:scale-90"
+          >
+            จบ
+          </button>
         </div>
 
-        <div className={`text-3xl font-black italic ${timer < 3 ? 'text-red-600 animate-pulse' : 'text-slate-800'}`}>
+        <div className="min-w-[2.5rem] rounded-xl bg-white/55 px-2 py-0.5 text-center text-3xl font-black tabular-nums text-slate-600 shadow-sm" aria-label={`เหลือ ${remainingCount} คำ`}>
+          {remainingCount}
+        </div>
+
+        <div className={`justify-self-end text-3xl font-black italic ${timer < 3 ? 'text-red-600 animate-pulse' : 'text-slate-800'}`}>
           {timer}s
         </div>
       </div>

@@ -46,9 +46,10 @@ function SummaryCard({ label, value, accent = 'orange', compact = false }) {
 function LevelBadge({ levelKey }) {
   const meta = LEVEL_SCHEDULE_META[levelKey];
   if (!meta) return null;
+  const label = String(levelKey) === '7' ? 'LV7' : meta.label;
   return (
     <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${meta.badgeClass}`}>
-      {meta.label}
+      {label}
     </span>
   );
 }

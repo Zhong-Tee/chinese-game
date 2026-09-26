@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActionButton, BOARD_W, COL, EquationPill, ErrorHint, StepChips, X, arrowDown, boxBase, branchPath, signBase } from './MathSplitKit';
+import { ActionButton, EquationPill, ErrorHint, StepChips } from './MathSplitKit';
+import { BOARD_W, COL, X, arrowDown, boxBase, branchPath, signBase } from './mathSplitLayout';
 
 /** ผังแยกจำนวนเพื่อทำให้ครบหลักสิบ (ด่านบวก ระดับ 2 และ 3) */
 const Y = { row1: 0, row2: 104, row3: 214 };

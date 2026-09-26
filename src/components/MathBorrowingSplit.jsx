@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActionButton, BOARD_W, COL, EquationPill, ErrorHint, StepChips, X, arrowDown, boxBase, branchPath, signBase, tagBase } from './MathSplitKit';
+import { ActionButton, EquationPill, ErrorHint, StepChips } from './MathSplitKit';
+import { BOARD_W, COL, X, arrowDown, boxBase, branchPath, signBase, tagBase } from './mathSplitLayout';
 
 /**
  * ผังลบแบบยืมหลักสิบ (ด่านลบ ระดับ 2 และ 3)

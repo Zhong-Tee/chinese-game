@@ -60,9 +60,9 @@ export default function BattleGame({ user, stageNo, difficulty = 'easy', already
   const [round, setRound] = useState(null); // {type, card, subStage, choices, correctAnswer}
   const [answered, setAnswered] = useState(false);
   const [selected, setSelected] = useState('');
-  const [revealAnswer, setRevealAnswer] = useState('');
+  const [, setRevealAnswer] = useState('');
   const [lastCorrect, setLastCorrect] = useState(false);
-  const [timedOut, setTimedOut] = useState(false);
+  const [, setTimedOut] = useState(false);
   const [timer, setTimer] = useState(8);
 
   // rearrange

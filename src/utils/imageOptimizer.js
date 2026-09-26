@@ -10,8 +10,7 @@ export const optimizeImageUrl = (url, options = {}) => {
   const {
     width = 800,      // ลดขนาดความกว้าง
     height = 1200,    // ลดขนาดความสูง
-    quality = 85,     // คุณภาพ 85% (ยังดูดีแต่ไฟล์เล็กลง)
-    format = 'auto'   // รูปแบบ (auto = ให้ browser เลือก)
+    quality = 85      // คุณภาพ 85% (ยังดูดีแต่ไฟล์เล็กลง)
   } = options;
   
   // ถ้า URL เป็น Supabase Storage

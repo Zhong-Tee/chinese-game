@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActionButton, BOARD_W, COL, EquationPill, ErrorHint, StepChips, X, arrowDown, boxBase, branchPath, signBase } from './MathSplitKit';
+import { ActionButton, EquationPill, ErrorHint, StepChips } from './MathSplitKit';
+import { BOARD_W, COL, X, arrowDown, boxBase, branchPath, signBase } from './mathSplitLayout';
 
 /**
  * ผังลบแบบตัด 10 (ด่านลบ10 ระดับ 1–3)

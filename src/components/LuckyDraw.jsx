@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useRef, useState } from 'react';
 import { getLuckyDrawStatus, claimLuckyDraw, getSfxMap } from '../utils/gameStorage';
 import { playSfx } from '../utils/gameAudio';

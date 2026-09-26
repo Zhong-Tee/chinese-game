@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { LEVEL_SCHEDULE_META } from '../utils/levelScheduleMeta';
 
@@ -42,7 +42,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
   const [activeTab, setActiveTab] = useState('personal');
   const [rankingGameType, setRankingGameType] = useState('overall');
 
-  const fetchPersonalStats = async () => {
+  const fetchPersonalStats = useCallback(async () => {
     if (!user?.id) return;
 
     try {
@@ -69,7 +69,7 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
         scores.forEach(score => {
           currentTotalScore += score.total_score || 0;
           bestTotalScore += score.best_score || 0;
-          if (bestScoresPerGame.hasOwnProperty(score.game_type)) {
+          if (Object.prototype.hasOwnProperty.call(bestScoresPerGame, score.game_type)) {
             bestScoresPerGame[score.game_type] = score.best_score || 0;
             bestStreaksPerGame[score.game_type] = score.best_streak || 0;
             currentScoresPerGame[score.game_type] = score.total_score || 0;
@@ -89,9 +89,9 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
     } catch (error) {
       console.error('Error in fetchPersonalStats:', error);
     }
-  };
+  }, [levelCounts, selectedIds.length, user?.id]);
 
-  const fetchRankings = async () => {
+  const fetchRankings = useCallback(async () => {
     try {
       const { data: allScores, error } = await supabase
         .from('user_scores')
@@ -142,14 +142,14 @@ export default function Score({ user, selectedIds, levelCounts, setPage }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (user?.id) {
       fetchPersonalStats();
       fetchRankings();
     }
-  }, [user?.id, selectedIds, levelCounts]);
+  }, [fetchPersonalStats, fetchRankings, user?.id]);
 
   const getUserRank = (rankingList) => {
     if (!user?.id) return null;

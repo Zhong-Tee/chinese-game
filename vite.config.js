@@ -2,6 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { createReadStream, cpSync, existsSync } from 'node:fs'
 import { extname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const projectDir = fileURLToPath(new URL('.', import.meta.url))
 
 const GAME_MIME = {
   '.png': 'image/png',
@@ -27,7 +30,7 @@ export default defineConfig({
           const url = rawUrl.split('?')[0]
           if (!url.startsWith('/game/')) return next()
 
-          const filePath = resolve(__dirname, url.slice(1))
+          const filePath = resolve(projectDir, url.slice(1))
           if (!existsSync(filePath)) return next()
 
           const mime = GAME_MIME[extname(filePath)]
@@ -36,7 +39,7 @@ export default defineConfig({
         })
       },
       closeBundle() {
-        cpSync(resolve(__dirname, 'game'), resolve(__dirname, 'dist/game'), { recursive: true })
+        cpSync(resolve(projectDir, 'game'), resolve(projectDir, 'dist/game'), { recursive: true })
       },
     },
   ],
