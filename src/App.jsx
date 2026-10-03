@@ -110,6 +110,7 @@ export default function App() {
   const [timer, setTimer] = useState(5);
   const [gameActive, setGameActive] = useState(false);
   const [gameQueue, setGameQueue] = useState([]);
+  const [flashcardStages, setFlashcardStages] = useState({ typing: true, rearrange: true });
   const [flashcardStage, setFlashcardStage] = useState('pinyin'); // pinyin | meaning | rearrange | typing
   const [flashcardChoices, setFlashcardChoices] = useState([]);
   const [flashcardSelectedAnswer, setFlashcardSelectedAnswer] = useState('');
@@ -259,11 +260,12 @@ export default function App() {
     // schedules = ค่ากลาง (game_settings) ใช้ร่วมทุกคน; timers/level_keys = รายคน (user_settings)
     const [{ data }, { data: gs }] = await Promise.all([
       supabase.from('user_settings').select('*').eq('user_id', userId).single(),
-      supabase.from('game_settings').select('schedules').eq('id', 1).maybeSingle(),
+      supabase.from('game_settings').select('*').eq('id', 1).maybeSingle(),
     ]);
 
     const loadedSchedules = gs?.schedules || { lv3: [], lv4: [], lv5: [], lv6: [] };
     setSchedules(loadedSchedules);
+    setFlashcardStages({ typing: gs?.flashcard_stages?.typing !== false, rearrange: gs?.flashcard_stages?.rearrange !== false });
 
     if (data) {
       setTimerSetting(data.timer_setting || 5);
@@ -584,6 +586,9 @@ export default function App() {
         alert("ยังไม่มีลูกกุญแจสำหรับด่านนี้ หรือวันนี้ใช้สิทธิ์ปลดล็อกกับด่านอื่นไปแล้ว");
         return;
       }
+      const { data: stageSettings, error: stageSettingsError } = await supabase.from('game_settings').select('*').eq('id', 1).maybeSingle();
+      if (stageSettingsError) throw stageSettingsError;
+      setFlashcardStages({ typing: stageSettings?.flashcard_stages?.typing !== false, rearrange: stageSettings?.flashcard_stages?.rearrange !== false });
       setActiveLevel(level);
       const progress = await fetchAllPages(() => {
         let query = supabase.from('user_progress').select('flashcard_id').eq('user_id', user.id);
@@ -841,29 +846,29 @@ export default function App() {
   }, [currentCard, resetStageState, typeTimerSetting]);
 
   const submitCurrentCard = useCallback(async () => {
-    const needsRearrange = shouldFlashcardRearrange(activeLevel, currentCard);
-    const needsTyping = shouldFlashcardTyping(activeLevel, currentCard);
+    const needsRearrange = flashcardStages.rearrange && shouldFlashcardRearrange(activeLevel, currentCard);
+    const needsTyping = flashcardStages.typing && shouldFlashcardTyping(activeLevel, currentCard);
     const passed = didPassFlashcard(flashcardStageResults, { needsRearrange, needsTyping });
     await moveToNextCard(passed);
-  }, [activeLevel, currentCard, flashcardStageResults, moveToNextCard]);
+  }, [activeLevel, currentCard, flashcardStages, flashcardStageResults, moveToNextCard]);
 
   const advanceAfterMeaning = useCallback(async () => {
-    if (shouldFlashcardTyping(activeLevel, currentCard)) {
+    if (flashcardStages.typing && shouldFlashcardTyping(activeLevel, currentCard)) {
       moveToTypingStage();
-    } else if (shouldFlashcardRearrange(activeLevel, currentCard)) {
+    } else if (flashcardStages.rearrange && shouldFlashcardRearrange(activeLevel, currentCard)) {
       moveToRearrangeStage();
     } else {
       await submitCurrentCard();
     }
-  }, [activeLevel, currentCard, moveToRearrangeStage, moveToTypingStage, submitCurrentCard]);
+  }, [activeLevel, currentCard, flashcardStages, moveToRearrangeStage, moveToTypingStage, submitCurrentCard]);
 
   const advanceAfterTyping = useCallback(async () => {
-    if (shouldFlashcardRearrange(activeLevel, currentCard)) {
+    if (flashcardStages.rearrange && shouldFlashcardRearrange(activeLevel, currentCard)) {
       moveToRearrangeStage();
     } else {
       await submitCurrentCard();
     }
-  }, [activeLevel, currentCard, moveToRearrangeStage, submitCurrentCard]);
+  }, [activeLevel, currentCard, flashcardStages.rearrange, moveToRearrangeStage, submitCurrentCard]);
 
   const handleContinueStage = useCallback(async () => {
     if (!currentCard || !flashcardStageAnswered) return;
@@ -1415,6 +1420,8 @@ export default function App() {
             setSchedules={setSchedules}
             saveSettings={(t, g, type) => saveSettings(t, g, type)}
             saveSchedules={saveSchedules}
+            flashcardStages={flashcardStages}
+            setFlashcardStages={setFlashcardStages}
           />
         )}
 

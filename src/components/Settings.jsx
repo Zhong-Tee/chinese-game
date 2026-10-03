@@ -73,8 +73,31 @@ export default function Settings({
   timerSetting, setTimerSetting,
   gameTimerSetting, setGameTimerSetting,
   typeTimerSetting, setTypeTimerSetting,
-  schedules, setSchedules, saveSettings, saveSchedules
+  schedules, setSchedules, saveSettings, saveSchedules, flashcardStages, setFlashcardStages
 }) {
+  const [stageSaving, setStageSaving] = useState(false);
+  const [stageMessage, setStageMessage] = useState('');
+  const [stageDraft, setStageDraft] = useState(flashcardStages);
+  useEffect(() => { setStageDraft(flashcardStages); }, [flashcardStages]);
+
+  const saveFlashcardStages = async () => {
+    if (!isAdmin || stageSaving) return;
+    setStageSaving(true);
+    setStageMessage('');
+    try {
+      const { data, error } = await supabase.from('game_settings')
+        .update({ flashcard_stages: stageDraft, updated_at: new Date().toISOString() })
+        .eq('id', 1).select('flashcard_stages').single();
+      if (error) throw error;
+      setFlashcardStages({ typing: data.flashcard_stages?.typing !== false, rearrange: data.flashcard_stages?.rearrange !== false });
+      setStageMessage('บันทึกแล้ว มีผลเมื่อเริ่มเล่นรอบใหม่');
+    } catch (error) {
+      setStageMessage('บันทึกไม่สำเร็จ: ' + error.message);
+    } finally {
+      setStageSaving(false);
+    }
+  };
+
   const daysOfWeek = ["จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์", "อาทิตย์"];
   const datesOfMonth = Array.from({ length: 30 }, (_, i) => i + 1);
   const [wrongWordsList, setWrongWordsList] = useState([]);
@@ -439,6 +462,26 @@ export default function Settings({
               >+</button>
             </div>
           </div>
+
+          {isAdmin && (
+            <div className="rounded-3xl border border-white/15 bg-white/5 p-4 space-y-3">
+              <h3 className="text-center font-black text-amber-300">⚙️ ช่วงการเล่น Flash Card</h3>
+              <p className="text-xs text-white/60">ใช้กับผู้เล่นทุกคน ช่วงที่ปิดจะถูกข้ามและไม่นับเป็นคำผิด</p>
+              {[['typing', 'ช่วงที่ 3: พิมพ์คำศัพท์'], ['rearrange', 'ช่วงที่ 4: เรียงประโยค']].map(([key, label]) => (
+                <label key={key} className="flex items-center justify-between gap-3 rounded-2xl bg-white/5 p-3 font-bold text-white">
+                  {label}
+                  <input type="checkbox" checked={stageDraft[key]} disabled={stageSaving}
+                    onChange={(event) => { setStageDraft(prev => ({ ...prev, [key]: event.target.checked })); setStageMessage(''); }}
+                    className="h-5 w-5 accent-orange-500" />
+                </label>
+              ))}
+              <p className="text-xs text-white/50">ช่วงที่ 1 และ 2 ใช้กติกาเดิม ต้องตอบถูกทุกช่วงที่เปิดจึงจะผ่าน</p>
+              <button onClick={saveFlashcardStages} disabled={stageSaving} className="w-full rounded-2xl bg-amber-400 p-3 font-black text-slate-900 disabled:opacity-50">
+                {stageSaving ? 'กำลังบันทึก...' : 'บันทึกช่วงการเล่น'}
+              </button>
+              {stageMessage && <p role="status" className="text-xs text-amber-200">{stageMessage}</p>}
+            </div>
+          )}
 
           <button onClick={() => setPage('select-words')} className="w-full bg-orange-500 text-white p-4 rounded-3xl font-black uppercase italic shadow-lg shadow-orange-100">📂 Select Study Words</button>
           {isAdmin && (

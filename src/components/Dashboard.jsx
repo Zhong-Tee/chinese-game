@@ -405,10 +405,10 @@ export default function Dashboard({
                       ★
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center justify-between gap-2 text-[10px] font-black leading-none">
+                      <span className={`flex items-center justify-between gap-x-2 gap-y-1 text-[10px] font-black leading-none ${mission.star === 2 ? 'flex-wrap' : ''}`}>
                         <span className={`truncate text-white/75 ${mission.unavailable ? 'line-through opacity-50' : ''}`}>{mission.label}</span>
-                        <span className={mission.completed ? 'text-amber-300' : 'text-white/50'}>
-                          {mission.unavailable ? 'ไม่มีกุญแจ' : mission.statusText || (mission.waiting ? 'รอเปิด Level' : `${mission.done}/${mission.total}`)}
+                        <span className={`shrink-0 whitespace-nowrap ${mission.completed ? 'text-amber-300' : 'text-white/50'}`}>
+                          {mission.unavailable ? 'ไม่มีกุญแจ' : mission.statusText || (mission.waiting ? 'รอเปิด Level' : `${mission.star === 2 ? `(${Math.max(0, mission.total - mission.done)}) ` : ''}${mission.done}/${mission.total}`)}
                         </span>
                       </span>
                       <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-white/10">
