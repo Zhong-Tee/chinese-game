@@ -1,13 +1,13 @@
 {
   "name": "my-chinese-game",
   "private": true,
-  "version": "1.3.4",
+  "version": "1.3.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node --test src/utils/math/questionGenerators.test.js src/utils/flashcardProgress.test.js",
+    "test": "node --test src/utils/math/questionGenerators.test.js src/utils/flashcardProgress.test.js src/utils/bookWords.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

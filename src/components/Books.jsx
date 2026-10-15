@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient';
 import { cancelChineseSpeech, speakChinese } from '../utils/chineseSpeech';
 import { recordDailyBookRead } from '../utils/dailyMissionStorage';
+import { bookWordTokens, createBookDictionary } from '../utils/bookWords';
 
 const CATEGORIES = [
   { id: 'daily-life', label: 'ชีวิตประจำวัน', icon: '🏡' },
@@ -244,9 +245,10 @@ function buildShelfEntries(bookRows, seriesRows, readBookIds, allBookRows = book
   return entries.sort((a, b) => String(b.sortDate).localeCompare(String(a.sortDate)));
 }
 
-function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageIndex = null, onSaveProgress, onSelectEpisode, onClose, onComplete, completing = false, onReadingEvent, onEnsureQuiz }) {
+function Reader({ book, allMasterCards = [], seriesEpisodes = [], readBookIds = new Set(), savedPageIndex = null, onSaveProgress, onSelectEpisode, onClose, onComplete, completing = false, onReadingEvent, onEnsureQuiz }) {
   const [showPinyin, setShowPinyin] = useState(() => localStorage.getItem('book-reader-pinyin') !== 'false');
   const [showThai, setShowThai] = useState(() => localStorage.getItem('book-reader-thai') !== 'false');
+  const canLookupWords = !showPinyin && !showThai;
   const [fontIndex, setFontIndex] = useState(() => {
     const stored = Number(localStorage.getItem('book-reader-font-index'));
     return Number.isInteger(stored) && stored >= 0 && stored < FONT_SIZES.length ? stored : 2;
@@ -261,6 +263,8 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
   const [quizAnswers, setQuizAnswers] = useState({});
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizError, setQuizError] = useState('');
+  const [selectedWord, setSelectedWord] = useState(null);
+  const dictionary = useMemo(() => createBookDictionary(allMasterCards), [allMasterCards]);
   const trackedReadingEventsRef = useRef(new Set());
   const pages = Array.isArray(book.pages) ? book.pages : [];
   const quizQuestions = quizQuestionsFromBook(book);
@@ -270,11 +274,57 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
   const targetPageCount = novelInProgress ? 8 : pages.length;
   const isQuizPage = !novelInProgress && pageIndex === pages.length;
   const page = pages[pageIndex] || null;
+  const activeWord = canLookupWords && selectedWord?.pageIndex === pageIndex ? selectedWord : null;
+  const closeWord = () => setSelectedWord(null);
+  const goToPage = (next) => { closeWord(); setPageIndex(next); };
+  const selectWord = (word, paragraphIndex, paragraph) => {
+    if (!canLookupWords) return;
+    if (activeWord?.paragraphIndex === paragraphIndex && activeWord?.offset === word.offset) {
+      closeWord();
+      return;
+    }
+    setSelectedWord({ ...word, paragraphIndex, pageIndex, contextThai: paragraph.thai || '', contextLabel: paragraph.contextLabel || 'คำแปลย่อหน้า' });
+  };
+
+  const bookHeading = { hanzi: book.title_cn || '', pinyin: book.title_pinyin || '', thai: book.title_th || '', contextLabel: 'คำแปลชื่อเรื่อง' };
+  const hasChapterHeading = isLegacyNovel && Boolean(page?.heading_cn);
+  const pageHeading = hasChapterHeading
+    ? { hanzi: page.heading_cn, pinyin: page.heading_pinyin || '', thai: page.heading_thai || '', contextLabel: 'คำแปลชื่อบท' }
+    : bookHeading;
+  const renderTitle = (heading, selectionIndex, compact = false) => {
+    if (!canLookupWords) return <span className={compact ? 'block truncate' : 'break-words'}>{heading.hanzi}</span>;
+    const selected = activeWord?.paragraphIndex === selectionIndex;
+    return (
+      <button
+        type="button"
+        data-reader-word
+        aria-label={'ดูพินอินและ' + heading.contextLabel + ' ' + heading.hanzi}
+        aria-pressed={selected}
+        aria-controls={selected ? 'reader-word-detail' : undefined}
+        onClick={() => selectWord({ hanzi: heading.hanzi, pinyin: heading.pinyin, offset: 0 }, selectionIndex, heading)}
+        className={'max-w-full cursor-pointer rounded-md text-left transition-colors focus-visible:outline-2 focus-visible:outline-orange-500 ' + (compact ? 'block truncate ' : 'break-words ') + (selected ? 'bg-amber-200 text-orange-950 ring-2 ring-amber-400' : 'hover:bg-orange-50')}
+      >
+        {heading.hanzi}
+      </button>
+    );
+  };
+
+  useEffect(() => {
+    if (!activeWord) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setSelectedWord(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeWord]);
   const pageImageUrl = page?.image_url || ((!isYouthNovel && book.content_image_url && pageIndex === Number(book.content_image_page ?? Math.floor(pages.length / 2))) ? book.content_image_url : '');
   const speechText = useMemo(() => (page?.paragraphs || [])
     .map((paragraph) => (paragraph.segments || []).map((segment) => segment.hanzi).join(''))
     .join(' '), [page]);
-  const saveToggle = (key, setter) => setter((value) => { localStorage.setItem(key, String(!value)); return !value; });
+  const saveToggle = (key, setter) => {
+    closeWord();
+    setter((value) => { localStorage.setItem(key, String(!value)); return !value; });
+  };
   const changeFont = (delta) => setFontIndex((value) => {
     const next = Math.max(0, Math.min(FONT_SIZES.length - 1, value + delta));
     localStorage.setItem('book-reader-font-index', String(next));
@@ -365,14 +415,14 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
   const openQuiz = async () => {
     setQuizError('');
     if (quizQuestions.length === 3) {
-      setPageIndex(pages.length);
+      goToPage(pages.length);
       return;
     }
     setQuizLoading(true);
     try {
       const updatedBook = await onEnsureQuiz?.(book);
       if (!updatedBook) throw new Error('สร้างคำถามไม่สำเร็จ');
-      setPageIndex(Array.isArray(updatedBook.pages) ? updatedBook.pages.length : pages.length);
+      goToPage(Array.isArray(updatedBook.pages) ? updatedBook.pages.length : pages.length);
     } catch (error) {
       setQuizError(error?.message || 'สร้างคำถามท้ายเล่มไม่สำเร็จ');
     } finally {
@@ -397,10 +447,10 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
     const elapsed = Date.now() - start.time;
     if (elapsed > 1000 || Math.abs(deltaX) < 60 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.25) return;
     if (deltaX < 0) {
-      if (pageIndex < pages.length - 1) setPageIndex((value) => Math.min(pages.length - 1, value + 1));
+      if (pageIndex < pages.length - 1) goToPage((value) => Math.min(pages.length - 1, value + 1));
       else if (!novelInProgress && !isQuizPage) openQuiz();
     } else if (pageIndex > 0) {
-      setPageIndex((value) => Math.max(0, value - 1));
+      goToPage((value) => Math.max(0, value - 1));
     }
   };
   const answeredCount = quizQuestions.filter((_, index) => quizAnswers[index] !== undefined).length;
@@ -419,7 +469,7 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
           </button>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
-              <div className={`min-w-0 truncate text-sm font-black text-slate-900 ${seriesEpisodes.length > 1 ? 'max-w-[40%] shrink' : 'flex-1'}`}>{book.title_cn}</div>
+              <div className={`min-w-0 truncate text-sm font-black text-slate-900 ${seriesEpisodes.length > 1 ? 'max-w-[40%] shrink' : 'flex-1'}`}>{renderTitle(bookHeading, -1, true)}</div>
               {seriesEpisodes.length > 1 && (
                 <select value={book.id} onChange={(event) => onSelectEpisode?.(event.target.value)} aria-label="เลือกตอนของซีรีส์" className="min-w-0 flex-1 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-[11px] font-black text-violet-800 outline-none">
                   {seriesEpisodes.map((episode) => <option key={episode.id} value={episode.id}>ตอน {episode.episode_number || 1}{readBookIds.has(episode.id) ? ' ✓' : ''} — {episode.title_th || episode.title_cn}</option>)}
@@ -438,7 +488,7 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
           <button type="button" onClick={() => changeFont(1)} disabled={fontIndex === FONT_SIZES.length - 1} className="h-10 rounded-xl bg-slate-100 text-lg font-black disabled:opacity-30" aria-label="เพิ่มขนาดอักษร">A+</button>
         </div>
       </header>
-      <main ref={readerScrollRef} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchCancel={() => { touchStartRef.current = null; }} className="flex-1 touch-pan-y overflow-y-auto px-5 py-6">
+      <main onClick={(event) => { if (!event.target.closest('[data-reader-word]')) closeWord(); }} ref={readerScrollRef} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchCancel={() => { touchStartRef.current = null; }} className="flex-1 touch-pan-y overflow-y-auto px-5 py-6">
         <article className="mx-auto max-w-2xl rounded-[2rem] border border-orange-100 bg-white p-5 shadow-xl sm:p-8">
           {isQuizPage ? (
             <div>
@@ -472,7 +522,7 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
           {(pageIndex === 0 || isLegacyNovel) && (
             <div className="mb-5 min-w-0">
               {isLegacyNovel && <p className="mb-1 text-xs font-black uppercase tracking-wider text-emerald-600">บทที่ {pageIndex + 1}</p>}
-              <h2 className="text-2xl font-black text-slate-900">{isLegacyNovel ? (page.heading_cn || book.title_cn) : book.title_cn}</h2>
+              <h2 className="text-2xl font-black text-slate-900">{renderTitle(pageHeading, hasChapterHeading ? -2 : -1)}</h2>
               {showPinyin && (isLegacyNovel ? page.heading_pinyin : book.title_pinyin) && <p className="mt-1 text-sm font-bold text-orange-500">{isLegacyNovel ? page.heading_pinyin : book.title_pinyin}</p>}
               {showThai && (isLegacyNovel ? page.heading_thai : book.title_th) && <p className="mt-1 text-sm font-bold text-slate-500">{isLegacyNovel ? page.heading_thai : book.title_th}</p>}
             </div>
@@ -486,7 +536,13 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
             {(page.paragraphs || []).map((paragraph, paragraphIndex) => (
               <div key={paragraphIndex} className="space-y-2">
                 <div className="flex flex-wrap items-end gap-x-2 gap-y-3 leading-relaxed" style={{ fontSize: FONT_SIZES[fontIndex] }}>
-                  {(paragraph.segments || []).map((segment, segmentIndex) => <span key={`${segment.hanzi}-${segmentIndex}`} className="inline-flex flex-col items-center">{showPinyin && segment.pinyin && segment.pinyin.trim().toLocaleLowerCase() !== segment.hanzi.trim().toLocaleLowerCase() && <span className="mb-0.5 text-[0.52em] font-bold leading-tight text-orange-500">{segment.pinyin}</span>}<span className="font-semibold text-slate-900">{segment.hanzi}</span></span>)}
+                  {bookWordTokens(paragraph.segments || [], dictionary).map((word) => {
+                    const selected = activeWord?.paragraphIndex === paragraphIndex && activeWord?.offset === word.offset;
+                    const content = <>{showPinyin && word.pinyin && word.pinyin.trim().toLocaleLowerCase() !== word.hanzi.trim().toLocaleLowerCase() && <span className="mb-0.5 text-[0.52em] font-bold leading-tight text-orange-500">{word.pinyin}</span>}<span className="font-semibold">{word.hanzi}</span></>;
+                    return canLookupWords && word.clickable
+                      ? <button key={word.offset} type="button" data-reader-word aria-label={'ดูพินอินและคำแปลย่อหน้า ' + word.hanzi} aria-pressed={selected} aria-controls={selected ? 'reader-word-detail' : undefined} onClick={() => selectWord(word, paragraphIndex, paragraph)} className={'inline-flex cursor-pointer flex-col items-center rounded-md text-inherit transition-colors focus-visible:outline-2 focus-visible:outline-orange-500 ' + (selected ? 'bg-amber-200 text-orange-950 ring-2 ring-amber-400' : 'text-slate-900 hover:bg-orange-50')}>{content}</button>
+                      : <span key={word.offset} className="inline-flex flex-col items-center text-slate-900">{content}</span>;
+                  })}
                 </div>
                 {showThai && paragraph.thai && <p className="rounded-xl bg-orange-50 px-3 py-2 text-sm leading-relaxed text-slate-600">{paragraph.thai}</p>}
               </div>
@@ -499,6 +555,18 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
           </>}
         </article>
       </main>
+      {activeWord && (
+        <aside id="reader-word-detail" aria-label="พินอินและคำแปลของข้อความที่เลือก" className="max-h-[35dvh] shrink-0 overflow-y-auto border-t border-amber-200 bg-white px-5 py-3 shadow-lg">
+          <div className="mx-auto flex max-w-2xl items-start gap-4">
+            <div className="min-w-0 flex-1" aria-live="polite">
+              <p className="break-words text-2xl font-black text-slate-900">{activeWord.hanzi}</p>
+              {activeWord.pinyin && <p className="mt-1 break-words text-base font-bold text-orange-600">{activeWord.pinyin}</p>}
+              {activeWord.contextThai && <p className="mt-2 break-words text-sm leading-relaxed text-slate-600">{activeWord.contextLabel}: {activeWord.contextThai}</p>}
+            </div>
+            <button type="button" onClick={closeWord} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-xl text-slate-600" aria-label="ปิดคำแปล">×</button>
+          </div>
+        </aside>
+      )}
       {showExpandedImage && (
         <div className="fixed inset-0 z-[170] flex items-center justify-center bg-slate-950/90 p-3 backdrop-blur-sm sm:p-6" role="dialog" aria-modal="true" aria-label="ภาพประกอบแบบขยาย" onMouseDown={(event) => event.target === event.currentTarget && setShowExpandedImage(false)}>
           <img src={pageImageUrl} alt="ภาพประกอบเนื้อหาแบบขยาย" className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl" />
@@ -509,17 +577,17 @@ function Reader({ book, seriesEpisodes = [], readBookIds = new Set(), savedPageI
       )}
       <footer className="shrink-0 border-t border-orange-200 bg-[#FBF4E6] px-4 pb-[max(0.8rem,env(safe-area-inset-bottom))] pt-3">
         <div className="mx-auto flex max-w-3xl items-center justify-center gap-1 sm:gap-2">
-          <button type="button" onClick={() => setPageIndex(0)} disabled={pageIndex === 0} className="flex h-12 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 disabled:opacity-30 sm:w-11" aria-label="ไปหน้าแรก" title="หน้าแรก">
+          <button type="button" onClick={() => goToPage(0)} disabled={pageIndex === 0} className="flex h-12 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 disabled:opacity-30 sm:w-11" aria-label="ไปหน้าแรก" title="หน้าแรก">
             <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path d="M6 5v14M18 6l-6 6 6 6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
-          <button type="button" onClick={() => setPageIndex((value) => Math.max(0, value - 1))} disabled={pageIndex === 0} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-200 text-slate-700 transition active:scale-95 disabled:opacity-30" aria-label="หน้าก่อนหน้า" title="ก่อนหน้า">
+          <button type="button" onClick={() => goToPage((value) => Math.max(0, value - 1))} disabled={pageIndex === 0} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-200 text-slate-700 transition active:scale-95 disabled:opacity-30" aria-label="หน้าก่อนหน้า" title="ก่อนหน้า">
             <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true"><path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
           <div className="min-w-20 flex-1 text-center text-sm font-black tabular-nums text-slate-600" aria-live="polite">{isLegacyNovel ? 'บท' : 'หน้า'} {Math.min(pageIndex + 1, targetPageCount)} / {targetPageCount}</div>
-          <button type="button" onClick={() => setPageIndex((value) => Math.min(pages.length - 1, value + 1))} disabled={isQuizPage || pageIndex >= pages.length - 1} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-sm transition active:scale-95 disabled:bg-slate-100 disabled:text-slate-600 disabled:opacity-30" aria-label="หน้าถัดไป" title="ถัดไป">
+          <button type="button" onClick={() => goToPage((value) => Math.min(pages.length - 1, value + 1))} disabled={isQuizPage || pageIndex >= pages.length - 1} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-sm transition active:scale-95 disabled:bg-slate-100 disabled:text-slate-600 disabled:opacity-30" aria-label="หน้าถัดไป" title="ถัดไป">
             <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
-          <button type="button" onClick={() => setPageIndex(Math.max(0, pages.length - 1))} disabled={isQuizPage || pageIndex >= pages.length - 1} className="flex h-12 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 disabled:opacity-30 sm:w-11" aria-label="ไปหน้าสุดท้าย" title="สุดท้าย">
+          <button type="button" onClick={() => goToPage(Math.max(0, pages.length - 1))} disabled={isQuizPage || pageIndex >= pages.length - 1} className="flex h-12 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 disabled:opacity-30 sm:w-11" aria-label="ไปหน้าสุดท้าย" title="สุดท้าย">
             <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path d="M18 5v14M6 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
         </div>
@@ -1023,7 +1091,7 @@ export default function Books({ user, isAdmin = false, setPage, allMasterCards =
         </div>
       )}
       {showCreate && <CreateBookModal user={user} isAdmin={isAdmin} allMasterCards={allMasterCards} selectedIds={selectedIds} quotaUsed={quotaUsed} quotaLimit={DAILY_BOOK_LIMIT} onClose={() => setShowCreate(false)} onCreated={async (book) => { setShowCreate(false); setBooks((current) => [book, ...current.filter((item) => item.id !== book.id)]); setTab('mine'); setCurrentPage(1); if (['ready', 'partial'].includes(book.status)) setActiveBook(book); await loadBooks(); }} />}
-      {activeBook && <Reader key={activeBook.id} book={activeBook} seriesEpisodes={activeSeriesEpisodes} readBookIds={readBookIds} savedPageIndex={bookProgress.has(activeBook.id) ? bookProgress.get(activeBook.id) : null} onSaveProgress={saveBookProgress} onSelectEpisode={(episodeId) => setActiveBook(activeSeriesEpisodes.find((episode) => episode.id === episodeId) || activeBook)} onClose={() => setActiveBook(null)} onComplete={completeBook} completing={completingBookId === activeBook.id} onReadingEvent={recordReadingEvent} onEnsureQuiz={ensureBookQuiz} />}
+      {activeBook && <Reader key={activeBook.id} book={activeBook} allMasterCards={allMasterCards} seriesEpisodes={activeSeriesEpisodes} readBookIds={readBookIds} savedPageIndex={bookProgress.has(activeBook.id) ? bookProgress.get(activeBook.id) : null} onSaveProgress={saveBookProgress} onSelectEpisode={(episodeId) => setActiveBook(activeSeriesEpisodes.find((episode) => episode.id === episodeId) || activeBook)} onClose={() => setActiveBook(null)} onComplete={completeBook} completing={completingBookId === activeBook.id} onReadingEvent={recordReadingEvent} onEnsureQuiz={ensureBookQuiz} />}
     </div>
   );
 }
