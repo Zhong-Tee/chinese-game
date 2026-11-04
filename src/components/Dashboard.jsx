@@ -1,3 +1,4 @@
+import ThemeSettings from './ThemeSettings';
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import {
@@ -577,6 +578,7 @@ export default function Dashboard({
             </div>
 
             <div className="overflow-y-auto">
+              <div className="px-5 py-4"><ThemeSettings /></div>
               <div className="px-5 py-4 border-b border-white/10">
                 <div className="text-xs font-black text-white/50 uppercase mb-2">อาวุธ (สูงสุด 3 • ชนิดละ {MAX_ITEM_CARRY})</div>
                 <div className="grid grid-cols-3 gap-3 mb-3">

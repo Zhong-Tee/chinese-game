@@ -1,3 +1,4 @@
+import ThemeSettings from './ThemeSettings';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { dailyMissionErrorMessage, DEFAULT_DAILY_MISSION_CONFIG, fetchDailyMissionConfig, localDateKey } from '../utils/dailyMissionStorage';
@@ -285,6 +286,7 @@ export default function Settings({
       >
         <button onClick={() => setPage('dashboard')} className="text-orange-400 font-black text-sm uppercase italic underline">← Back</button>
         <h2 className="text-2xl font-black text-center uppercase italic">Settings</h2>
+        <ThemeSettings />
         
         <div className="bg-white/5 p-6 rounded-[2.5rem] border-2 border-white/10 shadow-sm space-y-8">
           {/* ความเร็วเสียงอ่าน */}

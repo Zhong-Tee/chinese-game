@@ -271,8 +271,8 @@ export default function FlashcardGame({
 
       <div className="w-full flex flex-col">
         <div
-          className="w-full rounded-[1.8rem] border-4 border-white/80 shadow-2xl p-4 sm:p-5 flex flex-col"
-          style={{ backgroundColor: pastelCardBackground }}
+          className="flashcard-question-panel w-full rounded-[1.8rem] border-4 border-white/80 shadow-2xl p-4 sm:p-5 flex flex-col"
+          style={{ backgroundColor: `var(--flashcard-question-background, ${pastelCardBackground})` }}
         >
           <div className="text-center mb-3">
             <p className="text-xs font-black uppercase italic text-orange-600">{stageTitle}</p>
