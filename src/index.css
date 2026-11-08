@@ -1040,6 +1040,26 @@ body {
 /* Appearance preference: preserve artwork and saturated game/action colors. */
 :root { --page: #fbf4e6; --panel: #fff; --ink: #1e293b; --muted: #64748b; --edge: #cbd5e1; }
 :root:is([data-theme="dark"], [data-theme="original"]) { --page: #0a0e1a; --panel: #172033; --ink: #e2e8f0; --muted: #a8b5c9; --edge: #3b4961; }
+
+/* Native select menus need their own foreground/background and color scheme.
+   Otherwise Windows may draw a white popup with inherited dark-theme text. */
+.conversation-lessons select,
+.conversation-lessons select option,
+.conversation-lessons input:not([type="checkbox"]):not([type="radio"]) {
+  color: var(--ink);
+  background-color: var(--panel);
+  border-color: var(--edge);
+  color-scheme: light;
+}
+:root:is([data-theme="dark"], [data-theme="original"]) .conversation-lessons select,
+:root:is([data-theme="dark"], [data-theme="original"]) .conversation-lessons select option,
+:root:is([data-theme="dark"], [data-theme="original"]) .conversation-lessons input:not([type="checkbox"]):not([type="radio"]) {
+  color-scheme: dark;
+}
+.conversation-lessons input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
 html, body, #root { background-color: var(--page); }
 .theme-settings { min-width: 0; padding: 1rem; border: 1px solid var(--edge); border-radius: 1.25rem; background: var(--panel); color: var(--ink); }
 .theme-settings legend { padding: 0 .4rem; font-weight: 900; }

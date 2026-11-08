@@ -7,6 +7,7 @@ import Settings from './components/Settings';
 import FlashcardGame from './components/FlashcardGame';
 import Library from './components/Library';
 import Books from './components/Books';
+import ConversationLessons from './components/ConversationLessons';
 import WordMatchGame from './components/WordMatchGame';
 import ClassSchedule from './components/ClassSchedule';
 import Score from './components/Score';
@@ -1163,10 +1164,10 @@ export default function App() {
       </div>
     );
   }
-  const shouldShowTopBar = page !== 'fc-play' && page !== 'dashboard' && page !== 'lucky-draw' && page !== 'battle' && page !== 'class-schedule' && page !== 'books';
+  const shouldShowTopBar = page !== 'fc-play' && page !== 'dashboard' && page !== 'lucky-draw' && page !== 'battle' && page !== 'class-schedule' && page !== 'books' && page !== 'conversation';
   const isSelectWordsPage = page === 'select-words';
   const isHubPage = page === 'dashboard' || page === 'lucky-draw';
-  const isCreamPage = page === 'fc-play' || page === 'fc-chars' || page === 'library' || page === 'books' || page === 'statistics' || page === 'word-match' || page === 'class-schedule' || page === 'maths' || page === 'math-play';
+  const isCreamPage = page === 'fc-play' || page === 'fc-chars' || page === 'library' || page === 'books' || page === 'conversation' || page === 'statistics' || page === 'word-match' || page === 'class-schedule' || page === 'maths' || page === 'math-play';
 
   return (
     <div
@@ -1379,6 +1380,7 @@ export default function App() {
         )}
         {page === 'library' && <Library setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} libraryDetail={libraryDetail} setLibraryDetail={setLibraryDetail} libFlipped={libFlipped} setLibFlipped={setLibFlipped} />}
         {page === 'books' && <Books user={user} isAdmin={isAdmin} setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} />}
+        {page === 'conversation' && <ConversationLessons user={user} setPage={setPage} />}
         {page === 'word-match' && <WordMatchGame user={user} setPage={setPage} allMasterCards={allMasterCards} selectedIds={selectedIds} />}
         {page === 'class-schedule' && <ClassSchedule user={user} isAdmin={isAdmin} setPage={setPage} />}
         {page === 'maths' && (

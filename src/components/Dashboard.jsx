@@ -18,7 +18,7 @@ import { SCHEDULED_LEVEL_KEYS, isKeyLevelPlayableToday } from '../utils/levelSch
 const EFFECT_ICON = { add_hp: '❤️', add_attack: '⚔️', heal: '🧪', shield: '🛡️', add_time: '⏳', bomb: '💣' };
 
 const MODE_BUTTONS = [
-  { page: 'games', label: 'Battle', icon: '⚔️', grad: 'from-red-500 to-red-700' },
+  { page: 'conversation', label: 'ฝึกสนทนา', icon: '💬', grad: 'from-teal-500 to-teal-700' },
   { page: 'library', label: 'Library', icon: '📚', grad: 'from-orange-400 to-orange-600' },
   { page: 'maths', label: 'Maths', icon: '🧮', grad: 'from-blue-500 to-indigo-700' },
   { page: 'fc-chars', label: 'Flashcards', icon: '🎴', grad: 'from-emerald-400 to-emerald-600' },
@@ -532,11 +532,11 @@ export default function Dashboard({
           <button
             onClick={() => setPage('games')}
             className="hub-fight-btn relative -mt-5 sm:-mt-6 w-[4.5rem] h-[4.5rem] sm:w-[5rem] sm:h-[5rem] rounded-full p-0 overflow-hidden active:scale-95 transition-transform z-10"
-            aria-label="Fight"
+            aria-label="Battle"
           >
             <img
               src={fightBtnImg}
-              alt="Fight"
+              alt="Battle"
               className="w-full h-full object-cover pointer-events-none select-none"
               draggable={false}
             />

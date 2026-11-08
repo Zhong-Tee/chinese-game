@@ -58,6 +58,8 @@ If you are developing a production application, we recommend using TypeScript wi
 2. รัน SQL จากไฟล์ `supabase_migration_user_wrong_words.sql` ในโปรเจกต์นี้
 # AI Books setup
 
+เมนูฝึกสนทนา: ดูขั้นตอนติดตั้งฐานข้อมูลและ Edge Function ที่ [docs/conversation-lessons.md](docs/conversation-lessons.md)
+
 ฟีเจอร์ Books ใช้ Supabase Edge Function เพื่อไม่เปิดเผย OpenAI API key ในเบราว์เซอร์
 
 1. รัน `sql/ai_books.sql` ใน Supabase SQL Editor
