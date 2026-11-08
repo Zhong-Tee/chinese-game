@@ -17,8 +17,19 @@ function Chinese({ text, pinyin, lookup }) {
   return <span className="inline-flex flex-col items-center gap-1"><span lang="zh-CN">{text}</span>{pronunciation && <span className="text-sm font-normal text-teal-700">{pronunciation}</span>}</span>;
 }
 function Prompt({ text, pinyin, lookup }) {
-  return String(text).split(/([\p{Script=Han}]+)/gu).map((part, i) => /\p{Script=Han}/u.test(part)
-    ? <Chinese key={i} text={part} pinyin={pinyin} lookup={lookup} /> : part);
+  const source = String(text);
+  const firstChinese = source.search(/\p{Script=Han}/u);
+  if (firstChinese < 0) return source;
+  // Keep punctuation and blanks with the Chinese sentence, below the Thai instruction.
+  const prefix = source.slice(0, firstChinese);
+  const boundary = prefix.search(/[\s"'“”‘’「『]*$/u);
+  const instruction = source.slice(0, boundary).trim();
+  const sentence = source.slice(boundary).trim();
+  return <>
+    {instruction && <span className="block">{instruction}</span>}
+    <span className={`block leading-loose ${instruction ? 'mt-3' : ''}`}>{sentence.split(/([\p{Script=Han}]+)/gu).map((part, i) => /\p{Script=Han}/u.test(part)
+      ? <Chinese key={i} text={part} pinyin={pinyin} lookup={lookup} /> : part)}</span>
+  </>;
 }
 
 function usePracticeAudio() {
@@ -135,28 +146,94 @@ function Exercise({ course, unitIndex, index, onSaved, onNext, pinyin, lookup, a
   </>;
 }
 
-function MemoryRound({ course, unitIndex, round, initialProgress, onSaved, onNext, pinyin, lookup, audio }) {
+function MatchingVocabulary({ course, unitIndex, initialProgress, onSaved, onNext, pinyin, lookup, audio }) {
+  const unit = course.content.units[unitIndex];
+  const [initialPending] = useState(() => {
+    const pending = memoryPending(unit, initialProgress, 'start');
+    return pending.length ? pending : unit.vocabulary.map((_, i) => i);
+  });
+  const [cnOrder] = useState(() => shuffleIndices(unit.vocabulary.length));
+  const [thOrder] = useState(() => shuffleIndices(unit.vocabulary.length));
+  const [matchedCn, setMatchedCn] = useState(() => new Set(unit.vocabulary.map((_, i) => i).filter(i => !initialPending.includes(i))));
+  const [matchedTh, setMatchedTh] = useState(() => new Set(unit.vocabulary.map((_, i) => i).filter(i => !initialPending.includes(i))));
+  const [selected, setSelected] = useState({ cn: null, th: null });
+  const selection = useRef(selected);
+  const [feedback, setFeedback] = useState(null);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const lock = useRef(false);
+  useAutoAudio(unit.vocabulary[initialPending[0]].cn, audio.play, audio.cancel);
+  async function choose(side, index) {
+    if (lock.current || (side === 'cn' ? matchedCn : matchedTh).has(index)) return;
+    const pair = { ...selection.current, [side]: index };
+    selection.current = pair; setSelected(pair); setFeedback(null); setError('');
+    if (side === 'cn') audio.play(unit.vocabulary[index].cn);
+    if (pair.cn === null || pair.th === null) return;
+    lock.current = true; setSaving(true); audio.cancel();
+    try {
+      const { data, error } = await supabase.rpc('answer_conversation_vocabulary', {
+        p_course: course.id, p_unit: unitIndex, p_round: 'start', p_word: pair.cn, p_choice: pair.th,
+      });
+      if (error) throw error;
+      const correct = data.memory.start[pair.cn].correct;
+      onSaved(data); setFeedback({ ...pair, correct });
+      if (correct) {
+        setMatchedCn(current => new Set([...current, pair.cn]));
+        setMatchedTh(current => new Set([...current, pair.th]));
+        audio.correct();
+      }
+    } catch { setError('บันทึกคู่คำศัพท์ไม่ได้ กรุณาเลือกคู่นี้อีกครั้ง'); }
+    finally {
+      selection.current = { cn: null, th: null }; setSelected(selection.current);
+      lock.current = false; setSaving(false);
+    }
+  }
+  function cardClass(side, index) {
+    const matched = (side === 'cn' ? matchedCn : matchedTh).has(index);
+    const wrong = feedback && !feedback.correct && feedback[side] === index;
+    return `${secondary} flex min-h-20 min-w-0 flex-col items-center justify-center break-words ${matched ? '!opacity-100 border-emerald-500 bg-emerald-50 text-emerald-900' : wrong ? 'border-red-500 bg-red-50' : selected[side] === index ? 'ring-2 ring-teal-500' : ''}`;
+  }
+  const complete = matchedCn.size === unit.vocabulary.length;
+  return <section className={panel}>
+    <h3 className="text-xl font-black">{ROUND_LABELS.start}</h3>
+    <p className="text-sm text-slate-500">จับคู่ถูกแล้ว {matchedCn.size}/{unit.vocabulary.length} คู่ · เลือกสองฝั่งเพื่อตรวจทันที เลือกฝั่งไหนก่อนก็ได้</p>
+    <Listen text={unit.vocabulary[selection.current.cn ?? initialPending[0]].cn} play={audio.play} />
+    <div role="status" aria-live="polite" data-feedback={feedback ? feedback.correct ? 'correct' : 'incorrect' : 'idle'} className="conversation-match-feedback min-h-12 rounded-xl border p-3 font-semibold leading-relaxed">
+      {saving ? 'กำลังตรวจและบันทึก…' : feedback ? <>{feedback.correct ? '✓ ถูกต้อง! ' : 'ยังไม่ถูก · คำตอบคือ '}{unit.vocabulary[feedback.cn].cn} = {unit.vocabulary[feedback.cn].th}{!feedback.correct && ' · ลองเลือกคู่ใหม่ได้เลย'}</> : 'แตะคำจีนหนึ่งคำและคำแปลหนึ่งคำ ไม่ต้องกดตรวจคำตอบ'}
+    </div>
+    {error && <p role="alert" className="text-red-700">{error}</p>}
+    <div className="grid grid-cols-2 gap-3 font-bold"><p>คำศัพท์จีน</p><p>ความหมายไทย</p></div>
+    <div className="grid auto-rows-fr grid-cols-2 gap-3">{cnOrder.flatMap((cn, at) => {
+      const th = thOrder[at];
+      return [
+        <button key={`cn-${cn}`} type="button" aria-pressed={selected.cn === cn} disabled={saving || matchedCn.has(cn)} className={cardClass('cn', cn)} onClick={() => choose('cn', cn)}><Chinese text={unit.vocabulary[cn].cn} pinyin={pinyin} lookup={lookup} />{matchedCn.has(cn) && <span className="text-xs">✓ จับคู่แล้ว</span>}</button>,
+        <button key={`th-${th}`} type="button" aria-pressed={selected.th === th} disabled={saving || matchedTh.has(th)} className={cardClass('th', th)} onClick={() => choose('th', th)}>{unit.vocabulary[th].th}{matchedTh.has(th) && <span className="text-xs">✓ จับคู่แล้ว</span>}</button>,
+      ];
+    })}</div>
+    {complete && <><p className="font-bold text-emerald-700">✓ จับคู่ครบทุกคำแล้ว บันทึกผลเรียบร้อย</p><button className={`${primary} w-full`} onClick={onNext}>เรียนต่อ →</button></>}
+  </section>;
+}
+
+function RecallRound({ course, unitIndex, round, initialProgress, onSaved, onNext, pinyin, lookup, audio }) {
   const unit = course.content.units[unitIndex];
   const [queue, setQueue] = useState(() => {
     const pending = memoryPending(unit, initialProgress, round);
     return shuffleIndices(pending.length || unit.vocabulary.length).map(i => pending.length ? pending[i] : i);
   });
-  const [left, setLeft] = useState(null);
   const [right, setRight] = useState(null);
   const [result, setResult] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const lock = useRef(false);
-  const [thaiOrder] = useState(() => shuffleIndices(unit.vocabulary.length));
   const [turn, setTurn] = useState(0);
   const [choices, setChoices] = useState(() => vocabularyChoices(unit, queue[0]));
-  const word = round === 'start' ? left ?? queue[0] : queue[0];
+  const word = queue[0];
   const item = unit.vocabulary[word];
   // End round asks Thai -> Chinese. Read an instruction in Chinese instead of leaking its answer.
   const speech = !queue.length ? '' : round === 'end' ? '请选择正确的词语。' : unit.vocabulary[queue[0]].cn;
   useAutoAudio(speech, audio.play, audio.cancel, turn);
   async function check() {
-    if (lock.current || right === null || (round === 'start' && left === null)) return;
+    if (lock.current || right === null) return;
     lock.current = true; setSaving(true); setError(''); audio.cancel();
     try {
       const { data, error } = await supabase.rpc('answer_conversation_vocabulary', { p_course: course.id, p_unit: unitIndex, p_round: round, p_word: word, p_choice: right });
@@ -170,21 +247,25 @@ function MemoryRound({ course, unitIndex, round, initialProgress, onSaved, onNex
   function next() {
     const ordered = [word, ...queue.filter(i => i !== word)];
     const nextQueue = retryVocabulary(ordered, result.correct);
-    setQueue(nextQueue); setLeft(null); setRight(null); setResult(null);
+    setQueue(nextQueue); setRight(null); setResult(null);
     setTurn(value => value + 1);
     if (nextQueue.length) setChoices(vocabularyChoices(unit, nextQueue[0]));
   }
   if (!queue.length) return <section className={panel}><h3 className="text-xl font-black">✓ จำคำศัพท์ครบช่วงนี้แล้ว</h3><p>ตอบถูกครบ {unit.vocabulary.length} คำ บันทึกไว้ให้เรียนต่อได้แล้ว</p><button className={`${primary} w-full`} onClick={onNext}>เรียนต่อ →</button></section>;
   return <>
     <section className={panel}><h3 className="text-xl font-black">{ROUND_LABELS[round]}</h3><p className="text-sm text-slate-500">เหลือ {queue.length} คำ · ตอบผิดจะกลับมาอีกหลังคำอื่น จนตอบถูกครบ</p><Listen text={speech} play={audio.play} />
-      {round === 'start' ? <div className="grid grid-cols-2 gap-3"><div className="space-y-3"><p className="font-bold">คำศัพท์จีน</p>{queue.map(i => <button key={i} className={`${secondary} w-full ${left === i ? 'ring-2 ring-teal-500' : ''}`} disabled={saving || !!result} onClick={() => { setLeft(i); audio.play(unit.vocabulary[i].cn); }}><Chinese text={unit.vocabulary[i].cn} pinyin={pinyin} lookup={lookup} /></button>)}</div><div className="space-y-3"><p className="font-bold">ความหมายไทย</p>{thaiOrder.filter(i => queue.includes(i)).map(i => <button key={i} className={`${secondary} w-full ${right === i ? 'ring-2 ring-teal-500' : ''}`} disabled={saving || !!result} onClick={() => setRight(i)}>{unit.vocabulary[i].th}</button>)}</div></div> : <>
+      <>
         <p className="text-sm font-bold">{round === 'middle' ? 'คำนี้หมายถึงอะไร?' : 'ความหมายนี้ตรงกับคำจีนใด?'}</p><div className="text-2xl font-bold">{round === 'middle' ? <Chinese text={item.cn} pinyin={pinyin} lookup={lookup} /> : item.th}</div>
         <div className="grid gap-3">{choices.map(i => <button key={i} className={`${secondary} text-left ${right === i ? 'ring-2 ring-teal-500' : ''}`} disabled={saving || !!result} onClick={() => setRight(i)}>{round === 'middle' ? unit.vocabulary[i].th : <Chinese text={unit.vocabulary[i].cn} pinyin={pinyin} lookup={lookup} />}</button>)}</div>
-      </>}
+      </>
     </section>
     {error && <p role="alert" className="text-red-700">{error}</p>}
-    {result ? <section role="status" className={`${panel} ${result.correct ? 'bg-emerald-50' : 'bg-amber-50'}`}><h3 className="font-black">{result.correct ? '✓ ถูกต้อง!' : 'ยังไม่ถูก คำนี้จะกลับมาให้ฝึกอีกครั้ง'}</h3><div className="text-xl"><Chinese text={item.cn} pinyin={pinyin} lookup={lookup} /></div><p>{item.th}</p><Listen text={item.cn} play={audio.play} /><button className={`${primary} w-full`} onClick={next}>ไปต่อ →</button></section> : <button className={`${primary} w-full`} disabled={saving || right === null || (round === 'start' && left === null)} onClick={check}>{saving ? 'กำลังบันทึก…' : round === 'start' ? 'ตรวจคู่คำศัพท์' : 'ตรวจคำตอบ'}</button>}
+    {result ? <section role="status" className={`${panel} ${result.correct ? 'bg-emerald-50' : 'bg-amber-50'}`}><h3 className="font-black">{result.correct ? '✓ ถูกต้อง!' : 'ยังไม่ถูก คำนี้จะกลับมาให้ฝึกอีกครั้ง'}</h3><div className="text-xl"><Chinese text={item.cn} pinyin={pinyin} lookup={lookup} /></div><p>{item.th}</p><Listen text={item.cn} play={audio.play} /><button className={`${primary} w-full`} onClick={next}>ไปต่อ →</button></section> : <button className={`${primary} w-full`} disabled={saving || right === null} onClick={check}>{saving ? 'กำลังบันทึก…' : 'ตรวจคำตอบ'}</button>}
   </>;
+}
+
+function MemoryRound(props) {
+  return props.round === 'start' ? <MatchingVocabulary {...props} /> : <RecallRound {...props} />;
 }
 
 export default function ConversationPlayer({ course, unitIndex, initialProgress, mode, onSaved, onExit }) {

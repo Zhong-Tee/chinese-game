@@ -1057,6 +1057,32 @@ html {
   color: var(--muted);
   opacity: 1;
 }
+
+.conversation-match-feedback {
+  background-color: var(--panel);
+  color: var(--ink);
+  border-color: var(--edge);
+}
+.conversation-match-feedback[data-feedback="incorrect"] {
+  background-color: #fffbeb;
+  color: #78350f;
+  border-color: #d97706;
+}
+.conversation-match-feedback[data-feedback="correct"] {
+  background-color: #ecfdf5;
+  color: #064e3b;
+  border-color: #059669;
+}
+:root:is([data-theme="dark"], [data-theme="original"]) .conversation-match-feedback[data-feedback="incorrect"] {
+  background-color: #422d12;
+  color: #fef3c7;
+  border-color: #fbbf24;
+}
+:root:is([data-theme="dark"], [data-theme="original"]) .conversation-match-feedback[data-feedback="correct"] {
+  background-color: #063c32;
+  color: #d1fae5;
+  border-color: #34d399;
+}
 html, body, #root { background-color: var(--page); }
 .theme-settings { min-width: 0; padding: 1rem; border: 1px solid var(--edge); border-radius: 1.25rem; background: var(--panel); color: var(--ink); }
 .theme-settings legend { padding: 0 .4rem; font-weight: 900; }
