@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { cancelChineseSpeech, speakChinese } from '../utils/chineseSpeech';
-import { questionQueue, shuffleIndices } from '../../supabase/functions/_shared/conversation';
+import { cancelChineseSpeech } from '../utils/chineseSpeech';
+import LessonPlayer from './ConversationPlayer';
+import { MEMORY_ROUNDS, memoryPending } from '../utils/conversationPractice';
 import { formatConversationCost } from '../../supabase/functions/_shared/conversation-cost';
+import { conversationErrorMessage } from '../utils/conversationErrors';
 
 const LEVELS = { beginner: 'เริ่มต้น', basic: 'พื้นฐาน', intermediate: 'ปานกลาง' };
 const TOPICS = ['สั่งเครื่องดื่ม', 'ซื้อของในร้านสะดวกซื้อ', 'แนะนำตัว', 'สั่งอาหาร', 'เดินทางด้วยแท็กซี่', 'เข้าพักโรงแรม'];
@@ -14,10 +16,10 @@ const panel = 'rounded-3xl border border-slate-200 bg-white p-5 shadow-sm';
 function CourseCost({ course }) {
   const recorded = course.cost_record_count > 0;
   return <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-    <p className="font-bold">ค่าใช้จ่ายสะสมในการสร้าง (ประมาณ)</p>
-    <p className="mt-1 font-bold text-teal-800">{recorded ? `${formatConversationCost(course.generation_cost_thb)} · ${formatConversationCost(course.generation_cost_usd, 'USD')}` : course.status === 'generating' ? 'รอข้อมูลค่าใช้จ่ายจาก API…' : 'ยังไม่มีข้อมูลค่าใช้จ่าย'}</p>
+    <p className="font-bold">ต้นทุนสะสมของชุดนี้ (ประมาณ · บาท)</p>
+    <p className="mt-1 font-bold text-teal-800">{recorded ? formatConversationCost(course.generation_cost_thb) : course.status === 'generating' ? 'รอข้อมูลค่าใช้จ่ายจาก API…' : 'ยังไม่มีข้อมูลค่าใช้จ่าย'}</p>
     {recorded && <p className="mt-1 text-xs">ตรวจหัวข้อ: {formatConversationCost(course.lookup_cost_thb)} · สร้างเนื้อหา: {formatConversationCost(course.content_cost_thb)}</p>}
-    <p className="mt-1 text-xs">คำนวณจาก token และอัตราที่ตั้งไว้ รวมการลองสร้างใหม่ · เข้าเรียนซ้ำไม่สร้างเนื้อหาใหม่</p>
+    <p className="mt-1 text-xs">รวม {course.content?.units?.length || 3} บทย่อยในชุดนี้ ค่าตรวจหัวข้อ และการลองสร้างใหม่ถ้ามี · เข้าเรียนซ้ำไม่เพิ่มค่าสร้าง</p>
   </div>;
 }
 
@@ -30,85 +32,6 @@ async function readUserProgress(userId) {
     rows.push(...data);
     if (data.length < 500) return { data: rows };
   }
-}
-
-function AudioButton({ text }) {
-  const [error, setError] = useState('');
-  const alive = useRef(true);
-  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  async function play() {
-    if (!window.speechSynthesis) return setError('เบราว์เซอร์นี้ไม่รองรับเสียงอ่าน');
-    setError('');
-    try {
-      await speakChinese(text, { shouldSpeak: () => alive.current, onError: () => { if (alive.current) setError('เปิดเสียงไม่ได้ กรุณาลองอีกครั้ง'); } });
-    } catch { setError('เปิดเสียงไม่ได้ กรุณาลองอีกครั้ง'); }
-  }
-  return <span className="inline-flex flex-wrap items-center gap-2"><button type="button" onClick={play} className={secondary} aria-label="ฟังเสียงภาษาจีน">🔊 ฟังเสียง</button>{error && <span role="status" className="text-sm text-red-700">{error}</span>}</span>;
-}
-
-function LessonPlayer({ course, unitIndex, initialProgress, mode, onSaved, onExit }) {
-  const unit = course.content.units[unitIndex];
-  const [stage, setStage] = useState(mode === 'review' ? 'practice' : 'teach');
-  const [queue] = useState(() => {
-    const pending = questionQueue(unit, initialProgress?.answers, mode === 'review');
-    return pending.length || mode === 'review' ? pending : unit.questions.map((_, i) => i);
-  });
-  const [position, setPosition] = useState(0);
-  const [answer, setAnswer] = useState(null);
-  const [result, setResult] = useState(null);
-  const [progress, setProgress] = useState(initialProgress);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [pinyin, setPinyin] = useState(true);
-  const savingRef = useRef(false);
-  const index = queue[position];
-  const q = unit.questions[index];
-  const [tokenOrder, setTokenOrder] = useState(() => q?.kind === 'order' ? shuffleIndices(q.tokens.length) : []);
-  useEffect(() => () => cancelChineseSpeech(), []);
-
-  async function check() {
-    if (savingRef.current || answer === null) return;
-    savingRef.current = true;
-    setSaving(true); setError('');
-    const { data, error: saveError } = await supabase.rpc('answer_conversation_question', {
-      p_course: course.id, p_unit: unitIndex, p_question: index, p_answer: answer,
-    });
-    savingRef.current = false; setSaving(false);
-    if (saveError) { setError('บันทึกคำตอบไม่สำเร็จ กรุณาลองอีกครั้งก่อนเรียนต่อ'); return; }
-    setProgress(data); onSaved(data); setResult(data.answers[index]);
-  }
-  function next() {
-    cancelChineseSpeech();
-    setAnswer(null); setResult(null); setError('');
-    const nextPosition = position + 1;
-    setPosition(nextPosition);
-    const nextQuestion = unit.questions[queue[nextPosition]];
-    setTokenOrder(nextQuestion?.kind === 'order' ? shuffleIndices(nextQuestion.tokens.length) : []);
-  }
-  const wrong = Object.values(progress?.answers || {}).filter(a => !a.correct).length;
-  return <div className="space-y-5">
-    <div className="flex items-center justify-between gap-3"><button className={secondary} onClick={onExit} disabled={saving}>← กลับชุดบทเรียน</button><span className="text-sm text-slate-500">บันทึกแยกตามบัญชี</span></div>
-    <div><p className="text-sm font-bold text-teal-700">{course.topic} · บทที่ {unitIndex + 1}</p><h2 className="mt-1 text-2xl font-black">{unit.title}</h2></div>
-    {stage === 'teach' ? <>
-      <section className={panel}><h3 className="text-lg font-bold">เรียนรู้ก่อนฝึก</h3><p className="mt-3 whitespace-pre-line leading-relaxed">{unit.teaching_th}</p></section>
-      <div className="flex items-center justify-between"><h3 className="font-bold">คำศัพท์และรูปประโยค</h3><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={pinyin} onChange={e => setPinyin(e.target.checked)} />แสดงพินอิน</label></div>
-      {[...unit.vocabulary, ...unit.patterns].map((item, i) => <div className={`${panel} space-y-2`} key={i}><p lang="zh-CN" className="text-2xl font-bold">{item.cn}</p>{pinyin && <p className="text-teal-700">{item.pinyin}</p>}<p>{item.th}</p><AudioButton text={item.cn} /></div>)}
-      <button className={`${primary} w-full`} onClick={() => setStage('practice')}>เริ่มฝึก · {queue.length} ข้อ →</button>
-    </> : !q ? <section className={`${panel} space-y-4 text-center`}><p className="text-4xl">🎉</p><h3 className="text-2xl font-black">{mode === 'review' ? 'ทบทวนครบแล้ว!' : 'ฝึกครบแล้ว!'}</h3><p>บันทึกผลเรียบร้อยแล้ว</p><p>{wrong ? `ยังมี ${wrong} ข้อที่ควรทบทวนในบทนี้` : 'คำตอบที่ฝึกแล้วถูกทั้งหมด'}</p><button className={primary} onClick={onExit}>กลับไปเลือกบทเรียน</button></section> : <>
-      <div><div className="mb-2 flex justify-between text-sm text-slate-500"><span>{mode === 'review' ? 'ทบทวนข้อผิด' : 'ฝึกบทสนทนา'}</span><span>ข้อ {position + 1} / {queue.length}</span></div><progress className="h-3 w-full accent-teal-600" value={position} max={queue.length} aria-label="ความคืบหน้าแบบฝึก" /></div>
-      <section className={`${panel} space-y-5`}>
-        <h3 className="text-xl font-bold">{q.prompt_th}</h3>
-        {q.kind === 'listen' ? <><AudioButton text={q.cn} /><p className="text-sm text-slate-500">กดฟังซ้ำได้ ไม่สะดวกฟังสามารถกลับไปเลือกบทอื่นได้</p></> : q.kind === 'reply' ? <div className="space-y-2 rounded-2xl bg-teal-50 p-4"><p className="text-sm font-bold text-teal-700">คู่สนทนาพูดว่า</p><p lang="zh-CN" className="text-2xl">{q.cn}</p><AudioButton text={q.cn} /></div> : null}
-        {q.kind === 'order' ? <>
-          <p className="text-sm text-slate-500">แตะคำเพื่อเรียงประโยค · แตะคำที่เลือกเพื่อนำออก</p>
-          <div className="flex min-h-20 flex-wrap gap-2 rounded-2xl border-2 border-dashed border-teal-300 p-3" aria-label="ประโยคที่เรียงแล้ว">{(answer || []).map((id, i) => <button lang="zh-CN" key={id} disabled={!!result || saving} className={secondary} onClick={() => setAnswer(answer.filter((_, at) => at !== i))}>{q.tokens[id]}</button>)}</div>
-          <div className="flex flex-wrap gap-2">{tokenOrder.map(id => <button lang="zh-CN" key={id} disabled={!!result || saving || (answer || []).includes(id)} className={secondary} onClick={() => setAnswer([...(answer || []), id])}>{q.tokens[id]}</button>)}</div>
-        </> : <div className="grid gap-3">{q.options.map((option, i) => <button key={i} disabled={!!result || saving} aria-pressed={answer === i} className={`${button} border-2 text-left ${answer === i ? 'border-teal-600 bg-teal-50 text-teal-900' : 'border-slate-200 bg-white'}`} onClick={() => setAnswer(i)}>{option}</button>)}</div>}
-      </section>
-      {error && <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">{error}</p>}
-      {result ? <section role="status" className={`rounded-3xl p-5 ${result.correct ? 'bg-emerald-50 text-emerald-900' : 'bg-amber-50 text-amber-950'}`}><h3 className="text-xl font-bold">{result.correct ? '✓ ถูกต้อง!' : 'ลองจำรูปประโยคนี้อีกครั้ง'}</h3><p className="mt-3 font-bold">คำตอบ: {q.kind === 'order' ? q.answer_order.map(i => q.tokens[i]).join('') : q.options[q.correct_index]}</p><p className="mt-2 text-xl" lang="zh-CN">{q.cn}</p><p>{q.pinyin}</p><p>{q.th}</p><p className="my-3">{q.explanation_th}</p><AudioButton text={q.cn} /><button className={`${primary} mt-4 w-full`} onClick={next}>{position + 1 === queue.length ? 'ดูผลการฝึก' : 'ข้อต่อไป →'}</button></section> : <button className={`${primary} w-full`} disabled={saving || answer === null || (q.kind === 'order' && answer.length !== q.tokens.length)} onClick={check}>{saving ? 'กำลังบันทึก…' : 'ตรวจคำตอบ'}</button>}
-    </>}
-  </div>;
 }
 
 export default function ConversationLessons({ user, setPage }) {
@@ -168,9 +91,7 @@ export default function ConversationLessons({ user, setPage }) {
     try {
       const { data, error: invokeError } = await supabase.functions.invoke('generate-conversation', { body: { topic: requestedTopic, level: requestedLevel } });
       if (invokeError) {
-        let message = 'ค้นหาหรือสร้างไม่สำเร็จ กรุณาลองใหม่ และตรวจสอบการ deploy ฟังก์ชัน';
-        try { const body = await invokeError.context?.json(); if (body?.error) message = body.error; } catch { /* Use the connection error fallback. */ }
-        throw new Error(message);
+        throw new Error(await conversationErrorMessage(invokeError));
       }
       if (data.error) throw new Error(data.error);
       const found = data.course;
@@ -198,8 +119,10 @@ export default function ConversationLessons({ user, setPage }) {
       {course.content.units.map((unit, i) => {
         const progress = ownRows.find(p => p.unit_index === i);
         const count = Object.keys(progress?.answers || {}).length;
+        const complete = progress?.completed && MEMORY_ROUNDS.every(round => !memoryPending(unit, progress, round).length);
+        const remembered = MEMORY_ROUNDS.reduce((total, round) => total + unit.vocabulary.length - memoryPending(unit, progress, round).length, 0);
         const wrong = Object.values(progress?.answers || {}).filter(a => !a.correct).length;
-        return <section key={i} className={`${panel} space-y-3`}><p className="text-sm font-bold text-teal-700">บทที่ {i + 1} · ประมาณ 3–5 นาที</p><h2 className="text-xl font-black">{unit.title}</h2><p className="text-sm text-slate-500">{progress?.completed ? '✓ เรียนจบแล้ว' : count ? `เรียนแล้ว ${count}/${unit.questions.length} ข้อ` : `${unit.vocabulary.length} คำศัพท์ · ${unit.questions.length} แบบฝึก`}{wrong > 0 && ` · ควรทบทวน ${wrong} ข้อ`}</p><div className="flex flex-wrap gap-2"><button className={primary} onClick={() => { setSession({ unit: i, mode: 'learn' }); window.scrollTo(0, 0); }}>{progress?.completed ? 'ฝึกอีกครั้ง' : count ? 'เรียนต่อ' : 'เริ่มเรียน'}</button>{wrong > 0 && <button className={secondary} onClick={() => setSession({ unit: i, mode: 'review' })}>ทบทวนข้อผิด</button>}</div></section>;
+        return <section key={i} className={`${panel} space-y-3`}><p className="text-sm font-bold text-teal-700">บทที่ {i + 1} · ประมาณ 3–5 นาที</p><h2 className="text-xl font-black">{unit.title}</h2><p className="text-sm text-slate-500">{complete ? '✓ เรียนจบแล้ว' : count ? `เรียนแล้ว ${count}/${unit.questions.length} ข้อ` : `${unit.vocabulary.length} คำศัพท์ · ${unit.questions.length} แบบฝึก`}{wrong > 0 && ` · ควรทบทวน ${wrong} ข้อ`}</p><p className="text-sm text-slate-500">ฝึกจำคำศัพท์ {remembered}/{unit.vocabulary.length * 3} ครั้ง · ต้น / กลาง / ท้ายบท</p><div className="flex flex-wrap gap-2"><button className={primary} onClick={() => { setSession({ unit: i, mode: 'learn' }); window.scrollTo(0, 0); }}>{complete ? 'ฝึกอีกครั้ง' : count || remembered ? 'เรียนต่อ' : 'เริ่มเรียน'}</button>{wrong > 0 && <button className={secondary} onClick={() => setSession({ unit: i, mode: 'review' })}>ทบทวนข้อผิด</button>}</div></section>;
       })}
     </> : <>
       <section className={`${panel} space-y-4`}><h2 className="text-xl font-black">วันนี้อยากพูดเรื่องอะไร?</h2><div className="flex flex-wrap gap-2">{TOPICS.map(item => <button key={item} className="min-h-11 rounded-full bg-teal-50 px-4 py-2 text-sm font-bold text-teal-900" onClick={() => setTopic(item)}>{item}</button>)}</div><form className="space-y-3" onSubmit={e => { e.preventDefault(); generate(); }}><label className="block text-sm font-bold" htmlFor="conversation-topic">หัวข้อหรือสถานการณ์ที่อยากฝึก</label><input id="conversation-topic" value={topic} onChange={e => setTopic(e.target.value)} minLength={2} maxLength={200} required className="min-h-12 w-full rounded-xl border border-slate-300 px-4" placeholder="เช่น สั่งชานม หวานน้อย ไม่ใส่ไข่มุก" /><label className="block text-sm font-bold" htmlFor="conversation-level">ระดับภาษาจีน</label><select id="conversation-level" value={level} onChange={e => setLevel(e.target.value)} className="min-h-12 w-full rounded-xl border border-slate-300 px-4">{Object.entries(LEVELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select><p className="text-xs leading-relaxed text-slate-500">ระบบจะค้นหาหัวข้อที่มีความหมายเดียวกันก่อนสร้าง บทเรียนที่สร้างจะอยู่ในคลังให้ทุกคนเรียนได้ กรุณาไม่ใส่ข้อมูลส่วนตัว</p><button className={`${primary} w-full`} disabled={busy || topic.trim().length < 2}>{busy ? 'กำลังตรวจสอบ…' : 'ค้นหาหรือสร้างบทเรียน'}</button></form></section>
@@ -208,7 +131,7 @@ export default function ConversationLessons({ user, setPage }) {
       {!loading && !visible.length && <div className={`${panel} text-center text-slate-500`}>ยังไม่พบบทเรียน ลองค้นหาหัวข้ออื่นหรือสร้างชุดแรกได้เลย</div>}
       {visible.map(item => {
         const records = progressRows.filter(p => p.course_id === item.id);
-        const finished = records.filter(p => p.completed).length;
+        const finished = records.filter(p => p.completed && MEMORY_ROUNDS.every(round => p.memory?.[round])).length;
         const stalled = item.status === 'generating' && Date.now() - Date.parse(item.updated_at) > 10 * 60 * 1000;
         return <article key={item.id} className={`${panel} space-y-3`}><div className="flex flex-wrap items-center justify-between gap-2"><span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-800">{LEVELS[item.level]}</span><span className="text-xs text-slate-500">{item.status === 'ready' ? records.length ? `จบแล้ว ${finished}/3 บท` : '3 บทเรียน' : item.status === 'failed' || stalled ? 'สร้างไม่สำเร็จ / ลองใหม่ได้' : 'กำลังสร้าง…'}</span></div><h3 className="text-xl font-black">{item.topic}</h3><p className="text-sm leading-relaxed text-slate-500">{item.goal}</p><CourseCost course={item} />{item.status === 'ready' ? <button className={primary} disabled={busy} onClick={() => open(item.id)}>{records.length ? 'เรียนต่อ / ทบทวน' : 'ดูบทเรียน →'}</button> : item.status === 'failed' || stalled ? <button className={secondary} disabled={busy} onClick={() => generate(item.topic, item.level)}>ลองสร้างใหม่</button> : <p role="status" className="text-sm text-teal-700">ระบบจะอัปเดตอัตโนมัติ คุณกลับมาดูภายหลังได้</p>}</article>;
       })}{more && <button className={`${secondary} w-full`} onClick={() => setLimit(current => current + 60)}>โหลดบทเรียนเพิ่ม</button>}</section>

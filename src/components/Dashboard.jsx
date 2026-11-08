@@ -516,7 +516,7 @@ export default function Dashboard({
       </div>
 
       {/* Bottom nav + FIGHT */}
-      <div className="relative z-20 hub-bottom-nav px-2 sm:px-4 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] shrink-0">
+      <div className="relative z-20 hub-bottom-nav px-2 sm:px-4 pt-2 shrink-0">
         <div className="relative flex items-end justify-around w-full max-w-none px-1 sm:px-2">
           {BOTTOM_NAV.slice(0, 2).map(item => (
             <button

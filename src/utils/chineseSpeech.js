@@ -61,10 +61,15 @@ function getVoicesPromise() {
       return;
     }
 
-    const onVoicesChanged = () => {
+    const finish = () => {
+      clearTimeout(timeout);
       window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
       resolve(window.speechSynthesis.getVoices());
     };
+    const onVoicesChanged = () => finish();
+    // Some iOS versions never emit voiceschanged. Let the system voice speak
+    // rather than leaving every listen/autoplay action waiting indefinitely.
+    const timeout = setTimeout(finish, 1200);
 
     window.speechSynthesis.addEventListener('voiceschanged', onVoicesChanged);
   });

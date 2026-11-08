@@ -5,7 +5,7 @@ body,
 #root {
   width: 100%;
   height: 100%;
-  min-height: 100dvh;
+  min-height: 0;
   margin: 0;
   padding: 0;
   overflow: hidden;
@@ -14,17 +14,15 @@ body,
 }
 
 html {
-  min-height: -webkit-fill-available;
   color-scheme: light dark;
 }
 
-body {
-  min-height: 100vh;
-  min-height: 100dvh;
-  min-height: -webkit-fill-available;
-}
-
 #root {
+  /* iOS standalone: use the viewport edges as one source of height instead of
+     mixing dvh and -webkit-fill-available (which can exclude the bottom inset). */
+  position: fixed;
+  inset: 0;
+  height: auto;
   display: flex;
   flex-direction: column;
 }
@@ -47,11 +45,10 @@ body {
 /* App shell — เต็มจอทั้งกว้างและสูง */
 .app-shell {
   width: 100%;
-  height: 100vh;
-  height: 100dvh;
-  min-height: 100vh;
-  min-height: 100dvh;
-  max-height: 100dvh;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -548,8 +545,8 @@ body {
   background: linear-gradient(180deg, rgba(10, 14, 30, 0.95) 0%, rgba(5, 8, 20, 0.98) 100%);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(16px);
-  /* ให้สีแถบต่อเนื่องผ่าน safe area / Home Indicator ของ iPhone */
-  box-shadow: 0 100px 0 100px #050814;
+  /* Reserve the Home Indicator once, inside the bottom navigation itself. */
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
 }
 
 .hub-fight-btn {

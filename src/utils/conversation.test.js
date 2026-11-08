@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizeTopic, validateCourse, questionQueue, shuffleIndices } from '../../supabase/functions/_shared/conversation.js';
 import { conversationCost, formatConversationCost } from '../../supabase/functions/_shared/conversation-cost.js';
+import { conversationErrorMessage } from './conversationErrors.js';
+import { practicePlan, memoryPending, retryVocabulary, moveToken, pinyinLookup, vocabularyChoices } from './conversationPractice.js';
 
 const phrase = { cn: '茶', pinyin: 'chá', th: 'ชา' };
 function fixture() {
@@ -66,4 +68,47 @@ test('unknown models, incomplete pricing and missing or invalid usage never beco
   assert.equal(conversationCost('gpt-5.6-luna', usage, { CONVERSATION_INPUT_USD_PER_M: '2' }).cost_usd, null);
   assert.equal(conversationCost('gpt-5.6-luna', usage, { USD_THB_RATE: '-1' }).cost_thb, null);
   assert.equal(conversationCost('gpt-5.6-luna', { ...usage, input_tokens_details: { cached_tokens: 101 } }).cost_usd, null);
+});
+
+test('creation errors distinguish missing deployment, authentication, backend and connection problems', async () => {
+  assert.match(await conversationErrorMessage({ context: new Response('{}', { status: 404 }) }), /generate-conversation/);
+  assert.match(await conversationErrorMessage({ context: new Response('{}', { status: 401 }) }), /เข้าสู่ระบบ/);
+  assert.equal(await conversationErrorMessage({ context: new Response(JSON.stringify({ error: 'ยังไม่ได้ตั้งค่าบริการสร้างบทเรียน' }), { status: 503 }) }), 'ยังไม่ได้ตั้งค่าบริการสร้างบทเรียน');
+  assert.match(await conversationErrorMessage({ context: new Response('bad gateway', { status: 502 }) }), /ขัดข้องชั่วคราว/);
+  assert.match(await conversationErrorMessage(new Error('Failed to fetch')), /อินเทอร์เน็ต/);
+});
+
+test('practice inserts three memory checkpoints and resumes only unfinished work', () => {
+  const unit = fixture().units[0];
+  const plan = practicePlan(unit);
+  assert.deepEqual(plan.filter(s => s.type === 'memory').map(s => s.round), ['start', 'middle', 'end']);
+  assert.equal(plan[0].round, 'start');
+  assert.equal(plan[5].round, 'middle');
+  assert.equal(plan.at(-1).round, 'end');
+  const progress = { answers: { 0: { correct: false }, 1: { correct: true } }, memory: { start: Object.fromEntries(unit.vocabulary.map((_, i) => [i, { correct: true }])) } };
+  const resumed = practicePlan(unit, progress);
+  assert.equal(resumed.some(s => s.round === 'start'), false);
+  assert.equal(resumed.find(s => s.type === 'question').index, 2);
+  assert.deepEqual(practicePlan(unit, progress, 'review'), [{ type: 'question', index: 0 }]);
+  assert.deepEqual(memoryPending(unit, { memory: { middle: { 0: { correct: true }, 1: { correct: false } } } }, 'middle'), [1, 2, 3]);
+});
+test('wrong vocabulary returns after other words and drag preserves every token', () => {
+  assert.deepEqual(retryVocabulary([1, 2, 3], false), [2, 3, 1]);
+  assert.deepEqual(retryVocabulary([1], false), [1]);
+  assert.deepEqual(retryVocabulary([1], true), []);
+  assert.deepEqual(moveToken([4, 2, 7], 0, 2), [2, 7, 4]);
+  assert.deepEqual(moveToken([4, 2, 7], 2, 0), [7, 4, 2]);
+  assert.deepEqual(moveToken([4, 2, 7], 0, -1), [4, 2, 7]);
+});
+test('pinyin uses saved pronunciation and derives order tokens in answer order', () => {
+  const course = { content: fixture() };
+  const lookup = pinyinLookup(course);
+  assert.equal(lookup('我'), 'Wǒ');
+  assert.equal(lookup('喝茶'), 'hē chá');
+  assert.equal(lookup('茶'), 'chá');
+  assert.equal(lookup('unknown'), '');
+  const unit = { vocabulary: [{ th: 'ชา' }, { th: 'น้ำ' }, { th: 'ชา' }, { th: 'กาแฟ' }] };
+  const choices = vocabularyChoices(unit, 0);
+  assert.ok(choices.includes(0));
+  assert.equal(new Set(choices.map(i => unit.vocabulary[i].th)).size, choices.length);
 });

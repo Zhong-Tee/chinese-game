@@ -16,6 +16,8 @@ export function validateCourse(course) {
       if (!unit.questions.some(q => q.kind === kind)) fail();
     }
     for (const q of unit.questions) {
+      if (q.option_pinyin && (!Array.isArray(q.option_pinyin) || q.option_pinyin.length !== q.options?.length || !q.option_pinyin.every(v => typeof v === 'string'))) fail();
+      if (q.token_pinyin && (!Array.isArray(q.token_pinyin) || q.token_pinyin.length !== q.tokens?.length || !q.token_pinyin.every(v => typeof v === 'string'))) fail();
       if (!['choice', 'order', 'listen', 'reply'].includes(q.kind) || ![q.prompt_th, q.cn, q.pinyin, q.th, q.explanation_th].every(text)) fail();
       if (q.kind === 'order') {
         if (!Array.isArray(q.tokens) || q.tokens.length < 2 || q.tokens.length > 10 || !q.tokens.every(text) || !Array.isArray(q.answer_order)) fail();
