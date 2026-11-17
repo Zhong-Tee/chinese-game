@@ -26,18 +26,12 @@ html {
   flex-direction: column;
 }
 
-/* Installed iOS apps can resolve viewport edges/percentages against a shorter
-   viewport. Give the flex tree a definite height using vh, which includes the
-   safe areas in standalone WebKit (bugs.webkit.org/show_bug.cgi?id=254868).
-   Keep this out of browser tabs: their toolbars need the inset-based sizing.
-   Safe-area padding remains inside the HUD/navigation, never added to height. */
-@supports (-webkit-touch-callout: none) {
-  @media (display-mode: standalone) {
-    #root {
-      bottom: auto;
-      height: 100vh;
-    }
-  }
+/* Use the measured visible height in installed iOS apps. 100vh can extend
+   below the area WebKit actually paints. Keep safe-area padding inside the
+   navigation; adding it to this height would push the buttons offscreen. */
+html[data-ios-standalone="true"] #root {
+  bottom: auto;
+  height: var(--app-visible-height, 100%);
 }
 
 /* ป้องกัน Safari/Chrome เปลี่ยนช่อง Login เป็นสีเทาเมื่อ Autofill */
