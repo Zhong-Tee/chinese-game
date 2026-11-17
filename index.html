@@ -10,7 +10,9 @@
     <meta name="theme-color" content="#0a0e1a" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Let iOS reserve the status bar instead of overlaying it on the web
+         viewport, which can leave an inaccessible strip below installed apps. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="Word Fighter" />
     <link rel="icon" href="/icons/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="/game/icon/icon.png" type="image/png" />
