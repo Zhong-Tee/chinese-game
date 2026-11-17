@@ -18,13 +18,26 @@ html {
 }
 
 #root {
-  /* iOS standalone: use the viewport edges as one source of height instead of
-     mixing dvh and -webkit-fill-available (which can exclude the bottom inset). */
+  /* Browser tabs follow the viewport edges as browser controls expand/collapse. */
   position: fixed;
   inset: 0;
   height: auto;
   display: flex;
   flex-direction: column;
+}
+
+/* Installed iOS apps can resolve viewport edges/percentages against a shorter
+   viewport. Give the flex tree a definite height using vh, which includes the
+   safe areas in standalone WebKit (bugs.webkit.org/show_bug.cgi?id=254868).
+   Keep this out of browser tabs: their toolbars need the inset-based sizing.
+   Safe-area padding remains inside the HUD/navigation, never added to height. */
+@supports (-webkit-touch-callout: none) {
+  @media (display-mode: standalone) {
+    #root {
+      bottom: auto;
+      height: 100vh;
+    }
+  }
 }
 
 /* ป้องกัน Safari/Chrome เปลี่ยนช่อง Login เป็นสีเทาเมื่อ Autofill */
